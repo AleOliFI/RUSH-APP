@@ -18,15 +18,21 @@ import { H2, H3, Body, Caption, Label } from '../../src/components/ui/Typography
 import { Button } from '../../src/components/ui/Button';
 import { DIRECTIVE_LABEL } from '../../src/lib/algorithms/readiness';
 import { useHRVBaseline } from '../../src/hooks/useHRVBaseline';
+import { useIsPremium } from '../../src/hooks/useSubscription';
 
 export default function HomeScreen() {
   const { profile } = useAuthStore();
   const { data: today, isLoading } = useTodayReadiness();
   const { data: history = [] } = useReadinessHistory(7);
   const { readingCount } = useHRVBaseline();
+  const isPremium = useIsPremium();
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Atleta';
   const greeting = getGreeting();
+
+  const showFalseReadinessBanner = today?.false_readiness_flag === true;
+  const showLutealBadge = today?.cycle_phase === 'luteal' && isPremium;
+  const hasV2Scores = today?.s_vfc != null;
 
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top']}>
@@ -43,6 +49,26 @@ export default function HomeScreen() {
           </View>
           <Text className="text-brand-green text-2xl font-black tracking-tighter">RUSH</Text>
         </View>
+
+        {/* Contextual alert banners */}
+        {showFalseReadinessBanner && (
+          <View className="bg-yellow-500/15 border border-yellow-500/40 rounded-2xl px-4 py-3">
+            <Text className="text-yellow-400 font-semibold text-sm">
+              ⚠ Modo de conservação energética
+            </Text>
+            <Text className="text-yellow-300/80 text-xs mt-1">
+              VFC alta com disposição baixa — possível downregulation metabólica. Priorize recuperação hoje.
+            </Text>
+          </View>
+        )}
+
+        {showLutealBadge && (
+          <View className="bg-purple-500/15 border border-purple-500/40 rounded-2xl px-4 py-3 flex-row items-center gap-2">
+            <Text className="text-purple-400 font-semibold text-sm">
+              Fase Lútea — Ajuste aplicado
+            </Text>
+          </View>
+        )}
 
         {/* Today's Readiness Card */}
         {isLoading ? (
@@ -66,10 +92,41 @@ export default function HomeScreen() {
               <ReadinessRing score={today.readiness_score} color={today.readiness_color} />
             </View>
 
+            {/* V2 component scores */}
+            {hasV2Scores && (
+              <View className="flex-row gap-2">
+                <View className="flex-1 bg-bg-secondary rounded-xl p-2.5 items-center gap-0.5">
+                  <Text className="text-text-primary font-bold text-sm">
+                    {Math.round(today.s_vfc!)}
+                  </Text>
+                  <Caption className="text-xs">S_VFC</Caption>
+                </View>
+                <View className="flex-1 bg-bg-secondary rounded-xl p-2.5 items-center gap-0.5">
+                  <Text className="text-text-primary font-bold text-sm">
+                    {Math.round(today.s_fcr!)}
+                  </Text>
+                  <Caption className="text-xs">S_FCR</Caption>
+                </View>
+                <View className="flex-1 bg-bg-secondary rounded-xl p-2.5 items-center gap-0.5">
+                  <Text className="text-text-primary font-bold text-sm">
+                    {Math.round(today.e_wb!)}
+                  </Text>
+                  <Caption className="text-xs">E_WB</Caption>
+                </View>
+              </View>
+            )}
+
             <View className="bg-bg-secondary rounded-2xl p-4 gap-1.5">
               <Label>Treino sugerido</Label>
               <Body className="text-sm">{today.example_session}</Body>
             </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/measurement/log-session')}
+              className="flex-row items-center justify-center gap-1.5 py-2"
+            >
+              <Text className="text-brand-green text-xs font-semibold">+ Registrar treino de hoje</Text>
+            </TouchableOpacity>
           </Card>
         ) : (
           <Card className="gap-4 items-center py-6">
@@ -77,7 +134,8 @@ export default function HomeScreen() {
             <View className="items-center gap-1">
               <H3>Faça sua medição de hoje</H3>
               <Body className="text-text-secondary text-center">
-                60 segundos com o dedo na câmera para descobrir sua prescrição do dia.
+                120 segundos com o dedo na câmera (60s estabilização + 60s captura) para descobrir
+                sua prescrição do dia.
               </Body>
             </View>
             <Button

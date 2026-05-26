@@ -10,7 +10,7 @@ const METHODS = [
   {
     icon: '📷',
     title: 'Câmera (PPG)',
-    desc: 'Coloque o dedo na câmera traseira. 60 segundos. Mais preciso.',
+    desc: 'Dedo na câmera traseira. 60s estabilização + 60s captura ativa. Mais preciso.',
     recommended: true,
     route: '/measurement/camera' as const,
   },
@@ -19,7 +19,7 @@ const METHODS = [
     title: 'Acelerômetro (SCG)',
     desc: 'Coloque o aparelho no peito deitado. Alternativa sem câmera.',
     recommended: false,
-    route: '/measurement/camera' as const, // placeholder — same flow for now
+    route: '/measurement/camera' as const,
   },
 ];
 
@@ -64,6 +64,7 @@ export default function MeasureScreen() {
           {[
             'Meça sempre no mesmo horário (ao acordar)',
             'Fique em repouso por 2 min antes',
+            'Os primeiros 60s são descartados (estabilização) — mantenha o dedo firme',
             'Ambiente calmo e temperatura agradável',
             'Não meça após café ou exercício',
           ].map((tip) => (
