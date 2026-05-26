@@ -161,6 +161,12 @@ export default function ResultScreen() {
         </Card>
 
         <Button
+          title="Registrar treino de hoje"
+          variant="secondary"
+          onPress={() => router.push('/measurement/log-session')}
+        />
+
+        <Button
           title="Ir para o início"
           size="lg"
           onPress={() => router.replace('/(tabs)')}
