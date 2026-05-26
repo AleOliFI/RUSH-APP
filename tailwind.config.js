@@ -5,28 +5,30 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          green: '#22C55E',
-          yellow: '#EAB308',
-          orange: '#F97316',
-          red: '#EF4444',
-          'dark-red': '#991B1B',
+        rush: {
+          red:    '#e72329',
+          orange: '#ff3b00',
+          lime:   '#ccff00',
         },
         bg: {
-          primary: '#0A0A0A',
-          secondary: '#141414',
-          card: '#1C1C1C',
-          border: '#2A2A2A',
+          primary:   '#0f0f0f',
+          secondary: '#1a1a1a',
+          card:      '#1a1a1a',
+          border:    '#2e2e2e',
         },
         text: {
-          primary: '#F5F5F5',
-          secondary: '#A3A3A3',
-          muted: '#525252',
+          primary:   '#f7f5f3',
+          secondary: '#9e9b94',
+          muted:     '#3a3a3a',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui'],
-        mono: ['JetBrainsMono', 'monospace'],
+        display: ['BigShouldersDisplay_900Black', 'Impact', 'sans-serif'],
+        sans:    ['Manrope_500Medium', 'system-ui', 'sans-serif'],
+        mono:    ['JetBrainsMono', 'monospace'],
+      },
+      letterSpacing: {
+        widest2: '0.14em',
       },
     },
   },

@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --rush-red:    #e72329;
+    --rush-orange: #ff3b00;
+    --rush-lime:   #ccff00;
+    --bg-primary:  #0f0f0f;
+    --bg-surface:  #1a1a1a;
+    --bg-border:   #2e2e2e;
+    --text-base:   #f7f5f3;
+    --text-muted:  #9e9b94;
+  }
+}
