@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "RUSH",
+    "slug": "rush-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "rushapp",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rushapp.hrv",
+      "infoPlist": {
+        "NSCameraUsageDescription": "A câmera é usada para medir sua variabilidade da frequência cardíaca (VFC) pelo sensor PPG.",
+        "NSMotionUsageDescription": "O acelerômetro é usado para medir a VFC pelo método SCG.",
+        "NSHealthShareUsageDescription": "Lemos sua FC em repouso e VFC passiva do Apple Health.",
+        "NSHealthUpdateUsageDescription": "Armazenamos seus dados de treino no Apple Health."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "package": "com.rushapp.hrv",
+      "permissions": [
+        "CAMERA",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-splash-screen",
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "A câmera é usada para medir sua variabilidade da frequência cardíaca (VFC)."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#22C55E",
+          "sounds": []
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
