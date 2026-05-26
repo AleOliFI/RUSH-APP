@@ -14,29 +14,29 @@ interface ButtonProps extends TouchableOpacityProps {
 }
 
 const variants = {
-  primary: 'bg-brand-green',
+  primary:   'bg-rush-red',
   secondary: 'bg-bg-card border border-bg-border',
-  ghost: 'bg-transparent',
-  danger: 'bg-brand-red',
+  ghost:     'bg-transparent border border-bg-border',
+  danger:    'bg-rush-red',
 };
 
 const textVariants = {
-  primary: 'text-bg-primary font-semibold',
-  secondary: 'text-text-primary font-medium',
-  ghost: 'text-brand-green font-medium',
-  danger: 'text-white font-semibold',
+  primary:   'text-text-primary font-bold',
+  secondary: 'text-text-primary font-semibold',
+  ghost:     'text-rush-lime font-semibold',
+  danger:    'text-text-primary font-bold',
 };
 
 const sizes = {
-  sm: 'px-4 py-2 rounded-xl',
-  md: 'px-6 py-3.5 rounded-2xl',
-  lg: 'px-8 py-4 rounded-2xl',
+  sm: 'px-4 py-2 rounded-sm',
+  md: 'px-6 py-3.5 rounded-sm',
+  lg: 'px-8 py-4 rounded-sm',
 };
 
 const textSizes = {
-  sm: 'text-sm',
-  md: 'text-base',
-  lg: 'text-lg',
+  sm: 'text-sm tracking-widest uppercase',
+  md: 'text-base tracking-widest uppercase',
+  lg: 'text-lg tracking-widest uppercase',
 };
 
 export function Button({
@@ -51,16 +51,16 @@ export function Button({
   return (
     <TouchableOpacity
       className={`${variants[variant]} ${sizes[size]} flex-row items-center justify-center ${
-        disabled || loading ? 'opacity-50' : ''
+        disabled || loading ? 'opacity-40' : ''
       } ${className ?? ''}`}
       disabled={disabled || loading}
-      activeOpacity={0.8}
+      activeOpacity={0.75}
       {...props}
     >
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'primary' ? '#0A0A0A' : '#22C55E'}
+          color={variant === 'ghost' ? '#ccff00' : '#f7f5f3'}
         />
       ) : (
         <Text className={`${textVariants[variant]} ${textSizes[size]}`}>{title}</Text>

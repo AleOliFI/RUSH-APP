@@ -4,10 +4,10 @@ import { View, Text } from 'react-native';
 function TabIcon({ focused, icon, label }: { focused: boolean; icon: string; label: string }) {
   return (
     <View className="items-center gap-0.5 pt-1">
-      <Text className={`text-xl ${focused ? '' : 'opacity-40'}`}>{icon}</Text>
+      <Text className={`text-xl ${focused ? '' : 'opacity-30'}`}>{icon}</Text>
       <Text
-        className={`text-xs font-medium ${
-          focused ? 'text-brand-green' : 'text-text-muted'
+        className={`text-xs font-bold uppercase tracking-widest ${
+          focused ? 'text-rush-red' : 'text-text-secondary'
         }`}
       >
         {label}
@@ -22,8 +22,8 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#141414',
-          borderTopColor: '#2A2A2A',
+          backgroundColor: '#1a1a1a',
+          borderTopColor: '#2e2e2e',
           borderTopWidth: 1,
           paddingTop: 4,
           height: 72,

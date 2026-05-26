@@ -39,6 +39,10 @@ export default function ResultScreen() {
   }
 
   const colorHex = READINESS_COLOR_HEX[assessment.readiness_color];
+  const showFalseReadinessBanner = assessment.false_readiness_flag === true;
+  const showLutealBadge = assessment.cycle_phase === 'luteal';
+  const showSOPAlert =
+    assessment.hormonal_profile === 'sop' && assessment.readiness_color === 'green';
 
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top', 'bottom']}>
@@ -54,6 +58,38 @@ export default function ResultScreen() {
             label={DIRECTIVE_LABEL[assessment.training_directive]}
           />
         </View>
+
+        {/* Contextual alert banners */}
+        {showFalseReadinessBanner && (
+          <View className="bg-yellow-500/15 border border-yellow-500/40 rounded-2xl px-4 py-3">
+            <Text className="text-yellow-400 font-semibold text-sm">
+              ⚠ Modo de conservação energética detectado
+            </Text>
+            <Text className="text-yellow-300/80 text-xs mt-1">
+              Sua VFC está alta, mas sua disposição está baixa — possível downregulation metabólica. Priorize recuperação.
+            </Text>
+          </View>
+        )}
+
+        {showLutealBadge && (
+          <View className="bg-purple-500/15 border border-purple-500/40 rounded-2xl px-4 py-3 flex-row items-center gap-2">
+            <Text className="text-purple-400 font-semibold text-sm">Fase Lútea — Ajuste aplicado</Text>
+            <Caption className="text-purple-300/70 text-xs">
+              Correção lútea (+15%) aplicada à VFC para evitar falso alerta de fadiga.
+            </Caption>
+          </View>
+        )}
+
+        {showSOPAlert && (
+          <View className="bg-orange-500/15 border border-orange-500/40 rounded-2xl px-4 py-3">
+            <Text className="text-orange-400 font-semibold text-sm">
+              Perfil SOP — HIIT recomendado
+            </Text>
+            <Text className="text-orange-300/80 text-xs mt-1">
+              Alta intensidade neste dia melhora a sensibilidade à insulina e regulação hormonal.
+            </Text>
+          </View>
+        )}
 
         {/* Score ring */}
         <Card className="items-center gap-4 py-6">
@@ -99,23 +135,27 @@ export default function ResultScreen() {
           )}
         </Card>
 
-        {/* Markers */}
+        {/* V2 score markers */}
         <Card className="gap-3">
           <Label>Marcadores captados</Label>
           <View className="flex-row gap-3">
             <View className="flex-1 bg-bg-secondary rounded-2xl p-3 gap-1 items-center">
               <Text className="text-text-primary font-bold text-xl">
-                {assessment.baseline_rmssd_7d
-                  ? Math.round(assessment.baseline_rmssd_7d)
-                  : '--'}
+                {assessment.s_vfc != null ? Math.round(assessment.s_vfc) : '--'}
               </Text>
-              <Caption className="text-center text-xs">VFC baseline 7d (ms)</Caption>
+              <Caption className="text-center text-xs">S_VFC</Caption>
             </View>
             <View className="flex-1 bg-bg-secondary rounded-2xl p-3 gap-1 items-center">
               <Text className="text-text-primary font-bold text-xl">
-                {assessment.cv_7d ? `${Math.round(assessment.cv_7d)}%` : '--'}
+                {assessment.s_fcr != null ? Math.round(assessment.s_fcr) : '--'}
               </Text>
-              <Caption className="text-center text-xs">CV 7d</Caption>
+              <Caption className="text-center text-xs">S_FCR</Caption>
+            </View>
+            <View className="flex-1 bg-bg-secondary rounded-2xl p-3 gap-1 items-center">
+              <Text className="text-text-primary font-bold text-xl">
+                {assessment.e_wb != null ? Math.round(assessment.e_wb) : '--'}
+              </Text>
+              <Caption className="text-center text-xs">E_WB</Caption>
             </View>
           </View>
         </Card>
