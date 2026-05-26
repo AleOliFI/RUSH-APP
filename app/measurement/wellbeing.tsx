@@ -10,9 +10,22 @@ import {
   classifyHRVStatus,
   classifyRHRStatus,
   classifyWellbeingStatus,
+  calculateSVFC,
+  calculateSFCR,
+  calculateEWB,
 } from '../../src/lib/algorithms/hrv';
-import { evaluateReadiness } from '../../src/lib/algorithms/readiness';
-import type { WellbeingInput } from '../../src/types/hrv';
+import {
+  evaluateReadiness,
+  detectMaleDownregulation,
+  estimateCatabolicFactor,
+} from '../../src/lib/algorithms/readiness';
+import {
+  estimateCyclePhase,
+  applyLutealCorrection,
+  getPrescriptionFeminine,
+} from '../../src/lib/algorithms/hormonal';
+import type { WellbeingInput, CycleLog } from '../../src/types/hrv';
+import type { HormonalProfile } from '../../src/types/hrv';
 
 export default function WellbeingScreen() {
   const { user } = useAuthStore();
@@ -24,7 +37,7 @@ export default function WellbeingScreen() {
   }>();
   const [loading, setLoading] = useState(false);
   const { data: readings = [] } = useHRVHistory(28);
-  const { baseline7d, rhrBaseline, cv7d, readingCount } = useHRVBaseline();
+  const { baseline7d, rhrBaseline, cv7d, readingCount, rhrMu28, mu28SVC } = useHRVBaseline();
 
   const rmssd = parseFloat(params.rmssd ?? '0');
   const rhr = parseInt(params.rhr ?? '0', 10);
@@ -37,7 +50,96 @@ export default function WellbeingScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // 1. Save HRV reading
+      // 1. Fetch user profile for gender + hormonal profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('gender, hormonal_profile')
+        .eq('id', user.id)
+        .single();
+
+      const gender = profile?.gender as 'male' | 'female' | 'other' | undefined;
+      const hormonalProfile = (profile?.hormonal_profile ?? null) as HormonalProfile;
+
+      // 2. Resolve cycle phase for female users
+      let cyclePhase: import('../../src/types/hrv').CyclePhase = 'unknown';
+      let hormonalAdjustment = 1.0;
+      let effectiveRmssd = rmssd;
+
+      if (gender === 'female') {
+        const { data: cycleLog } = await supabase
+          .from('cycle_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('cycle_start_date', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (cycleLog) {
+          const cl = cycleLog as CycleLog;
+          const startDate = new Date(cl.cycle_start_date);
+          const dayOfCycle =
+            Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          cyclePhase = estimateCyclePhase(dayOfCycle);
+          effectiveRmssd = applyLutealCorrection(rmssd, cyclePhase);
+          hormonalAdjustment = effectiveRmssd / (rmssd || 1);
+        }
+      }
+
+      // 3. Compute V2 scores
+      const sVfc = calculateSVFC(effectiveRmssd);
+      const sFcr = calculateSFCR(rhr > 0 ? rhr : rhrMu28, rhrMu28);
+      const eWb = calculateEWB(wb.sleep_quality, wb.stress_level, wb.fatigue_level, wb.doms_level);
+
+      // 4. Male downregulation detection
+      let penaltyFactor = 1.0;
+      let falseReadinessFlag = false;
+      if (gender === 'male') {
+        const [flag, penalty] = detectMaleDownregulation(sVfc, mu28SVC, rhr, eWb);
+        if (flag) {
+          falseReadinessFlag = true;
+          penaltyFactor = penalty;
+        }
+      }
+
+      // 5. Catabolic factor (T:C estimate)
+      const last5SVC = readings.slice(0, 5).map((r) => calculateSVFC(r.rmssd));
+      const { data: recentSessions } = await supabase
+        .from('training_sessions')
+        .select('trimp_score')
+        .eq('user_id', user.id)
+        .gte(
+          'session_date',
+          new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        );
+      const trimpLast3 = (recentSessions ?? []).reduce(
+        (s: number, r: { trimp_score: number | null }) => s + (r.trimp_score ?? 0),
+        0,
+      );
+      const catabolicFlag = estimateCatabolicFactor(last5SVC, trimpLast3);
+
+      // 6. Evaluate readiness
+      let readiness = evaluateReadiness({
+        sVfc,
+        sFcr,
+        eWb,
+        readingCount: readingCount + 1,
+        penaltyFactor,
+        catabolicFlag,
+        falseReadinessFlag,
+      });
+
+      // 7. Override prescription for female users with specific hormonal profiles (Premium module)
+      if (gender === 'female' && hormonalProfile !== null && readingCount >= 7) {
+        const zone = readiness.color === 'green' ? 'green' : readiness.color === 'orange' ? 'orange' : 'red';
+        const femalePrescription = getPrescriptionFeminine(zone, hormonalProfile, cyclePhase);
+        readiness = {
+          ...readiness,
+          directive: femalePrescription.directive,
+          example_session: femalePrescription.session,
+        };
+      }
+
+      // 8. Save HRV reading
       const { data: hrvReading, error: hrvError } = await supabase
         .from('hrv_readings')
         .insert({
@@ -54,7 +156,7 @@ export default function WellbeingScreen() {
 
       if (hrvError) throw hrvError;
 
-      // 2. Save well-being log
+      // 9. Save well-being log
       const { data: wbLog, error: wbError } = await supabase
         .from('wellbeing_logs')
         .insert({ user_id: user.id, ...wb })
@@ -63,17 +165,14 @@ export default function WellbeingScreen() {
 
       if (wbError) throw wbError;
 
-      // 3. Compute readiness
-      const allReadings = [{ rmssd, rhr: rhr || null } as any, ...readings];
+      // 10. Classify legacy statuses (kept for DB columns)
       const hrvStatus = classifyHRVStatus(rmssd, baseline7d, readingCount + 1);
-      const rhrStatus = rhr > 0 && rhrBaseline > 0
-        ? classifyRHRStatus(rhr, rhrBaseline)
-        : 'normal';
+      const rhrStatus =
+        rhr > 0 && rhrBaseline > 0 ? classifyRHRStatus(rhr, rhrBaseline) : 'normal';
       const wbScore = wbLog.wellbeing_score ?? 3;
       const wbStatus = classifyWellbeingStatus(wbScore);
-      const readiness = evaluateReadiness(hrvStatus, rhrStatus, wbStatus);
 
-      // 4. Save assessment
+      // 11. Save assessment
       const { data: assessment, error: assessError } = await supabase
         .from('readiness_assessments')
         .upsert({
@@ -84,7 +183,7 @@ export default function WellbeingScreen() {
           hrv_status: hrvStatus,
           rhr_status: rhrStatus,
           wellbeing_status: wbStatus,
-          readiness_state: readiness.state,
+          readiness_state: 3, // legacy field
           readiness_color: readiness.color,
           readiness_score: readiness.score,
           training_directive: readiness.directive,
@@ -92,13 +191,20 @@ export default function WellbeingScreen() {
           example_session: readiness.example_session,
           baseline_rmssd_7d: baseline7d > 0 ? baseline7d : null,
           cv_7d: cv7d > 0 ? cv7d : null,
+          s_vfc: sVfc,
+          s_fcr: sFcr,
+          e_wb: eWb,
+          hormonal_adjustment: hormonalAdjustment,
+          false_readiness_flag: falseReadinessFlag,
+          cycle_phase: cyclePhase !== 'unknown' ? cyclePhase : null,
+          hormonal_profile: hormonalProfile,
         })
         .select()
         .single();
 
       if (assessError) throw assessError;
 
-      // 5. Mark onboarding complete on first measurement
+      // 12. Mark onboarding complete on first measurement
       if (readingCount === 0) {
         await supabase
           .from('profiles')

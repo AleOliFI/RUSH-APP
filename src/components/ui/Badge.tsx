@@ -4,10 +4,8 @@ import type { ReadinessColor } from '../../types/readiness';
 
 const colorMap: Record<ReadinessColor, { bg: string; text: string; dot: string }> = {
   green: { bg: 'bg-brand-green/20', text: 'text-brand-green', dot: 'bg-brand-green' },
-  yellow: { bg: 'bg-brand-yellow/20', text: 'text-brand-yellow', dot: 'bg-brand-yellow' },
   orange: { bg: 'bg-brand-orange/20', text: 'text-brand-orange', dot: 'bg-brand-orange' },
   red: { bg: 'bg-brand-red/20', text: 'text-brand-red', dot: 'bg-brand-red' },
-  dark_red: { bg: 'bg-red-900/30', text: 'text-red-300', dot: 'bg-red-700' },
   gray: { bg: 'bg-bg-card', text: 'text-text-secondary', dot: 'bg-text-muted' },
 };
 

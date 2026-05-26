@@ -24,6 +24,17 @@ export type HRVStatus = 'elevated' | 'baseline' | 'below_baseline' | 'low_trend'
 export type RHRStatus = 'reduced' | 'normal' | 'elevated';
 export type WellbeingStatus = 'excellent' | 'good' | 'poor' | 'very_poor';
 
+export type CyclePhase = 'follicular' | 'luteal' | 'menstrual' | 'unknown';
+export type HormonalProfile = 'regular' | 'sop' | 'ahf_reds' | null;
+
+export interface CycleLog {
+  id: string;
+  user_id: string;
+  cycle_start_date: string;
+  cycle_length_days: number;
+  created_at: string;
+}
+
 export interface WellbeingLog {
   id: string;
   user_id: string;

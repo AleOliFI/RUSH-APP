@@ -7,6 +7,7 @@ import {
   classifyHRVStatus,
   classifyRHRStatus,
   calculateRHRBaseline,
+  calculateBaselines,
 } from '../lib/algorithms/hrv';
 import type { HRVReading } from '../types/hrv';
 
@@ -41,8 +42,20 @@ export function useHRVBaseline() {
   const baseline28d = calculateBaseline(readings, 28);
   const cv7d = calculateCV(readings.slice(0, 7));
   const rhrBaseline = calculateRHRBaseline(readings);
+  const baselines = calculateBaselines(readings);
 
-  return { baseline7d, baseline28d, cv7d, rhrBaseline, readingCount: readings.length };
+  return {
+    baseline7d,
+    baseline28d,
+    cv7d,
+    rhrBaseline,
+    readingCount: readings.length,
+    mu7SVC: baselines.mu7SVC,
+    mu28SVC: baselines.mu28SVC,
+    sigma28SVC: baselines.sigma28SVC,
+    sigma28: baselines.sigma28,
+    rhrMu28: baselines.rhrMu28,
+  };
 }
 
 export function useCurrentHRVStatus(latestRMSSD: number, latestRHR: number | null) {

@@ -10,6 +10,7 @@ import { H1, Body, Caption } from '../../../src/components/ui/Typography';
 import { Button } from '../../../src/components/ui/Button';
 import { supabase } from '../../../src/lib/supabase';
 import { useAuthStore } from '../../../src/stores/auth';
+import type { HormonalProfile } from '../../../src/types/hrv';
 
 type RunnerLevel = 'beginner' | 'intermediate' | 'advanced';
 type Gender = 'male' | 'female' | 'other';
@@ -26,16 +27,40 @@ const GENDERS: { key: Gender; label: string }[] = [
   { key: 'other', label: 'Outro' },
 ];
 
+const HORMONAL_OPTIONS: { key: HormonalProfile; label: string; desc: string }[] = [
+  { key: 'regular', label: 'Sim, regular', desc: 'Ciclo mensal previsível' },
+  { key: 'sop', label: 'Irregular / SOP', desc: 'Ciclo irregular ou SOP diagnosticada' },
+  { key: 'ahf_reds', label: 'Amenorreia / RED-S', desc: 'Ausência de ciclo ou RED-S diagnosticado' },
+  { key: null, label: 'Prefiro não informar', desc: '' },
+];
+
 export default function OnboardingProfile() {
   const { user } = useAuthStore();
   const [level, setLevel] = useState<RunnerLevel>('beginner');
   const [gender, setGender] = useState<Gender>('female');
+  const [hormonalProfile, setHormonalProfile] = useState<HormonalProfile>('regular');
+  const [lastPeriodDate, setLastPeriodDate] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   async function handleNext() {
     if (!user) return;
     setLoading(true);
-    await supabase.from('profiles').update({ runner_level: level, gender }).eq('id', user.id);
+
+    const updates: Record<string, unknown> = { runner_level: level, gender };
+    if (gender === 'female') {
+      updates.hormonal_profile = hormonalProfile;
+    }
+
+    await supabase.from('profiles').update(updates).eq('id', user.id);
+
+    // Save cycle log if female and a last period date was provided
+    if (gender === 'female' && lastPeriodDate) {
+      await supabase
+        .from('cycle_logs')
+        .upsert({ user_id: user.id, cycle_start_date: lastPeriodDate })
+        .eq('user_id', user.id);
+    }
+
     setLoading(false);
     router.push('/(auth)/onboarding/calibration');
   }
@@ -55,6 +80,7 @@ export default function OnboardingProfile() {
         </Body>
       </View>
 
+      {/* Gender */}
       <View className="gap-4">
         <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
           Gênero
@@ -83,6 +109,66 @@ export default function OnboardingProfile() {
         </View>
       </View>
 
+      {/* Hormonal profile — only for female users */}
+      {gender === 'female' && (
+        <View className="gap-4">
+          <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
+            Ciclo Menstrual
+          </Caption>
+          <Body className="text-text-secondary -mt-2">
+            Você tem ciclo menstrual regular?
+          </Body>
+          <View className="gap-3">
+            {HORMONAL_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={String(opt.key)}
+                onPress={() => setHormonalProfile(opt.key)}
+                className={`p-4 rounded-2xl border ${
+                  hormonalProfile === opt.key
+                    ? 'bg-brand-green/10 border-brand-green'
+                    : 'bg-bg-card border-bg-border'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text
+                  className={`font-semibold text-base ${
+                    hormonalProfile === opt.key ? 'text-brand-green' : 'text-text-primary'
+                  }`}
+                >
+                  {opt.label}
+                </Text>
+                {opt.desc ? (
+                  <Text className="text-text-secondary text-sm mt-0.5">{opt.desc}</Text>
+                ) : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Last period date input */}
+          {hormonalProfile !== null && (
+            <View className="gap-2">
+              <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
+                Data da última menstruação (opcional)
+              </Caption>
+              <TouchableOpacity
+                className="bg-bg-card border border-bg-border rounded-2xl p-4"
+                activeOpacity={0.7}
+                onPress={() => {
+                  // Use a simple date input — in production wire up a DatePicker
+                  const today = new Date().toISOString().split('T')[0];
+                  setLastPeriodDate(today);
+                }}
+              >
+                <Text className={lastPeriodDate ? 'text-text-primary' : 'text-text-secondary'}>
+                  {lastPeriodDate || 'Toque para selecionar a data'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Runner level */}
       <View className="gap-4">
         <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
           Nível como corredor
