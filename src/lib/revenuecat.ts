@@ -9,10 +9,15 @@ export const ENTITLEMENT_PREMIUM = 'premium';
 export const OFFERING_DEFAULT = 'default';
 
 export function initRevenueCat() {
-  Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-  const apiKey = Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID;
-  if (apiKey) {
-    Purchases.configure({ apiKey });
+  if (Platform.OS === 'web') return;
+  try {
+    Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    const apiKey = Platform.OS === 'ios' ? RC_API_KEY_IOS : RC_API_KEY_ANDROID;
+    if (apiKey) {
+      Purchases.configure({ apiKey });
+    }
+  } catch {
+    // silently fail in dev without RC keys
   }
 }
 
