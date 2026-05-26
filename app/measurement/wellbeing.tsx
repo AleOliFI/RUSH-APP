@@ -6,6 +6,7 @@ import { WellbeingForm } from '../../src/components/measurement/WellbeingForm';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/stores/auth';
 import { useHRVHistory, useHRVBaseline } from '../../src/hooks/useHRVBaseline';
+import { useIsPremium } from '../../src/hooks/useSubscription';
 import {
   classifyHRVStatus,
   classifyRHRStatus,
@@ -24,11 +25,11 @@ import {
   applyLutealCorrection,
   getPrescriptionFeminine,
 } from '../../src/lib/algorithms/hormonal';
-import type { WellbeingInput, CycleLog } from '../../src/types/hrv';
-import type { HormonalProfile } from '../../src/types/hrv';
+import type { WellbeingInput, CycleLog, CyclePhase, HormonalProfile } from '../../src/types/hrv';
 
 export default function WellbeingScreen() {
   const { user } = useAuthStore();
+  const isPremium = useIsPremium();
   const params = useLocalSearchParams<{
     rmssd: string;
     rhr: string;
@@ -50,7 +51,7 @@ export default function WellbeingScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // 1. Fetch user profile for gender + hormonal profile
+      // 1. Fetch user profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('gender, hormonal_profile')
@@ -60,12 +61,12 @@ export default function WellbeingScreen() {
       const gender = profile?.gender as 'male' | 'female' | 'other' | undefined;
       const hormonalProfile = (profile?.hormonal_profile ?? null) as HormonalProfile;
 
-      // 2. Resolve cycle phase for female users
-      let cyclePhase: import('../../src/types/hrv').CyclePhase = 'unknown';
+      // 2. Hormonal cycle phase (Premium — Cérebro Endócrino)
+      let cyclePhase: CyclePhase = 'unknown';
       let hormonalAdjustment = 1.0;
       let effectiveRmssd = rmssd;
 
-      if (gender === 'female') {
+      if (isPremium && gender === 'female') {
         const { data: cycleLog } = await supabase
           .from('cycle_logs')
           .select('*')
@@ -90,10 +91,10 @@ export default function WellbeingScreen() {
       const sFcr = calculateSFCR(rhr > 0 ? rhr : rhrMu28, rhrMu28);
       const eWb = calculateEWB(wb.sleep_quality, wb.stress_level, wb.fatigue_level, wb.doms_level);
 
-      // 4. Male downregulation detection
+      // 4. Male downregulation (Premium)
       let penaltyFactor = 1.0;
       let falseReadinessFlag = false;
-      if (gender === 'male') {
+      if (isPremium && gender === 'male') {
         const [flag, penalty] = detectMaleDownregulation(sVfc, mu28SVC, rhr, eWb);
         if (flag) {
           falseReadinessFlag = true;
@@ -101,21 +102,24 @@ export default function WellbeingScreen() {
         }
       }
 
-      // 5. Catabolic factor (T:C estimate)
-      const last5SVC = readings.slice(0, 5).map((r) => calculateSVFC(r.rmssd));
-      const { data: recentSessions } = await supabase
-        .from('training_sessions')
-        .select('trimp_score')
-        .eq('user_id', user.id)
-        .gte(
-          'session_date',
-          new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      // 5. Catabolic factor (Premium)
+      let catabolicFlag = false;
+      if (isPremium) {
+        const last5SVC = readings.slice(0, 5).map((r) => calculateSVFC(r.rmssd));
+        const { data: recentSessions } = await supabase
+          .from('training_sessions')
+          .select('trimp_score')
+          .eq('user_id', user.id)
+          .gte(
+            'session_date',
+            new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          );
+        const trimpLast3 = (recentSessions ?? []).reduce(
+          (s: number, r: { trimp_score: number | null }) => s + (r.trimp_score ?? 0),
+          0,
         );
-      const trimpLast3 = (recentSessions ?? []).reduce(
-        (s: number, r: { trimp_score: number | null }) => s + (r.trimp_score ?? 0),
-        0,
-      );
-      const catabolicFlag = estimateCatabolicFactor(last5SVC, trimpLast3);
+        catabolicFlag = estimateCatabolicFactor(last5SVC, trimpLast3);
+      }
 
       // 6. Evaluate readiness
       let readiness = evaluateReadiness({
@@ -128,9 +132,10 @@ export default function WellbeingScreen() {
         falseReadinessFlag,
       });
 
-      // 7. Override prescription for female users with specific hormonal profiles (Premium module)
-      if (gender === 'female' && hormonalProfile !== null && readingCount >= 7) {
-        const zone = readiness.color === 'green' ? 'green' : readiness.color === 'orange' ? 'orange' : 'red';
+      // 7. Hormonal prescription override (Premium — Cérebro Endócrino)
+      if (isPremium && gender === 'female' && hormonalProfile !== null && readingCount >= 7) {
+        const zone =
+          readiness.color === 'green' ? 'green' : readiness.color === 'orange' ? 'orange' : 'red';
         const femalePrescription = getPrescriptionFeminine(zone, hormonalProfile, cyclePhase);
         readiness = {
           ...readiness,
@@ -165,7 +170,7 @@ export default function WellbeingScreen() {
 
       if (wbError) throw wbError;
 
-      // 10. Classify legacy statuses (kept for DB columns)
+      // 10. Legacy status fields
       const hrvStatus = classifyHRVStatus(rmssd, baseline7d, readingCount + 1);
       const rhrStatus =
         rhr > 0 && rhrBaseline > 0 ? classifyRHRStatus(rhr, rhrBaseline) : 'normal';
@@ -183,7 +188,7 @@ export default function WellbeingScreen() {
           hrv_status: hrvStatus,
           rhr_status: rhrStatus,
           wellbeing_status: wbStatus,
-          readiness_state: 3, // legacy field
+          readiness_state: 3,
           readiness_color: readiness.color,
           readiness_score: readiness.score,
           training_directive: readiness.directive,
@@ -204,7 +209,6 @@ export default function WellbeingScreen() {
 
       if (assessError) throw assessError;
 
-      // 12. Mark onboarding complete on first measurement
       if (readingCount === 0) {
         await supabase
           .from('profiles')

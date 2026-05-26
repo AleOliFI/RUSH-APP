@@ -9,11 +9,12 @@ import { Card } from '../../src/components/ui/Card';
 import { useSubscriptionStore } from '../../src/stores/subscription';
 
 const PREMIUM_FEATURES = [
-  { icon: '🎯', text: 'Matriz de Prescrição completa (5 estados)' },
-  { icon: '📊', text: 'Histórico de 28 dias + tendências crônicas' },
+  { icon: '🧠', text: 'Cérebro Endócrino: módulo hormonal SOP/AHF-RED-S com correção lútea' },
+  { icon: '⚡', text: 'Detecção de downregulation masculina (falsa prontidão)' },
+  { icon: '📊', text: 'Histórico 28 dias + curva S_VFC com banda µ±σ' },
+  { icon: '🎯', text: 'Prescrição detalhada de sessão (série, pace, duração)' },
+  { icon: '📈', text: 'Médias móveis µ_VFC7/28 e estimativa T:C (TRIMP)' },
   { icon: '🔗', text: 'Integração Strava, Apple Health e Garmin' },
-  { icon: '💊', text: 'Escore de Bem-Estar cruzado (DOMS + estresse)' },
-  { icon: '📈', text: 'Médias móveis 7d e 28d de VFC' },
 ];
 
 export default function SubscriptionScreen() {

@@ -4,6 +4,9 @@ import {
   TouchableOpacity,
   Text,
   ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { H1, Body, Caption } from '../../../src/components/ui/Typography';
@@ -34,13 +37,33 @@ const HORMONAL_OPTIONS: { key: HormonalProfile; label: string; desc: string }[] 
   { key: null, label: 'Prefiro não informar', desc: '' },
 ];
 
+function padTwo(n: string) {
+  return n.replace(/\D/g, '').slice(0, 2);
+}
+
+function buildDateString(day: string, month: string, year: string): string | null {
+  const d = parseInt(day, 10);
+  const m = parseInt(month, 10);
+  const y = parseInt(year, 10);
+  if (!d || !m || !y || y < 2000 || y > 2030) return null;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(y, m - 1, d);
+  if (date > new Date()) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 export default function OnboardingProfile() {
   const { user } = useAuthStore();
   const [level, setLevel] = useState<RunnerLevel>('beginner');
   const [gender, setGender] = useState<Gender>('female');
   const [hormonalProfile, setHormonalProfile] = useState<HormonalProfile>('regular');
-  const [lastPeriodDate, setLastPeriodDate] = useState<string>('');
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const dateString = buildDateString(day, month, year);
+  const dateValid = day && month && year ? dateString !== null : true;
 
   async function handleNext() {
     if (!user) return;
@@ -53,12 +76,13 @@ export default function OnboardingProfile() {
 
     await supabase.from('profiles').update(updates).eq('id', user.id);
 
-    // Save cycle log if female and a last period date was provided
-    if (gender === 'female' && lastPeriodDate) {
+    if (gender === 'female' && dateString) {
       await supabase
         .from('cycle_logs')
-        .upsert({ user_id: user.id, cycle_start_date: lastPeriodDate })
-        .eq('user_id', user.id);
+        .upsert(
+          { user_id: user.id, cycle_start_date: dateString },
+          { onConflict: 'user_id,cycle_start_date' },
+        );
     }
 
     setLoading(false);
@@ -66,65 +90,166 @@ export default function OnboardingProfile() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-bg-primary"
-      contentContainerClassName="px-6 py-12 gap-8"
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      className="flex-1"
     >
-      <View className="gap-1">
-        <Text className="text-brand-green text-sm font-semibold uppercase tracking-widest">
-          Passo 1 de 2
-        </Text>
-        <H1>Fale sobre você</H1>
-        <Body className="text-text-secondary">
-          Isso calibra sua prescrição de treino personalizada.
-        </Body>
-      </View>
-
-      {/* Gender */}
-      <View className="gap-4">
-        <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
-          Gênero
-        </Caption>
-        <View className="flex-row gap-3">
-          {GENDERS.map((g) => (
-            <TouchableOpacity
-              key={g.key}
-              onPress={() => setGender(g.key)}
-              className={`flex-1 py-3 rounded-2xl items-center border ${
-                gender === g.key
-                  ? 'bg-brand-green border-brand-green'
-                  : 'bg-bg-card border-bg-border'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text
-                className={`font-semibold text-sm ${
-                  gender === g.key ? 'text-bg-primary' : 'text-text-secondary'
-                }`}
-              >
-                {g.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      <ScrollView
+        className="flex-1 bg-bg-primary"
+        contentContainerClassName="px-6 py-12 gap-8"
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="gap-1">
+          <Text className="text-brand-green text-sm font-semibold uppercase tracking-widest">
+            Passo 1 de 2
+          </Text>
+          <H1>Fale sobre você</H1>
+          <Body className="text-text-secondary">
+            Isso calibra sua prescrição de treino personalizada.
+          </Body>
         </View>
-      </View>
 
-      {/* Hormonal profile — only for female users */}
-      {gender === 'female' && (
+        {/* Gender */}
         <View className="gap-4">
           <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
-            Ciclo Menstrual
+            Gênero
           </Caption>
-          <Body className="text-text-secondary -mt-2">
-            Você tem ciclo menstrual regular?
-          </Body>
-          <View className="gap-3">
-            {HORMONAL_OPTIONS.map((opt) => (
+          <View className="flex-row gap-3">
+            {GENDERS.map((g) => (
               <TouchableOpacity
-                key={String(opt.key)}
-                onPress={() => setHormonalProfile(opt.key)}
+                key={g.key}
+                onPress={() => setGender(g.key)}
+                className={`flex-1 py-3 rounded-2xl items-center border ${
+                  gender === g.key
+                    ? 'bg-brand-green border-brand-green'
+                    : 'bg-bg-card border-bg-border'
+                }`}
+                activeOpacity={0.7}
+              >
+                <Text
+                  className={`font-semibold text-sm ${
+                    gender === g.key ? 'text-bg-primary' : 'text-text-secondary'
+                  }`}
+                >
+                  {g.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Hormonal profile — female only */}
+        {gender === 'female' && (
+          <>
+            <View className="gap-4">
+              <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
+                Ciclo Menstrual
+              </Caption>
+              <Body className="text-text-secondary -mt-2">
+                Você tem ciclo menstrual regular?
+              </Body>
+              <View className="gap-3">
+                {HORMONAL_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={String(opt.key)}
+                    onPress={() => setHormonalProfile(opt.key)}
+                    className={`p-4 rounded-2xl border ${
+                      hormonalProfile === opt.key
+                        ? 'bg-brand-green/10 border-brand-green'
+                        : 'bg-bg-card border-bg-border'
+                    }`}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      className={`font-semibold text-base ${
+                        hormonalProfile === opt.key ? 'text-brand-green' : 'text-text-primary'
+                      }`}
+                    >
+                      {opt.label}
+                    </Text>
+                    {opt.desc ? (
+                      <Text className="text-text-secondary text-sm mt-0.5">{opt.desc}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Date of last period */}
+            {hormonalProfile !== null && (
+              <View className="gap-3">
+                <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
+                  Data da última menstruação (opcional)
+                </Caption>
+                <View className="flex-row gap-3">
+                  <View className="flex-1 gap-1">
+                    <Caption className="text-text-muted text-xs">Dia</Caption>
+                    <TextInput
+                      value={day}
+                      onChangeText={(v) => setDay(padTwo(v))}
+                      placeholder="DD"
+                      keyboardType="numeric"
+                      maxLength={2}
+                      className="bg-bg-card border border-bg-border rounded-2xl px-4 py-3 text-text-primary text-base text-center"
+                      placeholderTextColor="#525252"
+                    />
+                  </View>
+                  <View className="flex-1 gap-1">
+                    <Caption className="text-text-muted text-xs">Mês</Caption>
+                    <TextInput
+                      value={month}
+                      onChangeText={(v) => setMonth(padTwo(v))}
+                      placeholder="MM"
+                      keyboardType="numeric"
+                      maxLength={2}
+                      className="bg-bg-card border border-bg-border rounded-2xl px-4 py-3 text-text-primary text-base text-center"
+                      placeholderTextColor="#525252"
+                    />
+                  </View>
+                  <View className="flex-1 gap-1">
+                    <Caption className="text-text-muted text-xs">Ano</Caption>
+                    <TextInput
+                      value={year}
+                      onChangeText={(v) => setYear(v.replace(/\D/g, '').slice(0, 4))}
+                      placeholder="AAAA"
+                      keyboardType="numeric"
+                      maxLength={4}
+                      className="bg-bg-card border border-bg-border rounded-2xl px-4 py-3 text-text-primary text-base text-center"
+                      placeholderTextColor="#525252"
+                    />
+                  </View>
+                </View>
+                {day && month && year && !dateValid && (
+                  <Text className="text-red-400 text-xs">
+                    Data inválida — verifique o dia, mês e ano.
+                  </Text>
+                )}
+                {dateString && (
+                  <Text className="text-brand-green text-xs">
+                    ✓ {new Date(dateString + 'T12:00:00').toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </Text>
+                )}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Runner level */}
+        <View className="gap-4">
+          <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
+            Nível como corredor
+          </Caption>
+          <View className="gap-3">
+            {LEVELS.map((l) => (
+              <TouchableOpacity
+                key={l.key}
+                onPress={() => setLevel(l.key)}
                 className={`p-4 rounded-2xl border ${
-                  hormonalProfile === opt.key
+                  level === l.key
                     ? 'bg-brand-green/10 border-brand-green'
                     : 'bg-bg-card border-bg-border'
                 }`}
@@ -132,73 +257,25 @@ export default function OnboardingProfile() {
               >
                 <Text
                   className={`font-semibold text-base ${
-                    hormonalProfile === opt.key ? 'text-brand-green' : 'text-text-primary'
+                    level === l.key ? 'text-brand-green' : 'text-text-primary'
                   }`}
                 >
-                  {opt.label}
+                  {l.label}
                 </Text>
-                {opt.desc ? (
-                  <Text className="text-text-secondary text-sm mt-0.5">{opt.desc}</Text>
-                ) : null}
+                <Text className="text-text-secondary text-sm mt-0.5">{l.desc}</Text>
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Last period date input */}
-          {hormonalProfile !== null && (
-            <View className="gap-2">
-              <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
-                Data da última menstruação (opcional)
-              </Caption>
-              <TouchableOpacity
-                className="bg-bg-card border border-bg-border rounded-2xl p-4"
-                activeOpacity={0.7}
-                onPress={() => {
-                  // Use a simple date input — in production wire up a DatePicker
-                  const today = new Date().toISOString().split('T')[0];
-                  setLastPeriodDate(today);
-                }}
-              >
-                <Text className={lastPeriodDate ? 'text-text-primary' : 'text-text-secondary'}>
-                  {lastPeriodDate || 'Toque para selecionar a data'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
-      )}
 
-      {/* Runner level */}
-      <View className="gap-4">
-        <Caption className="text-text-secondary uppercase tracking-widest font-semibold">
-          Nível como corredor
-        </Caption>
-        <View className="gap-3">
-          {LEVELS.map((l) => (
-            <TouchableOpacity
-              key={l.key}
-              onPress={() => setLevel(l.key)}
-              className={`p-4 rounded-2xl border ${
-                level === l.key
-                  ? 'bg-brand-green/10 border-brand-green'
-                  : 'bg-bg-card border-bg-border'
-              }`}
-              activeOpacity={0.7}
-            >
-              <Text
-                className={`font-semibold text-base ${
-                  level === l.key ? 'text-brand-green' : 'text-text-primary'
-                }`}
-              >
-                {l.label}
-              </Text>
-              <Text className="text-text-secondary text-sm mt-0.5">{l.desc}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <Button title="Continuar" size="lg" loading={loading} onPress={handleNext} />
-    </ScrollView>
+        <Button
+          title="Continuar"
+          size="lg"
+          loading={loading}
+          disabled={!dateValid}
+          onPress={handleNext}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
