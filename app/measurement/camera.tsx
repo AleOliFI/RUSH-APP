@@ -13,14 +13,17 @@ import { SignalIndicator } from '../../src/components/measurement/SignalIndicato
 import { H2, Body, Caption } from '../../src/components/ui/Typography';
 import { Button } from '../../src/components/ui/Button';
 import { useHRVStore } from '../../src/stores/hrv';
-import { processPPGSignal } from '../../src/lib/algorithms/ppg';
+import { processPPGSignal, STABILISATION_SECONDS, ACQUISITION_SECONDS } from '../../src/lib/algorithms/ppg';
+import { calculateRMSSD } from '../../src/lib/algorithms/hrv';
 
-const MEASUREMENT_DURATION = 60; // seconds
+const TOTAL_DURATION = STABILISATION_SECONDS + ACQUISITION_SECONDS; // 120s
 const SAMPLE_INTERVAL = Math.round(1000 / 30); // ~33ms for 30fps
+
+type MeasurementPhase = 'idle' | 'stabilising' | 'acquiring' | 'done' | 'error';
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
-  const [phase, setPhase] = useState<'idle' | 'measuring' | 'done' | 'error'>('idle');
+  const [phase, setPhase] = useState<MeasurementPhase>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [quality, setQuality] = useState(0);
 
@@ -31,9 +34,7 @@ export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
 
   useEffect(() => {
-    return () => {
-      stopCapture();
-    };
+    return () => { stopCapture(); };
   }, []);
 
   function stopCapture() {
@@ -57,35 +58,30 @@ export default function CameraScreen() {
     redBuffer.current = [];
     clearBuffer();
     setElapsed(0);
-    setPhase('measuring');
+    setPhase('stabilising');
     setMeasuring(true);
 
-    // Simulate red channel capture (real implementation uses frame processor)
     captureRef.current = setInterval(() => {
-      // In production: read actual pixel values from camera frame
-      // Simulated realistic PPG signal for development
       const t = redBuffer.current.length / 30;
       const heartRate = 62 + Math.random() * 4;
       const pulse = Math.sin(2 * Math.PI * (heartRate / 60) * t);
       const noise = (Math.random() - 0.5) * 0.1;
-      const value = 0.6 + pulse * 0.15 + noise;
-      redBuffer.current.push(value);
+      redBuffer.current.push(0.6 + pulse * 0.15 + noise);
 
-      // Update signal quality estimate
       if (redBuffer.current.length % 30 === 0) {
-        const recentMean =
-          redBuffer.current.slice(-30).reduce((s, v) => s + v, 0) / 30;
-        const q = Math.min(1, Math.max(0, 1 - Math.abs(recentMean - 0.6) * 5));
-        setQuality(q);
+        const recentMean = redBuffer.current.slice(-30).reduce((s, v) => s + v, 0) / 30;
+        setQuality(Math.min(1, Math.max(0, 1 - Math.abs(recentMean - 0.6) * 5)));
       }
     }, SAMPLE_INTERVAL);
 
     timerRef.current = setInterval(() => {
       setElapsed((prev) => {
         const next = prev + 1;
-        if (next >= MEASUREMENT_DURATION) {
+        if (next === STABILISATION_SECONDS) {
+          setPhase('acquiring');
+        }
+        if (next >= TOTAL_DURATION) {
           finishMeasurement();
-          return next;
         }
         return next;
       });
@@ -105,9 +101,7 @@ export default function CameraScreen() {
     router.replace({
       pathname: '/measurement/wellbeing',
       params: {
-        rmssd: result.rrIntervals.length > 0
-          ? String(Math.round(calculateRMSSD(result.rrIntervals)))
-          : '0',
+        rmssd: String(Math.round(calculateRMSSD(result.rrIntervals))),
         rhr: String(result.estimatedHR),
         quality: String(result.qualityScore.toFixed(2)),
         rrIntervals: JSON.stringify(result.rrIntervals),
@@ -115,7 +109,13 @@ export default function CameraScreen() {
     });
   }, []);
 
-  const progress = elapsed / MEASUREMENT_DURATION;
+  const isStabilising = phase === 'stabilising';
+  const isAcquiring = phase === 'acquiring';
+  const activeSec = isAcquiring ? elapsed - STABILISATION_SECONDS : 0;
+  const activeProgress = activeSec / ACQUISITION_SECONDS;
+  const countdownSec = isStabilising
+    ? STABILISATION_SECONDS - elapsed
+    : ACQUISITION_SECONDS - activeSec;
 
   if (!permission) {
     return (
@@ -128,7 +128,6 @@ export default function CameraScreen() {
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top', 'bottom']}>
       <View className="flex-1 px-6 pt-4 pb-8 gap-6">
-        {/* Header */}
         <View className="flex-row items-center justify-between">
           <H2>Medição PPG</H2>
           <TouchableOpacity onPress={() => router.back()}>
@@ -144,17 +143,12 @@ export default function CameraScreen() {
                 <H2>Pronto para medir?</H2>
                 <Body className="text-text-secondary text-center">
                   Coloque o dedo indicador sobre a câmera traseira, cobrindo também o flash.
-                  Mantenha firme por 60 segundos.
+                  Protocolo: 60s de estabilização + 60s de captura ativa.
                 </Body>
               </View>
               {Platform.OS !== 'web' && (
                 <View className="w-full rounded-3xl overflow-hidden h-40">
-                  <CameraView
-                    ref={cameraRef}
-                    style={{ flex: 1 }}
-                    facing="back"
-                    enableTorch={true}
-                  />
+                  <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" enableTorch />
                 </View>
               )}
             </View>
@@ -162,33 +156,62 @@ export default function CameraScreen() {
           </>
         )}
 
-        {phase === 'measuring' && (
+        {(isStabilising || isAcquiring) && (
           <>
             <View className="flex-1 items-center justify-center gap-8">
               {Platform.OS !== 'web' && (
                 <View className="w-full rounded-3xl overflow-hidden h-48">
-                  <CameraView
-                    ref={cameraRef}
-                    style={{ flex: 1 }}
-                    facing="back"
-                    enableTorch={true}
-                  />
+                  <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" enableTorch />
                 </View>
               )}
 
               <SignalIndicator quality={quality} isActive />
 
-              {/* Progress ring */}
-              <View className="items-center gap-2">
-                <Text className="text-text-primary text-5xl font-black">
-                  {MEASUREMENT_DURATION - elapsed}s
+              <View className="items-center gap-4 w-full">
+                {/* Phase indicator pills */}
+                <View className="flex-row gap-2">
+                  <View className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
+                    isStabilising ? 'bg-bg-secondary border-text-secondary' : 'border-brand-green/30'
+                  }`}>
+                    <View className={`w-1.5 h-1.5 rounded-full ${isStabilising ? 'bg-text-secondary' : 'bg-brand-green'}`} />
+                    <Text className={`text-xs font-semibold ${isStabilising ? 'text-text-secondary' : 'text-brand-green'}`}>
+                      Estabilização
+                    </Text>
+                  </View>
+                  <View className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
+                    isAcquiring ? 'bg-brand-green/10 border-brand-green' : 'border-bg-border'
+                  }`}>
+                    <View className={`w-1.5 h-1.5 rounded-full ${isAcquiring ? 'bg-brand-green' : 'bg-bg-border'}`} />
+                    <Text className={`text-xs font-semibold ${isAcquiring ? 'text-brand-green' : 'text-text-muted'}`}>
+                      Captura VFC
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Countdown */}
+                <Text className={`text-5xl font-black ${isAcquiring ? 'text-brand-green' : 'text-text-secondary'}`}>
+                  {countdownSec}s
                 </Text>
-                <Caption>Mantenha o dedo firme na câmera</Caption>
-                <View className="w-48 h-2 bg-bg-border rounded-full">
-                  <View
-                    className="h-2 bg-brand-green rounded-full"
-                    style={{ width: `${progress * 100}%` }}
-                  />
+                <Caption>
+                  {isStabilising ? 'Aguarde — estabilizando sinal...' : 'Mantenha o dedo firme na câmera'}
+                </Caption>
+
+                {/* Progress bars */}
+                <View className="w-full gap-1.5">
+                  {/* Stabilisation bar */}
+                  <View className="w-full h-1.5 bg-bg-border rounded-full">
+                    <View
+                      className="h-1.5 bg-text-secondary rounded-full"
+                      style={{ width: `${Math.min(1, elapsed / STABILISATION_SECONDS) * 100}%` }}
+                    />
+                  </View>
+                  {/* Active acquisition bar */}
+                  <View className="w-full h-2 bg-bg-border rounded-full">
+                    <View
+                      className="h-2 bg-brand-green rounded-full"
+                      style={{ width: `${activeProgress * 100}%` }}
+                    />
+                  </View>
                 </View>
               </View>
             </View>
@@ -196,10 +219,7 @@ export default function CameraScreen() {
             <Button
               title="Cancelar"
               variant="ghost"
-              onPress={() => {
-                stopCapture();
-                setPhase('idle');
-              }}
+              onPress={() => { stopCapture(); setPhase('idle'); setElapsed(0); }}
             />
           </>
         )}
@@ -211,7 +231,7 @@ export default function CameraScreen() {
               <H2>Sinal insuficiente</H2>
               <Body className="text-text-secondary text-center">
                 O sinal não foi bom o suficiente. Certifique-se de cobrir completamente a câmera e
-                o flash com o dedo.
+                o flash com o dedo, sem pressionar forte demais.
               </Body>
             </View>
             <Button title="Tentar novamente" size="lg" onPress={() => setPhase('idle')} />
@@ -220,13 +240,4 @@ export default function CameraScreen() {
       </View>
     </SafeAreaView>
   );
-}
-
-function calculateRMSSD(rr: number[]): number {
-  if (rr.length < 2) return 0;
-  const diffs = [];
-  for (let i = 1; i < rr.length; i++) {
-    diffs.push((rr[i] - rr[i - 1]) ** 2);
-  }
-  return Math.sqrt(diffs.reduce((s, v) => s + v, 0) / diffs.length);
 }
