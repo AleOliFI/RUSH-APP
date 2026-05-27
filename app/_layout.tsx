@@ -33,6 +33,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="measurement" options={{ presentation: 'modal' }} />
             <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="wearables" options={{ presentation: 'modal' }} />
           </Stack>
         </AppProviders>
       </QueryClientProvider>
