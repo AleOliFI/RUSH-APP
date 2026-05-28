@@ -1,26 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Purchases, { type PurchasesPackage } from 'react-native-purchases';
-import { H2, H3, Body, Caption, Label } from '../../src/components/ui/Typography';
+import { Platform } from 'react-native';
+import { H2, Body, Caption, Label } from '../../src/components/ui/Typography';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { useSubscriptionStore } from '../../src/stores/subscription';
-import { checkPremiumAccess, ENTITLEMENT_PREMIUM } from '../../src/lib/revenuecat';
+import { useAuthStore } from '../../src/stores/auth';
+import { openCaktoCheckout, refreshSubscriptionFromSupabase } from '../../src/lib/cakto';
+import type { CaktoPlan } from '../../src/lib/cakto';
 
 const PREMIUM_FEATURES = [
-  { icon: '🧠', text: 'Cérebro Endócrino: módulo hormonal SOP/AHF-RED-S com correção lútea' },
-  { icon: '⚡', text: 'Detecção de downregulation masculina (falsa prontidão)' },
-  { icon: '📊', text: 'Histórico 28 dias + curva S_VFC com banda µ±σ' },
-  { icon: '🎯', text: 'Prescrição detalhada de sessão (série, pace, duração)' },
-  { icon: '📈', text: 'Médias móveis µ_VFC7/28 e estimativa T:C (TRIMP)' },
+  { icon: '🎯', text: 'Matriz de Prescrição completa (5 estados)' },
+  { icon: '📊', text: 'Histórico de 28 dias + tendências crônicas' },
   { icon: '🔗', text: 'Integração Strava, Apple Health e Garmin' },
+  { icon: '💊', text: 'Escore de Bem-Estar cruzado (DOMS + estresse)' },
+  { icon: '📈', text: 'Médias móveis 7d e 28d de VFC' },
 ];
 
 const PLANS = [
   {
-    id: 'annual',
+    id: 'annual' as CaktoPlan,
     label: 'Anual',
     price: 'R$ 119,90',
     perMonth: 'R$ 9,99/mês',
@@ -28,7 +37,7 @@ const PLANS = [
     highlight: true,
   },
   {
-    id: 'monthly',
+    id: 'monthly' as CaktoPlan,
     label: 'Mensal',
     price: 'R$ 19,90',
     perMonth: 'por mês',
@@ -38,64 +47,85 @@ const PLANS = [
 ];
 
 export default function SubscriptionScreen() {
-  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
-  const [selectedPkg, setSelectedPkg] = useState<string>('annual');
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
+  const [packages, setPackages]     = useState<PurchasesPackage[]>([]);
+  const [selectedPkg, setSelectedPkg] = useState<CaktoPlan>('annual');
+  const [loading, setLoading]       = useState(false);
+  const [fetching, setFetching]     = useState(true);
   const { setTier } = useSubscriptionStore();
-  const isWeb = Platform.OS === 'web';
+  const { user }    = useAuthStore();
 
   useEffect(() => {
-    if (!isWeb) loadOfferings();
-    else setFetching(false);
+    loadNativeOfferings();
   }, []);
 
-  async function loadOfferings() {
+  async function loadNativeOfferings() {
     try {
       const offerings = await Purchases.getOfferings();
       if (offerings.current?.availablePackages) {
         setPackages(offerings.current.availablePackages);
       }
     } catch {
-      // no-op in dev without RC keys
+      // no-op in dev without RevenueCat keys
     } finally {
       setFetching(false);
     }
   }
 
+  /**
+   * Purchase flow:
+   *  - On iOS/Android with RevenueCat packages → native IAP (App Store / Play Store)
+   *  - Otherwise (web or no RC packages) → Cakto hosted checkout
+   */
   async function handlePurchase() {
-    if (isWeb) {
-      Alert.alert(
-        'Assinatura disponível no app',
-        'Baixe o app RUSH no iOS ou Android para se inscrever via App Store ou Google Play.',
-      );
-      return;
-    }
-
-    const pkg = packages.find((p) =>
-      selectedPkg === 'annual' ? p.packageType === 'ANNUAL' : p.packageType === 'MONTHLY',
-    );
-
-    if (!pkg) {
-      Alert.alert(
-        'Modo de desenvolvimento',
-        'Em produção, este botão abrirá o checkout da App Store/Play Store.',
-      );
-      return;
-    }
-
     setLoading(true);
     try {
-      const { customerInfo } = await Purchases.purchasePackage(pkg);
-      const isPremium = customerInfo.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
-      if (isPremium) {
-        setTier('premium');
-        // Sync to DB immediately — don't wait for webhook
-        const isPremiumConfirmed = await checkPremiumAccess();
-        if (isPremiumConfirmed) setTier('premium');
-        Alert.alert('Bem-vindo ao Premium! 🎉', 'Todos os recursos estão desbloqueados.', [
-          { text: 'Começar', onPress: () => router.back() },
-        ]);
+      // ── Native IAP path (RevenueCat) ──────────────────────────────────────
+      if (Platform.OS !== 'web' && packages.length > 0) {
+        const pkg = packages.find((p) =>
+          selectedPkg === 'annual'
+            ? p.packageType === 'ANNUAL'
+            : p.packageType === 'MONTHLY',
+        );
+
+        if (pkg) {
+          const { customerInfo } = await Purchases.purchasePackage(pkg);
+          const isPremium = customerInfo.entitlements.active['premium'] !== undefined;
+          if (isPremium) {
+            setTier('premium');
+            router.back();
+          }
+          return;
+        }
+      }
+
+      // ── Cakto web checkout path ───────────────────────────────────────────
+      if (!user) {
+        Alert.alert('Erro', 'Você precisa estar logado para assinar.');
+        return;
+      }
+
+      const browserClosed = await openCaktoCheckout(selectedPkg, user.id);
+
+      if (browserClosed) {
+        // Give the webhook a moment to process, then refresh
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const tier = await refreshSubscriptionFromSupabase(user.id);
+
+        if (tier === 'premium') {
+          setTier('premium');
+          Alert.alert(
+            '🎉 Assinatura ativada!',
+            'Bem-vindo ao RUSH Pro. Aproveite todos os recursos.',
+            [{ text: 'Continuar', onPress: () => router.back() }],
+          );
+        } else {
+          // Payment may still be processing — user can restart the app
+          Alert.alert(
+            'Processando pagamento',
+            'Se o pagamento foi aprovado, seu acesso será liberado em instantes. '
+            + 'Feche e reabra o app se ainda não aparecer.',
+          );
+        }
       }
     } catch (e: any) {
       if (!e.userCancelled) {
@@ -118,11 +148,15 @@ export default function SubscriptionScreen() {
           <Text className="text-text-secondary text-xl">✕</Text>
         </TouchableOpacity>
 
+        {/* Header */}
         <View className="items-center gap-2">
-          <Text className="text-brand-green text-3xl font-black tracking-tighter">RUSH</Text>
+          <Text className="text-rush-red text-3xl font-black tracking-tighter uppercase">
+            RUSH
+          </Text>
           <H2 className="text-center">Desbloqueie seu treinador completo</H2>
           <Body className="text-text-secondary text-center">
-            O preço de uma inscrição de corrida para ter um treinador de recuperação o ano inteiro.
+            O preço de uma inscrição de corrida para ter um treinador de recuperação o ano
+            inteiro.
           </Body>
         </View>
 
@@ -137,101 +171,85 @@ export default function SubscriptionScreen() {
           ))}
         </Card>
 
-        {/* Web notice */}
-        {isWeb && (
-          <Card className="bg-bg-card border border-brand-green/20 gap-3 items-center py-5">
-            <Text className="text-3xl">📱</Text>
-            <H3 className="text-center">Disponível no app móvel</H3>
-            <Body className="text-text-secondary text-center text-sm">
-              A assinatura é processada pela App Store (iOS) ou Google Play (Android). Baixe o app
-              para se inscrever.
-            </Body>
-            <View className="flex-row gap-3 mt-1">
-              <View className="flex-1 bg-bg-secondary rounded-2xl p-3 items-center gap-1">
-                <Text className="text-xl">🍎</Text>
-                <Caption className="text-xs text-center">App Store</Caption>
-              </View>
-              <View className="flex-1 bg-bg-secondary rounded-2xl p-3 items-center gap-1">
-                <Text className="text-xl">🤖</Text>
-                <Caption className="text-xs text-center">Google Play</Caption>
-              </View>
-            </View>
-          </Card>
-        )}
-
-        {/* Plans — mobile only */}
-        {!isWeb && (
-          <>
-            <View className="gap-3">
-              <Label>Escolha seu plano</Label>
-              {fetching ? (
-                <View className="items-center py-4">
-                  <ActivityIndicator color="#22C55E" />
-                </View>
-              ) : (
-                PLANS.map((plan) => (
-                  <TouchableOpacity
-                    key={plan.id}
-                    onPress={() => setSelectedPkg(plan.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View
-                      className={`rounded-3xl p-5 border flex-row items-center justify-between ${
-                        selectedPkg === plan.id
-                          ? 'bg-brand-green/10 border-brand-green'
-                          : 'bg-bg-card border-bg-border'
+        {/* Plans */}
+        <View className="gap-3">
+          <Label>Escolha seu plano</Label>
+          {PLANS.map((plan) => (
+            <TouchableOpacity
+              key={plan.id}
+              onPress={() => setSelectedPkg(plan.id)}
+              activeOpacity={0.8}
+            >
+              <View
+                className={`rounded-2xl p-5 border flex-row items-center justify-between ${
+                  selectedPkg === plan.id
+                    ? 'bg-rush-red/10 border-rush-red'
+                    : 'bg-bg-card border-bg-border'
+                }`}
+              >
+                <View className="gap-1">
+                  <View className="flex-row items-center gap-2">
+                    <Text
+                      className={`font-bold text-base uppercase tracking-widest ${
+                        selectedPkg === plan.id ? 'text-rush-red' : 'text-text-primary'
                       }`}
                     >
-                      <View className="gap-1">
-                        <View className="flex-row items-center gap-2">
-                          <Text
-                            className={`font-semibold text-base ${
-                              selectedPkg === plan.id ? 'text-brand-green' : 'text-text-primary'
-                            }`}
-                          >
-                            {plan.label}
-                          </Text>
-                          {plan.badge && (
-                            <View className="bg-brand-green px-2 py-0.5 rounded-full">
-                              <Text className="text-bg-primary text-xs font-bold">{plan.badge}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Caption>{plan.perMonth}</Caption>
+                      {plan.label}
+                    </Text>
+                    {plan.badge && (
+                      <View className="bg-rush-lime px-2 py-0.5 rounded-sm">
+                        <Text className="text-bg-primary text-xs font-bold uppercase tracking-widest">
+                          {plan.badge}
+                        </Text>
                       </View>
-                      <Text
-                        className={`text-xl font-bold ${
-                          selectedPkg === plan.id ? 'text-brand-green' : 'text-text-primary'
-                        }`}
-                      >
-                        {plan.price}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))
-              )}
-            </View>
+                    )}
+                  </View>
+                  <Caption>{plan.perMonth}</Caption>
+                </View>
+                <View className="items-end">
+                  <Text
+                    className={`text-xl font-black ${
+                      selectedPkg === plan.id ? 'text-rush-red' : 'text-text-primary'
+                    }`}
+                  >
+                    {plan.price}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-            {/* Anchoring comparison */}
-            <View className="bg-bg-card/50 rounded-2xl p-4">
-              <Caption className="text-center text-text-muted">
-                Comparado ao mercado: Strava Premium R$149,90/ano • Athlytic R$199,90/ano
-              </Caption>
-            </View>
+        {/* Anchoring comparison */}
+        <View className="bg-bg-card/50 rounded-sm p-4 border border-bg-border gap-1">
+          <Caption className="text-center text-text-muted">
+            Comparado ao mercado: Strava Premium R$149,90/ano • Athlytic R$199,90/ano
+          </Caption>
+        </View>
 
-            <Button
-              title={loading ? 'Processando...' : 'Assinar agora'}
-              size="lg"
-              loading={loading}
-              onPress={handlePurchase}
-            />
-
-            <Caption className="text-center text-text-muted">
-              Cancele quando quiser. Sem compromisso.{'\n'}
-              Assinatura gerenciada pela App Store / Play Store.
-            </Caption>
-          </>
+        {/* CTA */}
+        {fetching ? (
+          <ActivityIndicator color="#e72329" />
+        ) : (
+          <Button
+            title={loading ? 'Processando...' : 'Assinar agora'}
+            size="lg"
+            loading={loading}
+            onPress={handlePurchase}
+          />
         )}
+
+        {/* Payment method notice */}
+        <View className="items-center gap-1">
+          <Caption className="text-center text-text-muted">
+            Pagamento seguro via{' '}
+            <Text className="text-rush-red font-bold">Cakto</Text>
+            {packages.length > 0 ? ' ou App Store / Play Store' : ''}.
+          </Caption>
+          <Caption className="text-center text-text-muted">
+            Cancele quando quiser. Sem compromisso.
+          </Caption>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
