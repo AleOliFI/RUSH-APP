@@ -37,6 +37,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      "@stripe/stripe-react-native",
       "expo-splash-screen",
       "expo-web-browser",
       [

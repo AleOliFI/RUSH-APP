@@ -6,30 +6,41 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Purchases, { type PurchasesPackage } from 'react-native-purchases';
-import { Platform } from 'react-native';
 import { H2, Body, Caption, Label } from '../../src/components/ui/Typography';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { useSubscriptionStore } from '../../src/stores/subscription';
 import { useAuthStore } from '../../src/stores/auth';
-import { openCaktoCheckout, refreshSubscriptionFromSupabase } from '../../src/lib/cakto';
-import type { CaktoPlan } from '../../src/lib/cakto';
+import {
+  presentStripePaymentSheet,
+  refreshSubscriptionFromSupabase,
+  type StripePlan,
+} from '../../src/lib/stripe';
 
 const PREMIUM_FEATURES = [
-  { icon: '🎯', text: 'Matriz de Prescrição completa (5 estados)' },
-  { icon: '📊', text: 'Histórico de 28 dias + tendências crônicas' },
+  { icon: '🧠', text: 'Cérebro Endócrino: módulo hormonal SOP/AHF-RED-S com correção lútea' },
+  { icon: '⚡', text: 'Detecção de downregulation masculina (falsa prontidão)' },
+  { icon: '📊', text: 'Histórico 28 dias + curva S_VFC com banda µ±σ' },
+  { icon: '🎯', text: 'Prescrição detalhada de sessão (série, pace, duração)' },
+  { icon: '📈', text: 'Médias móveis µ_VFC7/28 e estimativa T:C (TRIMP)' },
   { icon: '🔗', text: 'Integração Strava, Apple Health e Garmin' },
-  { icon: '💊', text: 'Escore de Bem-Estar cruzado (DOMS + estresse)' },
-  { icon: '📈', text: 'Médias móveis 7d e 28d de VFC' },
 ];
 
-const PLANS = [
+const PLANS: Array<{
+  id: StripePlan;
+  label: string;
+  price: string;
+  perMonth: string;
+  badge: string | null;
+  highlight: boolean;
+}> = [
   {
-    id: 'annual' as CaktoPlan,
+    id: 'annual',
     label: 'Anual',
     price: 'R$ 119,90',
     perMonth: 'R$ 9,99/mês',
@@ -37,7 +48,7 @@ const PLANS = [
     highlight: true,
   },
   {
-    id: 'monthly' as CaktoPlan,
+    id: 'monthly',
     label: 'Mensal',
     price: 'R$ 19,90',
     perMonth: 'por mês',
@@ -47,12 +58,12 @@ const PLANS = [
 ];
 
 export default function SubscriptionScreen() {
-  const [packages, setPackages]     = useState<PurchasesPackage[]>([]);
-  const [selectedPkg, setSelectedPkg] = useState<CaktoPlan>('annual');
-  const [loading, setLoading]       = useState(false);
-  const [fetching, setFetching]     = useState(true);
+  const [rcPackages, setRcPackages] = useState<PurchasesPackage[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<StripePlan>('annual');
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const { setTier } = useSubscriptionStore();
-  const { user }    = useAuthStore();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     loadNativeOfferings();
@@ -62,35 +73,28 @@ export default function SubscriptionScreen() {
     try {
       const offerings = await Purchases.getOfferings();
       if (offerings.current?.availablePackages) {
-        setPackages(offerings.current.availablePackages);
+        setRcPackages(offerings.current.availablePackages);
       }
     } catch {
-      // no-op in dev without RevenueCat keys
+      // no-op without RevenueCat keys
     } finally {
       setFetching(false);
     }
   }
 
-  /**
-   * Purchase flow:
-   *  - On iOS/Android with RevenueCat packages → native IAP (App Store / Play Store)
-   *  - Otherwise (web or no RC packages) → Cakto hosted checkout
-   */
   async function handlePurchase() {
     setLoading(true);
     try {
-      // ── Native IAP path (RevenueCat) ──────────────────────────────────────
-      if (Platform.OS !== 'web' && packages.length > 0) {
-        const pkg = packages.find((p) =>
-          selectedPkg === 'annual'
+      // ── Native IAP via RevenueCat (App Store / Play Store) ───────────────
+      if (Platform.OS !== 'web' && rcPackages.length > 0) {
+        const pkg = rcPackages.find((p) =>
+          selectedPlan === 'annual'
             ? p.packageType === 'ANNUAL'
             : p.packageType === 'MONTHLY',
         );
-
         if (pkg) {
           const { customerInfo } = await Purchases.purchasePackage(pkg);
-          const isPremium = customerInfo.entitlements.active['premium'] !== undefined;
-          if (isPremium) {
+          if (customerInfo.entitlements.active['premium']) {
             setTier('premium');
             router.back();
           }
@@ -98,38 +102,34 @@ export default function SubscriptionScreen() {
         }
       }
 
-      // ── Cakto web checkout path ───────────────────────────────────────────
+      // ── Stripe Payment Sheet ──────────────────────────────────────────────
       if (!user) {
         Alert.alert('Erro', 'Você precisa estar logado para assinar.');
         return;
       }
 
-      const browserClosed = await openCaktoCheckout(selectedPkg, user.id);
+      const result = await presentStripePaymentSheet(selectedPlan, user.id);
+      if (result === 'cancelled') return;
 
-      if (browserClosed) {
-        // Give the webhook a moment to process, then refresh
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const tier = await refreshSubscriptionFromSupabase(user.id);
+      // Poll Supabase until webhook confirms (up to 3×, 2 s apart)
+      const tier = await refreshSubscriptionFromSupabase(user.id, 3, 2000);
 
-        if (tier === 'premium') {
-          setTier('premium');
-          Alert.alert(
-            '🎉 Assinatura ativada!',
-            'Bem-vindo ao RUSH Pro. Aproveite todos os recursos.',
-            [{ text: 'Continuar', onPress: () => router.back() }],
-          );
-        } else {
-          // Payment may still be processing — user can restart the app
-          Alert.alert(
-            'Processando pagamento',
-            'Se o pagamento foi aprovado, seu acesso será liberado em instantes. '
-            + 'Feche e reabra o app se ainda não aparecer.',
-          );
-        }
+      if (tier === 'premium') {
+        setTier('premium');
+        Alert.alert(
+          '🎉 Assinatura ativada!',
+          'Bem-vindo ao RUSH Pro. Todos os recursos estão desbloqueados.',
+          [{ text: 'Continuar', onPress: () => router.back() }],
+        );
+      } else {
+        Alert.alert(
+          'Processando pagamento',
+          'Seu pagamento foi recebido. O acesso será liberado em instantes — feche e reabra o app se precisar.',
+        );
       }
     } catch (e: any) {
       if (!e.userCancelled) {
-        Alert.alert('Erro', 'Não foi possível processar a compra. Tente novamente.');
+        Alert.alert('Erro', e.message ?? 'Não foi possível processar a compra. Tente novamente.');
       }
     } finally {
       setLoading(false);
@@ -177,12 +177,12 @@ export default function SubscriptionScreen() {
           {PLANS.map((plan) => (
             <TouchableOpacity
               key={plan.id}
-              onPress={() => setSelectedPkg(plan.id)}
+              onPress={() => setSelectedPlan(plan.id)}
               activeOpacity={0.8}
             >
               <View
                 className={`rounded-2xl p-5 border flex-row items-center justify-between ${
-                  selectedPkg === plan.id
+                  selectedPlan === plan.id
                     ? 'bg-rush-red/10 border-rush-red'
                     : 'bg-bg-card border-bg-border'
                 }`}
@@ -191,7 +191,7 @@ export default function SubscriptionScreen() {
                   <View className="flex-row items-center gap-2">
                     <Text
                       className={`font-bold text-base uppercase tracking-widest ${
-                        selectedPkg === plan.id ? 'text-rush-red' : 'text-text-primary'
+                        selectedPlan === plan.id ? 'text-rush-red' : 'text-text-primary'
                       }`}
                     >
                       {plan.label}
@@ -209,7 +209,7 @@ export default function SubscriptionScreen() {
                 <View className="items-end">
                   <Text
                     className={`text-xl font-black ${
-                      selectedPkg === plan.id ? 'text-rush-red' : 'text-text-primary'
+                      selectedPlan === plan.id ? 'text-rush-red' : 'text-text-primary'
                     }`}
                   >
                     {plan.price}
@@ -220,8 +220,8 @@ export default function SubscriptionScreen() {
           ))}
         </View>
 
-        {/* Anchoring comparison */}
-        <View className="bg-bg-card/50 rounded-sm p-4 border border-bg-border gap-1">
+        {/* Market comparison */}
+        <View className="bg-bg-card/50 rounded-sm p-4 border border-bg-border">
           <Caption className="text-center text-text-muted">
             Comparado ao mercado: Strava Premium R$149,90/ano • Athlytic R$199,90/ano
           </Caption>
@@ -239,12 +239,12 @@ export default function SubscriptionScreen() {
           />
         )}
 
-        {/* Payment method notice */}
+        {/* Payment footnote */}
         <View className="items-center gap-1">
           <Caption className="text-center text-text-muted">
             Pagamento seguro via{' '}
-            <Text className="text-rush-red font-bold">Cakto</Text>
-            {packages.length > 0 ? ' ou App Store / Play Store' : ''}.
+            <Text className="text-rush-red font-bold">Stripe</Text>
+            {rcPackages.length > 0 ? ' ou App Store / Play Store' : ''}.
           </Caption>
           <Caption className="text-center text-text-muted">
             Cancele quando quiser. Sem compromisso.

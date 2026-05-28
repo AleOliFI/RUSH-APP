@@ -2,17 +2,17 @@ import { useEffect } from 'react';
 import { useSubscriptionStore } from '../stores/subscription';
 import { useAuthStore } from '../stores/auth';
 import { checkPremiumAccess, identifyUser } from '../lib/revenuecat';
-import { refreshSubscriptionFromSupabase } from '../lib/cakto';
+import { refreshSubscriptionFromSupabase } from '../lib/stripe';
 
 /**
  * Syncs subscription status on mount / user change.
  *
  * Priority:
  *  1. RevenueCat (App Store / Play Store native purchases)
- *  2. Cakto via Supabase profile (web checkout / webhook-confirmed purchases)
+ *  2. Stripe via Supabase profile (webhook-confirmed purchases)
  *
  * If RevenueCat says premium → done.
- * Otherwise fall back to the Supabase profile field set by the Cakto webhook.
+ * Otherwise fall back to the Supabase profile field set by the Stripe webhook.
  */
 export function useSubscriptionSync() {
   const { user } = useAuthStore();
@@ -34,9 +34,9 @@ export function useSubscriptionSync() {
           return;
         }
 
-        // 3. Fall back to Cakto/Supabase tier
-        const supabaseTier = await refreshSubscriptionFromSupabase(user!.id);
-        setTier(supabaseTier);
+        // 3. Fall back to Stripe tier stored in Supabase (1 attempt, no retry)
+        const tier = await refreshSubscriptionFromSupabase(user!.id, 1, 0);
+        setTier(tier);
       } finally {
         setLoading(false);
       }
