@@ -52,3 +52,4 @@
 | Data | Concorrente pesquisado | Feature implementada | PR |
 |------|----------------------|---------------------|----|
 | 2026-06-01 | — | Setup do workflow de desenvolvimento diário | — |
+| 2026-06-22 | WHOOP 4.0 | Behavior Insights: chips de hábitos diários + correlação com S_VFC + card de disruptores na home (Premium) | #8 |
