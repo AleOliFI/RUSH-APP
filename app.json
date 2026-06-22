@@ -37,7 +37,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "@stripe/stripe-react-native",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.rushapp.hrv",
+          "enableGooglePay": false
+        }
+      ],
       "expo-splash-screen",
       "expo-web-browser",
       [

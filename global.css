@@ -12,5 +12,7 @@
     --bg-border:   #2e2e2e;
     --text-base:   #f7f5f3;
     --text-muted:  #9e9b94;
+    /* NativeWind v4 web: use class-based dark mode */
+    --css-interop-darkMode: class dark;
   }
 }

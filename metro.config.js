@@ -1,6 +1,24 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const { withNativeWind } = require('nativewind/metro');
+const path = require('path');
 
 const config = getDefaultConfig(__dirname);
+
+// Stub native-only packages on web
+const webStubPath = path.resolve(__dirname, 'src/stubs/native-stub.js');
+const originalResolver = config.resolver?.resolveRequest;
+
+config.resolver = {
+  ...config.resolver,
+  resolveRequest: (context, moduleName, platform) => {
+    if (platform === 'web' && moduleName === '@stripe/stripe-react-native') {
+      return { type: 'sourceFile', filePath: webStubPath };
+    }
+    if (originalResolver) {
+      return originalResolver(context, moduleName, platform);
+    }
+    return context.resolveRequest(context, moduleName, platform);
+  },
+};
 
 module.exports = withNativeWind(config, { input: './global.css' });
