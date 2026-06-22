@@ -11,11 +11,23 @@ import { Button } from '../../src/components/ui/Button';
 import { H2, H3, Body, Label, Caption } from '../../src/components/ui/Typography';
 import { DIRECTIVE_LABEL, READINESS_COLOR_HEX } from '../../src/lib/algorithms/readiness';
 import { useIsPremium } from '../../src/hooks/useSubscription';
+import { BehaviorPicker } from '../../src/components/measurement/BehaviorPicker';
+import { useAuthStore } from '../../src/stores/auth';
+import type { Behavior } from '../../src/lib/algorithms/behaviors';
 import type { ReadinessAssessment } from '../../src/types/readiness';
 
 export default function ResultScreen() {
   const { assessmentId } = useLocalSearchParams<{ assessmentId: string }>();
   const isPremium = useIsPremium();
+  const { user } = useAuthStore();
+
+  async function saveBehaviors(behaviors: Behavior[]) {
+    if (!user) return;
+    const today = new Date().toISOString().split('T')[0];
+    await supabase
+      .from('behavior_logs')
+      .upsert({ user_id: user.id, log_date: today, behaviors }, { onConflict: 'user_id,log_date' });
+  }
 
   const { data: assessment, isLoading } = useQuery({
     queryKey: ['assessment', assessmentId],
@@ -158,6 +170,11 @@ export default function ResultScreen() {
               <Caption className="text-center text-xs">E_WB</Caption>
             </View>
           </View>
+        </Card>
+
+        {/* Behavior log */}
+        <Card className="gap-3">
+          <BehaviorPicker onSave={saveBehaviors} />
         </Card>
 
         <Button

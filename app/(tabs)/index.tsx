@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../src/stores/auth';
 import { useTodayReadiness, useReadinessHistory } from '../../src/hooks/useReadiness';
 import { ReadinessRing } from '../../src/components/charts/ReadinessRing';
@@ -19,13 +20,38 @@ import { Button } from '../../src/components/ui/Button';
 import { DIRECTIVE_LABEL } from '../../src/lib/algorithms/readiness';
 import { useHRVBaseline } from '../../src/hooks/useHRVBaseline';
 import { useIsPremium } from '../../src/hooks/useSubscription';
+import { supabase } from '../../src/lib/supabase';
+import { calculateBehaviorCorrelations } from '../../src/lib/algorithms/behaviors';
 
 export default function HomeScreen() {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const { data: today, isLoading } = useTodayReadiness();
   const { data: history = [] } = useReadinessHistory(7);
-  const { readingCount } = useHRVBaseline();
+  const { readingCount, mu28SVC } = useHRVBaseline();
   const isPremium = useIsPremium();
+
+  const { data: behaviorInsights = [] } = useQuery({
+    queryKey: ['behavior-insights', user?.id],
+    enabled: !!user && isPremium,
+    staleTime: 1000 * 60 * 60,
+    queryFn: async () => {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 28);
+      const [{ data: logs }, { data: assessments }] = await Promise.all([
+        supabase
+          .from('behavior_logs')
+          .select('log_date, behaviors')
+          .eq('user_id', user!.id)
+          .gte('log_date', cutoff.toISOString().split('T')[0]),
+        supabase
+          .from('readiness_assessments')
+          .select('assessed_at, s_vfc')
+          .eq('user_id', user!.id)
+          .gte('assessed_at', cutoff.toISOString().split('T')[0]),
+      ]);
+      return calculateBehaviorCorrelations(logs ?? [], assessments ?? [], mu28SVC);
+    },
+  });
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'Atleta';
   const greeting = getGreeting();
@@ -163,6 +189,32 @@ export default function HomeScreen() {
             <Caption>
               Sua baseline de VFC estará pronta em {7 - readingCount} medições.
             </Caption>
+          </Card>
+        )}
+
+        {/* Behavior Insights (Premium) */}
+        {isPremium && behaviorInsights.length > 0 && (
+          <Card className="gap-3">
+            <Label>Disruptores de recuperação</Label>
+            <Caption className="text-text-secondary -mt-1">
+              Fatores que mais impactaram sua VFC nos últimos 28 dias
+            </Caption>
+            {behaviorInsights.slice(0, 3).map((insight) => (
+              <View key={insight.behavior} className="flex-row items-center justify-between">
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-base">{insight.emoji}</Text>
+                  <Text className="text-text-primary text-sm font-medium">{insight.label}</Text>
+                  <Caption className="text-xs">({insight.sampleCount}×)</Caption>
+                </View>
+                <Text
+                  className={`text-sm font-bold ${
+                    insight.avgDelta < 0 ? 'text-rush-red' : 'text-rush-lime'
+                  }`}
+                >
+                  {insight.avgDelta > 0 ? '+' : ''}{insight.avgDelta} pts
+                </Text>
+              </View>
+            ))}
           </Card>
         )}
 
