@@ -22,6 +22,8 @@ import { useHRVBaseline } from '../../src/hooks/useHRVBaseline';
 import { useIsPremium } from '../../src/hooks/useSubscription';
 import { supabase } from '../../src/lib/supabase';
 import { calculateBehaviorCorrelations } from '../../src/lib/algorithms/behaviors';
+import { useStreak } from '../../src/hooks/useStreak';
+import { StreakCard } from '../../src/components/home/StreakCard';
 
 export default function HomeScreen() {
   const { profile, user } = useAuthStore();
@@ -29,6 +31,7 @@ export default function HomeScreen() {
   const { data: history = [] } = useReadinessHistory(7);
   const { readingCount, mu28SVC } = useHRVBaseline();
   const isPremium = useIsPremium();
+  const streak = useStreak();
 
   const { data: behaviorInsights = [] } = useQuery({
     queryKey: ['behavior-insights', user?.id],
@@ -191,6 +194,9 @@ export default function HomeScreen() {
             </Caption>
           </Card>
         )}
+
+        {/* Streak & monthly consistency */}
+        <StreakCard streak={streak} />
 
         {/* Behavior Insights (Premium) */}
         {isPremium && behaviorInsights.length > 0 && (
