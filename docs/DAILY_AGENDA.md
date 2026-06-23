@@ -41,7 +41,7 @@
 - Teste ortostático: diferença HRV deitado → em pé → classificar SNA
 - Integração Apple Health para importar dados de sono e FC
 - Plano de treino adaptativo semanal baseado no S_VFC histórico
-- Streak de dias consecutivos medidos (gamificação / retenção)
+- ~~Streak de dias consecutivos medidos (gamificação / retenção)~~ ✅ implementado 23/06
 - Comparativo de S_VFC em dias de treino vs repouso
 - Score de consistência mensal (% de dias medidos)
 
@@ -53,3 +53,4 @@
 |------|----------------------|---------------------|----|
 | 2026-06-01 | — | Setup do workflow de desenvolvimento diário | — |
 | 2026-06-22 | WHOOP 4.0 | Behavior Insights: chips de hábitos diários + correlação com S_VFC + card de disruptores na home (Premium) | #8 |
+| 2026-06-23 | Garmin Connect | Streak de dias consecutivos + consistência mensal com dots visuais e badge de recorde pessoal (Free) | #10 |
