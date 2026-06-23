@@ -3,13 +3,22 @@
     "name": "RUSH",
     "slug": "rush-app",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "rushapp",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f0f"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.rushapp.hrv",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "A câmera é usada para medir sua variabilidade da frequência cardíaca (VFC) pelo sensor PPG.",
         "NSMotionUsageDescription": "O acelerômetro é usado para medir a VFC pelo método SCG.",
@@ -20,14 +29,16 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#0f0f0f"
       },
       "package": "com.rushapp.hrv",
+      "versionCode": 1,
       "permissions": [
-        "CAMERA",
-        "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED",
-        "SCHEDULE_EXACT_ALARM"
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM"
       ]
     },
     "web": {
@@ -44,7 +55,14 @@
           "enableGooglePay": false
         }
       ],
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0f0f0f",
+          "resizeMode": "contain"
+        }
+      ],
       "expo-web-browser",
       [
         "expo-camera",
