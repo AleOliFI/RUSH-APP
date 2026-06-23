@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RUSH — Treinador de Recuperação HRV</title>
+  <meta name="description" content="Mede sua VFC pela câmera e prescreve o treino certo para cada dia. Ciência de alto rendimento no seu celular." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg:#0f0f0f; --card:#1a1a1a; --border:#2e2e2e; --red:#e72329; --green:#22c55e; --text:#f7f5f3; --muted:#9e9b94; }
+    body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; line-height:1.6; }
+    .container { max-width:900px; margin:0 auto; padding:0 1.5rem; }
+    nav { display:flex; align-items:center; justify-content:space-between; padding:1.5rem 0; border-bottom:1px solid var(--border); }
+    .logo { font-size:1.5rem; font-weight:900; letter-spacing:-0.04em; color:var(--red); }
+    nav a { color:var(--muted); font-size:0.875rem; text-decoration:none; }
+    nav a:hover { color:var(--text); }
+    .hero { text-align:center; padding:5rem 1rem 4rem; }
+    .hero h1 { font-size:clamp(2.5rem,8vw,4.5rem); font-weight:900; line-height:1.05; letter-spacing:-0.04em; margin-bottom:1.25rem; }
+    .hero h1 span { color:var(--red); }
+    .hero p { font-size:1.125rem; color:var(--muted); max-width:520px; margin:0 auto 2.5rem; }
+    .badges { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; }
+    .badge { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:0.875rem 1.5rem; font-size:0.875rem; font-weight:600; color:var(--text); text-decoration:none; transition:border-color 0.2s; }
+    .badge:hover { border-color:var(--red); }
+    .badge .sub { display:block; font-size:0.7rem; font-weight:400; color:var(--muted); margin-bottom:0.15rem; }
+    .features { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:1rem; padding:3rem 0; }
+    .feature { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:1.5rem; }
+    .feature .icon { font-size:1.75rem; margin-bottom:0.75rem; }
+    .feature h3 { font-size:1rem; font-weight:700; margin-bottom:0.4rem; }
+    .feature p { font-size:0.875rem; color:var(--muted); margin:0; }
+    .zones { display:flex; gap:0.75rem; margin:2rem 0; flex-wrap:wrap; justify-content:center; }
+    .zone { border-radius:12px; padding:1rem 1.5rem; flex:1; min-width:180px; text-align:center; }
+    .zone.green { background:#16a34a20; border:1px solid #16a34a60; }
+    .zone.orange { background:#f9731620; border:1px solid #f9731660; }
+    .zone.red { background:#dc262620; border:1px solid #dc262660; }
+    .zone .score { font-size:1.5rem; font-weight:900; }
+    .zone .label { font-size:0.8rem; color:var(--muted); }
+    .zone.green .score { color:#4ade80; }
+    .zone.orange .score { color:#fb923c; }
+    .zone.red .score { color:#f87171; }
+    footer { padding:3rem 0 2rem; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.875rem; }
+    footer a { color:var(--muted); text-decoration:none; margin:0 0.75rem; }
+    footer a:hover { color:var(--text); }
+    .coming-soon { opacity:0.5; cursor:not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <span class="logo">RUSH</span>
+      <div style="display:flex;gap:1.5rem;">
+        <a href="support.html">Suporte</a>
+        <a href="privacy-policy.html">Privacidade</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <h1>Treine com <span>ciência.</span><br/>Não no chute.</h1>
+      <p>RUSH mede sua VFC pela câmera em 2 minutos e prescreve exatamente como treinar hoje — alta intensidade, Zona 2 ou recuperação.</p>
+      <div class="badges">
+        <a class="badge coming-soon" href="#" title="Em breve">
+          <span class="sub">Baixar na</span>
+          App Store
+        </a>
+        <a class="badge coming-soon" href="#" title="Em breve">
+          <span class="sub">Disponível no</span>
+          Google Play
+        </a>
+      </div>
+    </section>
+
+    <div class="zones">
+      <div class="zone green">
+        <div class="score">≥ 70</div>
+        <div style="font-weight:700;margin:0.25rem 0;">Verde</div>
+        <div class="label">Alta intensidade · Limiares · HIIT</div>
+      </div>
+      <div class="zone orange">
+        <div class="score">40–69</div>
+        <div style="font-weight:700;margin:0.25rem 0;">Laranja</div>
+        <div class="label">Zona 2 · Corrida conversacional</div>
+      </div>
+      <div class="zone red">
+        <div class="score">&lt; 40</div>
+        <div style="font-weight:700;margin:0.25rem 0;">Vermelho</div>
+        <div class="label">Recuperação · Coerência cardíaca</div>
+      </div>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="icon">📸</div>
+        <h3>Câmera PPG</h3>
+        <p>Sem wearable. Só o dedo na câmera traseira por 2 minutos.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🧠</div>
+        <h3>Algoritmo V2</h3>
+        <p>S_VFC + S_FCR + E_WB ponderados. Ciência aplicada ao dia a dia.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔥</div>
+        <h3>Streak Diário</h3>
+        <p>Meça todos os dias e acompanhe seu recorde pessoal de consistência.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🌙</div>
+        <h3>Módulo Hormonal</h3>
+        <p>Ajuste automático por fase do ciclo para atletas femininas. Premium.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">⚡</div>
+        <h3>Behavior Insights</h3>
+        <p>Veja quais hábitos impactam sua VFC. Álcool, sono, estresse e mais.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">📈</div>
+        <h3>Tendências 28 dias</h3>
+        <p>Gráfico S_VFC com banda µ±σ para detectar fadiga crônica cedo. Premium.</p>
+      </div>
+    </div>
+
+    <footer>
+      <p style="margin-bottom:1rem;">© 2026 RUSH App · Brasil</p>
+      <div>
+        <a href="index.html">Início</a>
+        <a href="privacy-policy.html">Política de Privacidade</a>
+        <a href="support.html">Suporte</a>
+        <a href="mailto:afilho785@gmail.com">Contato</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

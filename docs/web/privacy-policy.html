@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidade — RUSH</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f0f;
+      --card: #1a1a1a;
+      --border: #2e2e2e;
+      --red: #e72329;
+      --text: #f7f5f3;
+      --muted: #9e9b94;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      padding: 0 1rem 4rem;
+    }
+    header {
+      padding: 2rem 0 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2rem;
+    }
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      color: var(--red);
+      text-decoration: none;
+    }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 {
+      font-size: 2rem;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 0.5rem;
+    }
+    .updated {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    h2 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin: 2rem 0 0.75rem;
+      color: var(--text);
+    }
+    p { color: #d1cec9; margin-bottom: 1rem; }
+    ul { color: #d1cec9; padding-left: 1.5rem; margin-bottom: 1rem; }
+    li { margin-bottom: 0.4rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .card p { margin: 0; }
+    a { color: var(--red); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    footer {
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.875rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a class="logo" href="index.html">RUSH</a>
+    </header>
+
+    <h1>Política de Privacidade</h1>
+    <p class="updated">Última atualização: 23 de junho de 2026</p>
+
+    <div class="card">
+      <p>
+        O RUSH ("nós", "nosso") respeita sua privacidade e está comprometido com a proteção
+        dos seus dados pessoais em conformidade com a
+        <strong>Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018)</strong>.
+      </p>
+    </div>
+
+    <h2>1. Quem somos</h2>
+    <p>
+      RUSH é um aplicativo móvel de monitoramento da Variabilidade da Frequência Cardíaca (VFC/HRV)
+      para atletas. Desenvolvido e operado por Ale Olifi, com sede no Brasil.
+      Contato: <a href="mailto:afilho785@gmail.com">afilho785@gmail.com</a>
+    </p>
+
+    <h2>2. Dados que coletamos</h2>
+
+    <p><strong>2.1 Dados de conta</strong></p>
+    <ul>
+      <li>Endereço de e-mail (para autenticação via Supabase Auth)</li>
+      <li>Nome completo (opcional, para personalização da saudação)</li>
+      <li>Gênero e perfil hormonal (opcional, para ajuste do algoritmo)</li>
+    </ul>
+
+    <p><strong>2.2 Dados de saúde</strong></p>
+    <ul>
+      <li>Leituras de VFC (RMSSD) capturadas pela câmera do dispositivo via PPG</li>
+      <li>Frequência cardíaca em repouso (RHR)</li>
+      <li>Questionário de bem-estar diário (sono, estresse, fadiga muscular)</li>
+      <li>Data de início do ciclo menstrual (opcional, somente para usuárias femininas)</li>
+      <li>Dados de sessões de treino (duração, FC média, TRIMP estimado)</li>
+    </ul>
+
+    <p><strong>2.3 Dados de comportamento</strong></p>
+    <ul>
+      <li>Fatores diários registrados voluntariamente (álcool, sono ruim, viagem, etc.)</li>
+      <li>Streak e histórico de medições</li>
+    </ul>
+
+    <p><strong>2.4 Dados de pagamento</strong></p>
+    <ul>
+      <li>
+        Processados exclusivamente pela <strong>RevenueCat</strong> (App Store / Play Store)
+        e pelo <strong>Stripe</strong>. Nós <strong>nunca armazenamos</strong> dados de cartão
+        de crédito.
+      </li>
+    </ul>
+
+    <p><strong>2.5 Dados técnicos</strong></p>
+    <ul>
+      <li>Logs de erros (anônimos, via Supabase)</li>
+      <li>Versão do app e sistema operacional</li>
+    </ul>
+
+    <h2>3. Como usamos seus dados</h2>
+    <ul>
+      <li>Calcular seu escore de prontidão diária (E_Prontidão)</li>
+      <li>Gerar prescrições de treino personalizadas</li>
+      <li>Calcular baselines e tendências de VFC ao longo do tempo</li>
+      <li>Adaptar o algoritmo ao perfil hormonal (quando informado)</li>
+      <li>Sincronizar assinatura premium entre dispositivos</li>
+      <li>Enviar notificações push de lembrete de medição (somente se você autorizar)</li>
+    </ul>
+
+    <h2>4. Compartilhamento de dados</h2>
+    <p>Seus dados de saúde <strong>nunca são vendidos ou compartilhados com terceiros</strong> para fins comerciais. Compartilhamos dados apenas com:</p>
+    <ul>
+      <li><strong>Supabase</strong> — banco de dados e autenticação (servidores na AWS us-east-1)</li>
+      <li><strong>RevenueCat</strong> — gestão de assinaturas</li>
+      <li><strong>Stripe</strong> — processamento de pagamentos</li>
+      <li><strong>Autoridades legais</strong> — somente quando exigido por lei</li>
+    </ul>
+
+    <h2>5. Armazenamento e segurança</h2>
+    <ul>
+      <li>Todos os dados são armazenados com criptografia em repouso (AES-256)</li>
+      <li>Comunicação protegida por TLS 1.3</li>
+      <li>Acesso aos dados restrito ao próprio usuário via Row Level Security (RLS) no Supabase</li>
+      <li>Dados de saúde não são usados para treinamento de modelos de IA de terceiros</li>
+    </ul>
+
+    <h2>6. Retenção de dados</h2>
+    <ul>
+      <li>Dados de saúde são retidos enquanto sua conta estiver ativa</li>
+      <li>Ao excluir sua conta, todos os dados são apagados permanentemente em até 30 dias</li>
+      <li>Logs de erro são retidos por 90 dias e então deletados automaticamente</li>
+    </ul>
+
+    <h2>7. Seus direitos (LGPD)</h2>
+    <p>Você tem direito a:</p>
+    <ul>
+      <li><strong>Acesso</strong> — solicitar uma cópia de todos os seus dados</li>
+      <li><strong>Correção</strong> — corrigir dados incorretos ou desatualizados</li>
+      <li><strong>Exclusão</strong> — apagar sua conta e todos os dados associados</li>
+      <li><strong>Portabilidade</strong> — exportar seus dados em formato CSV (em breve)</li>
+      <li><strong>Revogação de consentimento</strong> — retirar autorização de uso a qualquer momento</li>
+    </ul>
+    <p>
+      Para exercer seus direitos, entre em contato:
+      <a href="mailto:afilho785@gmail.com">afilho785@gmail.com</a>
+    </p>
+
+    <h2>8. Câmera e permissões</h2>
+    <p>
+      O RUSH solicita acesso à câmera traseira exclusivamente para capturar o sinal PPG (luz refletida
+      no dedo) e calcular a VFC. <strong>Nenhum vídeo ou imagem é gravado, transmitido ou armazenado.</strong>
+      O processamento é feito localmente no dispositivo em tempo real.
+    </p>
+
+    <h2>9. Menores de idade</h2>
+    <p>
+      O RUSH não é destinado a menores de 18 anos. Não coletamos conscientemente dados de menores.
+      Se você acredita que uma criança forneceu dados ao app, entre em contato conosco para remoção imediata.
+    </p>
+
+    <h2>10. Alterações nesta política</h2>
+    <p>
+      Podemos atualizar esta política periodicamente. Notificaremos você por e-mail ou notificação push
+      em caso de mudanças materiais. A data de "última atualização" no topo reflete a versão vigente.
+    </p>
+
+    <h2>11. Contato e DPO</h2>
+    <p>
+      Para dúvidas sobre privacidade ou para exercer seus direitos:<br />
+      <a href="mailto:afilho785@gmail.com">afilho785@gmail.com</a>
+    </p>
+
+    <footer>
+      <p>© 2026 RUSH App · <a href="index.html">Início</a> · <a href="privacy-policy.html">Privacidade</a> · <a href="support.html">Suporte</a></p>
+    </footer>
+  </div>
+</body>
+</html>
