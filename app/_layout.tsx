@@ -1,4 +1,3 @@
-// @ts-expect-error css import handled by metro
 import '../global.css';
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
