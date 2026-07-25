@@ -26,7 +26,8 @@ export function detectMaleDownregulation(
   rhrDaily: number,
   eWb: number,
 ): [boolean, number] {
-  const isFlag = sVfcDaily >= baseline28 && rhrDaily <= 45 && eWb < 50;
+  // rhrDaily > 0: a missing RHR (0) must not read as bradycardia
+  const isFlag = sVfcDaily >= baseline28 && rhrDaily > 0 && rhrDaily <= 45 && eWb < 50;
   return [isFlag, isFlag ? 0.55 : 1.0];
 }
 

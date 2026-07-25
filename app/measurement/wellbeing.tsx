@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { WellbeingForm } from '../../src/components/measurement/WellbeingForm';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/stores/auth';
+import { useSubscriptionStore } from '../../src/stores/subscription';
 import { useHRVHistory, useHRVBaseline } from '../../src/hooks/useHRVBaseline';
 import { useIsPremium } from '../../src/hooks/useSubscription';
+import { localToday, localDaysAgo, parseDateOnly } from '../../src/lib/dates';
 import {
   classifyHRVStatus,
   classifyRHRStatus,
@@ -30,6 +33,8 @@ import type { WellbeingInput, CycleLog, CyclePhase, HormonalProfile } from '../.
 export default function WellbeingScreen() {
   const { user } = useAuthStore();
   const isPremium = useIsPremium();
+  const subLoading = useSubscriptionStore((s) => s.isLoading);
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{
     rmssd: string;
     rhr: string;
@@ -46,10 +51,13 @@ export default function WellbeingScreen() {
 
   async function handleSubmit(wb: WellbeingInput) {
     if (!user) return;
+    // Wait for the subscription sync to settle so premium logic isn't skipped
+    // and baked permanently into the assessment (free-tier race).
+    if (subLoading) return;
     setLoading(true);
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = localToday();
 
       // 1. Fetch user profile
       const { data: profile } = await supabase
@@ -77,7 +85,7 @@ export default function WellbeingScreen() {
 
         if (cycleLog) {
           const cl = cycleLog as CycleLog;
-          const startDate = new Date(cl.cycle_start_date);
+          const startDate = parseDateOnly(cl.cycle_start_date);
           const dayOfCycle =
             Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
           cyclePhase = estimateCyclePhase(dayOfCycle);
@@ -105,15 +113,13 @@ export default function WellbeingScreen() {
       // 5. Catabolic factor (Premium)
       let catabolicFlag = false;
       if (isPremium) {
-        const last5SVC = readings.slice(0, 5).map((r) => calculateSVFC(r.rmssd));
+        // readings come newest-first; estimateCatabolicFactor expects oldest-first
+        const last5SVC = readings.slice(0, 5).reverse().map((r) => calculateSVFC(r.rmssd));
         const { data: recentSessions } = await supabase
           .from('training_sessions')
           .select('trimp_score')
           .eq('user_id', user.id)
-          .gte(
-            'session_date',
-            new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          );
+          .gte('session_date', localDaysAgo(3));
         const trimpLast3 = (recentSessions ?? []).reduce(
           (s: number, r: { trimp_score: number | null }) => s + (r.trimp_score ?? 0),
           0,
@@ -178,6 +184,8 @@ export default function WellbeingScreen() {
       const wbStatus = classifyWellbeingStatus(wbScore);
 
       // 11. Save assessment
+      // onConflict matches unique (user_id, assessed_at): a same-day
+      // re-measurement updates in place instead of failing with 23505
       const { data: assessment, error: assessError } = await supabase
         .from('readiness_assessments')
         .upsert({
@@ -203,7 +211,7 @@ export default function WellbeingScreen() {
           false_readiness_flag: falseReadinessFlag,
           cycle_phase: cyclePhase !== 'unknown' ? cyclePhase : null,
           hormonal_profile: hormonalProfile,
-        })
+        }, { onConflict: 'user_id,assessed_at' })
         .select()
         .single();
 
@@ -216,12 +224,17 @@ export default function WellbeingScreen() {
           .eq('id', user.id);
       }
 
+      queryClient.invalidateQueries({ queryKey: ['readiness'] });
+      queryClient.invalidateQueries({ queryKey: ['readiness-history'] });
+      queryClient.invalidateQueries({ queryKey: ['hrv-history'] });
+
       router.replace({
         pathname: '/measurement/result',
         params: { assessmentId: assessment.id },
       });
     } catch (e) {
       console.error('Error saving measurement:', e);
+      Alert.alert('Erro', 'Não foi possível salvar sua medição. Tente novamente.');
       setLoading(false);
     }
   }
@@ -229,7 +242,7 @@ export default function WellbeingScreen() {
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top']}>
       <View className="flex-1">
-        <WellbeingForm onSubmit={handleSubmit} loading={loading} />
+        <WellbeingForm onSubmit={handleSubmit} loading={loading || subLoading} />
       </View>
     </SafeAreaView>
   );

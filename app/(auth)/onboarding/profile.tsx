@@ -7,6 +7,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { H1, Body, Caption } from '../../../src/components/ui/Typography';
@@ -74,15 +75,26 @@ export default function OnboardingProfile() {
       updates.hormonal_profile = hormonalProfile;
     }
 
-    await supabase.from('profiles').update(updates).eq('id', user.id);
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', user.id);
 
+    let cycleError = null;
     if (gender === 'female' && dateString) {
-      await supabase
+      ({ error: cycleError } = await supabase
         .from('cycle_logs')
         .upsert(
           { user_id: user.id, cycle_start_date: dateString },
           { onConflict: 'user_id,cycle_start_date' },
-        );
+        ));
+    }
+
+    if (profileError || cycleError) {
+      console.error('Error saving onboarding profile:', profileError ?? cycleError);
+      Alert.alert('Erro', 'Não foi possível salvar seu perfil. Tente novamente.');
+      setLoading(false);
+      return;
     }
 
     setLoading(false);

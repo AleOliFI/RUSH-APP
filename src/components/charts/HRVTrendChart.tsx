@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import type { ReadinessAssessment } from '../../types/readiness';
 import { READINESS_COLOR_HEX } from '../../lib/algorithms/readiness';
+import { parseDateOnly } from '../../lib/dates';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 48;
@@ -58,7 +59,7 @@ export function HRVTrendChart({ assessments }: HRVTrendChartProps) {
       </View>
       <View className="flex-row justify-between mt-1">
         <Text className="text-text-muted text-xs">
-          {new Date(sorted[0].assessed_at).toLocaleDateString('pt-BR', {
+          {parseDateOnly(sorted[0].assessed_at).toLocaleDateString('pt-BR', {
             day: '2-digit',
             month: 'short',
           })}

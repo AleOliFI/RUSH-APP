@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/auth';
+import { useSubscriptionStore } from '../stores/subscription';
 import type { Profile } from '../types/subscription';
 
 export function useAuthListener() {
@@ -64,5 +65,7 @@ export function useSignOut() {
   return async () => {
     await supabase.auth.signOut();
     reset();
+    // Clear premium state so the next account doesn't inherit it
+    useSubscriptionStore.getState().reset();
   };
 }

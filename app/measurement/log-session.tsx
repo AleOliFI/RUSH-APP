@@ -11,11 +11,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { H2, Body, Caption, Label } from '../../src/components/ui/Typography';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
 import { supabase } from '../../src/lib/supabase';
 import { useAuthStore } from '../../src/stores/auth';
+import { localToday } from '../../src/lib/dates';
 
 type SessionType = 'easy' | 'tempo' | 'interval' | 'long_run' | 'race' | 'cross_training' | 'rest';
 
@@ -44,6 +46,7 @@ function estimateTRIMP(
 
 export default function LogSessionScreen() {
   const { user, profile } = useAuthStore();
+  const queryClient = useQueryClient();
   const [sessionType, setSessionType] = useState<SessionType>('easy');
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
@@ -65,7 +68,7 @@ export default function LogSessionScreen() {
     }
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = localToday();
       const { error } = await supabase.from('training_sessions').insert({
         user_id: user.id,
         session_date: today,
@@ -79,6 +82,9 @@ export default function LogSessionScreen() {
         external_id: `manual-${today}-${Date.now()}`,
       });
       if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['readiness'] });
+      queryClient.invalidateQueries({ queryKey: ['readiness-history'] });
+      queryClient.invalidateQueries({ queryKey: ['hrv-history'] });
       router.back();
     } catch (e) {
       console.error('Error saving session:', e);

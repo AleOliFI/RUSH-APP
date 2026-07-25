@@ -1,5 +1,6 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { View, Text } from 'react-native';
+import { useAuthStore } from '../../src/stores/auth';
 
 function TabIcon({ focused, icon, label }: { focused: boolean; icon: string; label: string }) {
   return (
@@ -17,6 +18,10 @@ function TabIcon({ focused, icon, label }: { focused: boolean; icon: string; lab
 }
 
 export default function TabsLayout() {
+  const { session, isLoading } = useAuthStore();
+  if (isLoading) return null;
+  if (!session) return <Redirect href="/(auth)/sign-in" />;
+
   return (
     <Tabs
       screenOptions={{
