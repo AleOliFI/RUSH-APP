@@ -19,9 +19,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      # A action não aceita `prompt_file`; o conteúdo precisa ir inline.
+      - name: Carregar prompt diário
+        id: prompt
+        run: |
+          {
+            echo 'text<<DAILY_PROMPT_EOF'
+            cat docs/DAILY_PROMPT.md
+            echo 'DAILY_PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Executar Claude Code — desenvolvimento diário
         uses: anthropics/claude-code-action@beta
         with:
+          # 'agent' é obrigatório para eventos de automação (schedule);
+          # o modo padrão ('tag') só responde a menções em issues/PRs.
+          mode: agent
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt_file: docs/DAILY_PROMPT.md
+          direct_prompt: ${{ steps.prompt.outputs.text }}
