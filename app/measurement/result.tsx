@@ -14,6 +14,7 @@ import { useIsPremium } from '../../src/hooks/useSubscription';
 import { BehaviorPicker } from '../../src/components/measurement/BehaviorPicker';
 import { useAuthStore } from '../../src/stores/auth';
 import type { Behavior } from '../../src/lib/algorithms/behaviors';
+import { localToday } from '../../src/lib/dates';
 import type { ReadinessAssessment } from '../../src/types/readiness';
 
 export default function ResultScreen() {
@@ -23,7 +24,7 @@ export default function ResultScreen() {
 
   async function saveBehaviors(behaviors: Behavior[]) {
     if (!user) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = localToday();
     await supabase
       .from('behavior_logs')
       .upsert({ user_id: user.id, log_date: today, behaviors }, { onConflict: 'user_id,log_date' });

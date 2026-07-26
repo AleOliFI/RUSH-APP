@@ -1,3 +1,5 @@
+import { formatLocalDate } from '../dates';
+
 export type Behavior =
   | 'alcohol'
   | 'late_dinner'
@@ -65,7 +67,7 @@ export function calculateBehaviorCorrelations(
     // Find next-day assessment
     const nextDate = new Date(log.log_date);
     nextDate.setDate(nextDate.getDate() + 1);
-    const nextDateStr = nextDate.toISOString().split('T')[0];
+    const nextDateStr = formatLocalDate(nextDate);
     const nextSVC = assessmentMap.get(nextDateStr);
 
     if (nextSVC == null) continue;

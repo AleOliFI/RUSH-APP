@@ -58,7 +58,7 @@ export async function checkPremiumAccess(): Promise<boolean> {
   }
   try {
     // DB sync happens server-side via the RevenueCat webhook; billing columns
-    // are read-only for users (migration 010).
+    // are read-only for users (migration 011).
     const info = await Purchases.getCustomerInfo();
     return info.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
   } catch {

@@ -23,6 +23,7 @@ import { useIsPremium } from '../../src/hooks/useSubscription';
 import { supabase } from '../../src/lib/supabase';
 import { calculateBehaviorCorrelations } from '../../src/lib/algorithms/behaviors';
 import { useStreak } from '../../src/hooks/useStreak';
+import { localDaysAgo } from '../../src/lib/dates';
 import { StreakCard } from '../../src/components/home/StreakCard';
 
 export default function HomeScreen() {
@@ -38,19 +39,17 @@ export default function HomeScreen() {
     enabled: !!user && isPremium,
     staleTime: 1000 * 60 * 60,
     queryFn: async () => {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 28);
       const [{ data: logs }, { data: assessments }] = await Promise.all([
         supabase
           .from('behavior_logs')
           .select('log_date, behaviors')
           .eq('user_id', user!.id)
-          .gte('log_date', cutoff.toISOString().split('T')[0]),
+          .gte('log_date', localDaysAgo(28)),
         supabase
           .from('readiness_assessments')
           .select('assessed_at, s_vfc')
           .eq('user_id', user!.id)
-          .gte('assessed_at', cutoff.toISOString().split('T')[0]),
+          .gte('assessed_at', localDaysAgo(28)),
       ]);
       return calculateBehaviorCorrelations(logs ?? [], assessments ?? [], mu28SVC);
     },

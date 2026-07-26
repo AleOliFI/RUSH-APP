@@ -1,4 +1,5 @@
-function formatLocal(d: Date): string {
+/** Format a Date as 'YYYY-MM-DD' using its LOCAL calendar day (not UTC). */
+export function formatLocalDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -7,14 +8,14 @@ function formatLocal(d: Date): string {
 
 /** Today as 'YYYY-MM-DD' in the device's local timezone (not UTC). */
 export function localToday(): string {
-  return formatLocal(new Date());
+  return formatLocalDate(new Date());
 }
 
 /** 'YYYY-MM-DD' for N days before today, local timezone. */
 export function localDaysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return formatLocal(d);
+  return formatLocalDate(d);
 }
 
 /**

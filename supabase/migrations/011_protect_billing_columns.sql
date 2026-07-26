@@ -1,4 +1,4 @@
--- 010_protect_billing_columns.sql
+-- 011_protect_billing_columns.sql
 -- Fecha a brecha de RLS onde o dono da linha podia dar UPDATE nas próprias
 -- colunas de billing (subscription_tier / subscription_expires_at /
 -- stripe_customer_id) e se conceder premium sem pagar.
