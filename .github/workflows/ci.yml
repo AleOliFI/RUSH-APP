@@ -14,5 +14,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # O projeto tem conflitos de peer deps (Expo 56 + RN 0.85), então o lock
+      # é resolvido com --legacy-peer-deps; o ci precisa usar a mesma flag.
+      - run: npm ci --legacy-peer-deps
       - run: npx tsc --noEmit
