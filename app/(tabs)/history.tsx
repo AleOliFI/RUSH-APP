@@ -11,6 +11,7 @@ import { useReadinessHistory } from '../../src/hooks/useReadiness';
 import { useIsPremium } from '../../src/hooks/useSubscription';
 import { useHRVBaseline } from '../../src/hooks/useHRVBaseline';
 import { DIRECTIVE_LABEL } from '../../src/lib/algorithms/readiness';
+import { parseDateOnly } from '../../src/lib/dates';
 
 export default function HistoryScreen() {
   const isPremium = useIsPremium();
@@ -117,7 +118,7 @@ export default function HistoryScreen() {
             <Card key={a.id} className="flex-row items-center gap-4">
               <View className="flex-1 gap-1">
                 <Text className="text-text-primary font-semibold">
-                  {new Date(a.assessed_at).toLocaleDateString('pt-BR', {
+                  {parseDateOnly(a.assessed_at).toLocaleDateString('pt-BR', {
                     weekday: 'short',
                     day: '2-digit',
                     month: 'short',

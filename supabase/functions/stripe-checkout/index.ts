@@ -34,11 +34,39 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { priceId, userId } = await req.json() as { priceId: string; userId: string };
-
-    if (!priceId || !userId) {
+    // ── Derive the user from the verified JWT — never trust a body userId ────
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const jwt = authHeader.replace(/^Bearer\s+/i, '');
+    if (!jwt) {
       return new Response(
-        JSON.stringify({ error: 'Missing priceId or userId' }),
+        JSON.stringify({ error: 'Missing authorization' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    const { data: userData, error: userError } = await supabase.auth.getUser(jwt);
+    if (userError || !userData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    const userId = userData.user.id;
+
+    const { priceId, userId: bodyUserId } = await req.json() as {
+      priceId: string;
+      userId?: string;
+    };
+
+    if (bodyUserId && bodyUserId !== userId) {
+      return new Response(
+        JSON.stringify({ error: 'User mismatch' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (!priceId) {
+      return new Response(
+        JSON.stringify({ error: 'Missing priceId' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }

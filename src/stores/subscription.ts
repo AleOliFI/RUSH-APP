@@ -7,6 +7,7 @@ interface SubscriptionState {
   isLoading: boolean;
   setTier: (tier: SubscriptionTier) => void;
   setLoading: (loading: boolean) => void;
+  reset: () => void;
 }
 
 export const useSubscriptionStore = create<SubscriptionState>((set) => ({
@@ -15,4 +16,5 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
   isLoading: false,
   setTier: (tier) => set({ tier, isPremium: tier === 'premium' }),
   setLoading: (isLoading) => set({ isLoading }),
+  reset: () => set({ tier: 'free', isPremium: false, isLoading: false }),
 }));

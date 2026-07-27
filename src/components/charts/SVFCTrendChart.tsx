@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import Svg, { Path, Rect, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import type { ReadinessAssessment } from '../../types/readiness';
+import { parseDateOnly } from '../../lib/dates';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_WIDTH = SCREEN_WIDTH - 48;
@@ -63,11 +64,11 @@ export function SVFCTrendChart({ assessments, mu28SVC, sigma28SVC }: SVFCTrendCh
     linePath +
     ` L${xFor(total - 1, total)},${PAD_TOP + PLOT_H} L${PAD_LEFT},${PAD_TOP + PLOT_H} Z`;
 
-  const firstDate = new Date(sorted[0].assessed_at).toLocaleDateString('pt-BR', {
+  const firstDate = parseDateOnly(sorted[0].assessed_at).toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: 'short',
   });
-  const lastDate = new Date(sorted[sorted.length - 1].assessed_at).toLocaleDateString('pt-BR', {
+  const lastDate = parseDateOnly(sorted[sorted.length - 1].assessed_at).toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: 'short',
   });

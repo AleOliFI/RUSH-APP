@@ -57,11 +57,10 @@ export async function checkPremiumAccess(): Promise<boolean> {
     return true;
   }
   try {
+    // DB sync happens server-side via the RevenueCat webhook; billing columns
+    // are read-only for users (migration 011).
     const info = await Purchases.getCustomerInfo();
-    const isPremium = info.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
-    // Sync result to Supabase so webhook-less sessions stay consistent
-    await syncPremiumToSupabase(isPremium, info);
-    return isPremium;
+    return info.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
   } catch {
     return false;
   }
@@ -71,35 +70,8 @@ export async function restorePurchases() {
   if (Platform.OS === 'web') return false;
   try {
     const info = await Purchases.restorePurchases();
-    const isPremium = info.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
-    await syncPremiumToSupabase(isPremium, info);
-    return isPremium;
+    return info.entitlements.active[ENTITLEMENT_PREMIUM] !== undefined;
   } catch {
     return false;
-  }
-}
-
-/** Sync RevenueCat entitlement status to Supabase profiles table. */
-async function syncPremiumToSupabase(
-  isPremium: boolean,
-  customerInfo: Awaited<ReturnType<typeof Purchases.getCustomerInfo>>,
-) {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const entitlement = customerInfo.entitlements.active[ENTITLEMENT_PREMIUM];
-    const expiresAt = entitlement?.expirationDate ?? null;
-
-    await supabase
-      .from('profiles')
-      .update({
-        subscription_tier: isPremium ? 'premium' : 'free',
-        subscription_expires_at: expiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', user.id);
-  } catch {
-    // non-critical — webhook will eventually sync
   }
 }

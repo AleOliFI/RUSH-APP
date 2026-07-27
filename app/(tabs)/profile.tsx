@@ -14,6 +14,7 @@ import { useIsPremium } from '../../src/hooks/useSubscription';
 import { restorePurchases } from '../../src/lib/revenuecat';
 import { supabase } from '../../src/lib/supabase';
 import { estimateCyclePhase } from '../../src/lib/algorithms/hormonal';
+import { parseDateOnly } from '../../src/lib/dates';
 import type { CycleLog, HormonalProfile } from '../../src/types/hrv';
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -44,7 +45,7 @@ const CYCLE_PHASE_COLORS: Record<string, string> = {
 
 export default function ProfileScreen() {
   const { profile, user } = useAuthStore();
-  const { tier } = useSubscriptionStore();
+  const { tier, setTier } = useSubscriptionStore();
   const { readingCount, baseline7d, mu28SVC, sigma28SVC } = useHRVBaseline();
   const isPremium = useIsPremium();
   const signOut = useSignOut();
@@ -74,7 +75,7 @@ export default function ProfileScreen() {
       let cyclePhase = null;
       if (cycleLog) {
         const cl = cycleLog as CycleLog;
-        dayOfCycle = Math.floor((Date.now() - new Date(cl.cycle_start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        dayOfCycle = Math.floor((Date.now() - parseDateOnly(cl.cycle_start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1;
         cyclePhase = estimateCyclePhase(dayOfCycle);
       }
       return { hormonalProfile, dayOfCycle, cyclePhase };
@@ -85,6 +86,7 @@ export default function ProfileScreen() {
     setRestoring(true);
     const restored = await restorePurchases();
     setRestoring(false);
+    if (restored) setTier('premium');
     Alert.alert(
       restored ? 'Assinatura restaurada!' : 'Nenhuma compra encontrada',
       restored ? 'Seu Premium está ativo.' : 'Nenhuma compra anterior foi encontrada.',

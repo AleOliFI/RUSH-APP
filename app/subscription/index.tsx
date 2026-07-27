@@ -8,7 +8,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Purchases, { type PurchasesPackage } from 'react-native-purchases';
 import { H2, Body, Caption, Label } from '../../src/components/ui/Typography';
@@ -63,7 +63,7 @@ export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const { setTier } = useSubscriptionStore();
-  const { user } = useAuthStore();
+  const { user, session, isLoading: authLoading } = useAuthStore();
 
   useEffect(() => {
     loadNativeOfferings();
@@ -135,6 +135,9 @@ export default function SubscriptionScreen() {
       setLoading(false);
     }
   }
+
+  if (authLoading) return null;
+  if (!session) return <Redirect href="/(auth)/sign-in" />;
 
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top', 'bottom']}>

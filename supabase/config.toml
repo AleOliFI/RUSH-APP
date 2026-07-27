@@ -366,6 +366,18 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# Per-function JWT policy: checkout requires a logged-in user; webhooks are
+# called by Stripe/RevenueCat without Supabase JWTs (they authenticate via
+# signature / shared secret inside the function).
+[functions.stripe-checkout]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.revenuecat-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = false
 # Supported request policies: `oneshot`, `per_worker`.

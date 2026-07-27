@@ -35,9 +35,13 @@ Deno.serve(async (req: Request) => {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
-  // Validate RevenueCat webhook auth header
+  // Validate RevenueCat webhook auth header — fail closed
   const authHeader = req.headers.get('Authorization');
-  if (RC_WEBHOOK_AUTH && authHeader !== RC_WEBHOOK_AUTH) {
+  if (!RC_WEBHOOK_AUTH) {
+    console.error('[RC Webhook] REVENUECAT_WEBHOOK_AUTH_TOKEN not set — rejecting all requests');
+    return new Response('Webhook auth not configured', { status: 503 });
+  }
+  if (authHeader !== RC_WEBHOOK_AUTH) {
     return new Response('Unauthorized', { status: 401 });
   }
 

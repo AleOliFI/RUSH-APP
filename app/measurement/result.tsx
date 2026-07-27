@@ -14,6 +14,7 @@ import { useIsPremium } from '../../src/hooks/useSubscription';
 import { BehaviorPicker } from '../../src/components/measurement/BehaviorPicker';
 import { useAuthStore } from '../../src/stores/auth';
 import type { Behavior } from '../../src/lib/algorithms/behaviors';
+import { localToday } from '../../src/lib/dates';
 import type { ReadinessAssessment } from '../../src/types/readiness';
 
 export default function ResultScreen() {
@@ -23,24 +24,39 @@ export default function ResultScreen() {
 
   async function saveBehaviors(behaviors: Behavior[]) {
     if (!user) return;
-    const today = new Date().toISOString().split('T')[0];
+    const today = localToday();
     await supabase
       .from('behavior_logs')
       .upsert({ user_id: user.id, log_date: today, behaviors }, { onConflict: 'user_id,log_date' });
   }
 
-  const { data: assessment, isLoading } = useQuery({
+  const { data: assessment, isLoading, isError } = useQuery({
     queryKey: ['assessment', assessmentId],
     enabled: !!assessmentId,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('readiness_assessments')
         .select('*')
         .eq('id', assessmentId)
-        .single();
-      return data as ReadinessAssessment;
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as ReadinessAssessment | null;
     },
   });
+
+  // A disabled query (missing assessmentId) has isLoading === false in
+  // react-query v5, so this must come before the spinner branch.
+  if (!assessmentId || isError || (!isLoading && !assessment)) {
+    return (
+      <View className="flex-1 bg-bg-primary items-center justify-center px-8 gap-4">
+        <Text className="text-4xl">😕</Text>
+        <Body className="text-text-secondary text-center">
+          Não foi possível carregar o resultado da medição.
+        </Body>
+        <Button title="Voltar ao início" size="lg" onPress={() => router.replace('/(tabs)')} />
+      </View>
+    );
+  }
 
   if (isLoading || !assessment) {
     return (
@@ -129,14 +145,13 @@ export default function ResultScreen() {
               <Body className="text-text-secondary">
                 {assessment.prescription_text.split('.')[0]}.
               </Body>
-              <View
-                className="bg-bg-secondary rounded-2xl p-4 gap-2 opacity-40"
-                style={{ filter: 'blur(4px)' as any }}
-              >
-                <Text className="text-text-secondary text-xs font-semibold uppercase tracking-widest">
-                  Sessão sugerida
+              {/* Locked teaser: never render the real session for free users
+                  (CSS blur is a no-op on native and the text stays legible) */}
+              <View className="bg-bg-secondary rounded-2xl p-4 gap-2 items-center py-6">
+                <Text className="text-2xl">🔒</Text>
+                <Text className="text-text-secondary text-sm text-center">
+                  Sessão sugerida disponível no Premium
                 </Text>
-                <Body>{assessment.example_session}</Body>
               </View>
               <Button
                 title="Desbloquear prescrição completa"

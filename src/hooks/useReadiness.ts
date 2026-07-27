@@ -1,23 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/auth';
+import { localToday, localDaysAgo } from '../lib/dates';
 import type { ReadinessAssessment } from '../types/readiness';
 
 export function useTodayReadiness() {
   const { user } = useAuthStore();
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
 
   return useQuery({
     queryKey: ['readiness', user?.id, today],
     enabled: !!user,
     staleTime: 1000 * 60 * 30,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('readiness_assessments')
         .select('*')
         .eq('user_id', user!.id)
         .eq('assessed_at', today)
-        .single();
+        .maybeSingle();
+      if (error) throw error;
       return (data ?? null) as ReadinessAssessment | null;
     },
   });
@@ -31,14 +33,11 @@ export function useReadinessHistory(days = 7) {
     enabled: !!user,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
-
       const { data, error } = await supabase
         .from('readiness_assessments')
         .select('*')
         .eq('user_id', user!.id)
-        .gte('assessed_at', cutoff.toISOString().split('T')[0])
+        .gte('assessed_at', localDaysAgo(days))
         .order('assessed_at', { ascending: false });
 
       if (error) throw error;

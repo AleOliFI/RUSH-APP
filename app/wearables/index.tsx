@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { H2, Body, Caption, Label } from '../../src/components/ui/Typography';
 import { Card } from '../../src/components/ui/Card';
 import { Button } from '../../src/components/ui/Button';
 import { useIsPremium } from '../../src/hooks/useSubscription';
+import { useAuthStore } from '../../src/stores/auth';
 
 const WEARABLES = [
   {
@@ -48,6 +49,10 @@ const WEARABLES = [
 
 export default function WearablesScreen() {
   const isPremium = useIsPremium();
+  const { session, isLoading: authLoading } = useAuthStore();
+
+  if (authLoading) return null;
+  if (!session) return <Redirect href="/(auth)/sign-in" />;
 
   return (
     <SafeAreaView className="flex-1 bg-bg-primary" edges={['top', 'bottom']}>
