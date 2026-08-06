@@ -162,14 +162,14 @@ export default function HomeScreen() {
             <View className="items-center gap-1">
               <H3>Faça sua medição de hoje</H3>
               <Body className="text-text-secondary text-center">
-                120 segundos com o dedo na câmera (60s estabilização + 60s captura) para descobrir
+                60 segundos com sua cinta ou relógio conectado por Bluetooth para descobrir
                 sua prescrição do dia.
               </Body>
             </View>
             <Button
               title="Medir agora"
               size="lg"
-              onPress={() => router.push('/measurement/camera')}
+              onPress={() => router.push('/measurement/ble')}
               className="w-full"
             />
           </Card>

@@ -8,18 +8,11 @@ import { Card } from '../../src/components/ui/Card';
 
 const METHODS = [
   {
-    icon: '📷',
-    title: 'Câmera (PPG)',
-    desc: 'Dedo na câmera traseira. 60s estabilização + 60s captura ativa. Mais preciso.',
+    icon: '⌚',
+    title: 'Cinta ou relógio (Bluetooth)',
+    desc: 'Conecta ao sensor e lê os intervalos entre batimentos. Precisão de ~1ms.',
     recommended: true,
-    route: '/measurement/camera' as const,
-  },
-  {
-    icon: '📱',
-    title: 'Acelerômetro (SCG)',
-    desc: 'Coloque o aparelho no peito deitado. Alternativa sem câmera.',
-    recommended: false,
-    route: '/measurement/camera' as const,
+    route: '/measurement/ble' as const,
   },
 ];
 

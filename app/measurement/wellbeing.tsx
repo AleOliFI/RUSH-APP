@@ -40,6 +40,8 @@ export default function WellbeingScreen() {
     rhr: string;
     quality: string;
     rrIntervals: string;
+    metric: string;
+    method: string;
   }>();
   const [loading, setLoading] = useState(false);
   const { data: readings = [] } = useHRVHistory(28);
@@ -157,7 +159,8 @@ export default function WellbeingScreen() {
           user_id: user.id,
           rmssd,
           rhr: rhr > 0 ? rhr : null,
-          measurement_method: 'camera_ppg',
+          measurement_method: params.method ?? 'ble_hrm',
+          hrv_metric: params.metric ?? 'rmssd',
           duration_seconds: 60,
           quality_score: quality,
           raw_rr_intervals: params.rrIntervals ? JSON.parse(params.rrIntervals) : null,

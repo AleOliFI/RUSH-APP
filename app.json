@@ -20,10 +20,9 @@
       "bundleIdentifier": "com.rushapp.hrv",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "A câmera é usada para medir sua variabilidade da frequência cardíaca (VFC) pelo sensor PPG.",
-        "NSMotionUsageDescription": "O acelerômetro é usado para medir a VFC pelo método SCG.",
         "NSHealthShareUsageDescription": "Lemos sua FC em repouso e VFC passiva do Apple Health.",
-        "NSHealthUpdateUsageDescription": "Armazenamos seus dados de treino no Apple Health."
+        "NSHealthUpdateUsageDescription": "Armazenamos seus dados de treino no Apple Health.",
+        "NSBluetoothAlwaysUsageDescription": "O Bluetooth é usado para conectar à sua cinta cardíaca ou relógio e medir a variabilidade da frequência cardíaca (VFC)."
       }
     },
     "android": {
@@ -35,10 +34,12 @@
       "package": "com.rushapp.hrv",
       "versionCode": 1,
       "permissions": [
-        "android.permission.CAMERA",
         "android.permission.VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.SCHEDULE_EXACT_ALARM"
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -65,17 +66,22 @@
       ],
       "expo-web-browser",
       [
-        "expo-camera",
-        {
-          "cameraPermission": "A câmera é usada para medir sua variabilidade da frequência cardíaca (VFC)."
-        }
-      ],
-      [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
           "color": "#e72329",
           "sounds": []
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "modes": [
+            "peripheral",
+            "central"
+          ]
         }
       ]
     ],

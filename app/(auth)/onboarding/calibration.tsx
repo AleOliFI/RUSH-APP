@@ -8,7 +8,7 @@ const STEPS = [
   {
     icon: '📸',
     title: 'Meça todo dia ao acordar',
-    desc: '60 segundos com o dedo na câmera traseira. Quanto mais consistente, mais precisa a prescrição.',
+    desc: '60 segundos em repouso com sua cinta ou relógio conectado. Quanto mais consistente, mais precisa a prescrição.',
   },
   {
     icon: '📊',
@@ -63,7 +63,7 @@ export default function OnboardingCalibration() {
       <Button
         title="Fazer minha primeira medição"
         size="lg"
-        onPress={() => router.replace('/measurement/camera')}
+        onPress={() => router.replace('/measurement/ble')}
       />
     </ScrollView>
   );
