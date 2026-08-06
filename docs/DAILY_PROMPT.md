@@ -6,7 +6,7 @@ Você é o desenvolvedor autônomo do **RUSH-APP**. Sua tarefa hoje é pesquisar
 
 ## 1. Identidade do RUSH-APP
 
-**O que é:** App mobile React Native (Expo SDK 56) para corredores que mede a Variabilidade da Frequência Cardíaca (VFC/HRV) via câmera PPG e gera prescrições de treino personalizadas.
+**O que é:** App mobile React Native (Expo SDK 56) para corredores que mede a Variabilidade da Frequência Cardíaca (VFC/HRV) a partir de sensores Bluetooth (cintas e relógios) e gera prescrições de treino personalizadas.
 
 **Stack:**
 - React Native + Expo SDK 56 + Expo Router (file-based routing)
@@ -25,7 +25,7 @@ Você é o desenvolvedor autônomo do **RUSH-APP**. Sua tarefa hoje é pesquisar
 - Fator catabólico T:C via TRIMP acumulado
 
 **Freemium:**
-- Grátis: medição PPG, S_VFC, questionário bem-estar, histórico 7 dias
+- Grátis: medição por sensor BLE, S_VFC, questionário bem-estar, histórico 7 dias
 - Premium: prescrições detalhadas, módulo hormonal, downregulation, histórico 28 dias, wearables
 
 **Arquivos principais:**
@@ -35,11 +35,12 @@ app/
   (tabs)/history.tsx       # histórico S_VFC
   (tabs)/profile.tsx       # perfil + dados hormonais
   (auth)/onboarding/       # cadastro + calibração
-  measurement/             # camera → wellbeing → result
+  measurement/             # ble → wellbeing → result
   subscription/index.tsx   # paywall RevenueCat
   wearables/index.tsx      # placeholder (Em breve)
 src/
-  lib/algorithms/          # ppg.ts, hrv.ts, readiness.ts, hormonal.ts
+  lib/algorithms/          # hrv.ts, readiness.ts, hormonal.ts, behaviors.ts
+  lib/ble/                 # heartRate.ts — parser do GATT Heart Rate
   hooks/useHRVBaseline.ts  # baselines S_VFC µ7/µ28/σ28
   hooks/useSubscription.ts # useIsPremium()
   components/charts/       # ReadinessRing, SVFCTrendChart
@@ -60,7 +61,7 @@ Identifique o dia da semana atual e pesquise o concorrente correspondente:
 |-----|-------------|-----------------|
 | Segunda | **WHOOP 4.0** | Recovery Score, Strain Coach, coaching diário |
 | Terça | **Garmin Connect** | HRV Status, Training Readiness, Body Battery, Morning Report |
-| Quarta | **HRV4Training** | camera PPG, readiness score, acute:chronic ratio |
+| Quarta | **HRV4Training** | readiness score, acute:chronic ratio, protocolos de medição |
 | Quinta | **TrainingPeaks** | TSS, CTL/ATL/TSB, Performance Manager Chart, workout plans |
 | Sexta | **Polar Flow** | Training Load Pro, Orthostatic Test, FitSpark AI coach |
 | Sábado | **Runna / Tempo** | planos de corrida adaptativos, IA coach, periodização |
