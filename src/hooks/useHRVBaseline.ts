@@ -9,7 +9,7 @@ import {
   calculateRHRBaseline,
   calculateBaselines,
 } from '../lib/algorithms/hrv';
-import type { HRVReading } from '../types/hrv';
+import type { HRVMetric, HRVReading } from '../types/hrv';
 
 export function useHRVHistory(days = 28) {
   const { user } = useAuthStore();
@@ -35,14 +35,26 @@ export function useHRVHistory(days = 28) {
   });
 }
 
-export function useHRVBaseline() {
-  const { data: readings = [] } = useHRVHistory(28);
+/**
+ * Baselines de uma métrica só.
+ *
+ * RMSSD (cintas BLE) e SDNN (Apple Health) medem componentes diferentes da
+ * variabilidade: 40 ms de um não significa o mesmo que 40 ms do outro. Antes,
+ * só o calculateBaselines particionava, enquanto readingCount, baseline7d,
+ * cv7d e rhrBaseline usavam as leituras misturadas — e bastava a primeira
+ * leitura SDNN para o app se declarar calibrado com contagem de uma métrica
+ * comparada contra a baseline de outra.
+ */
+export function useHRVBaseline(metric: HRVMetric = 'rmssd') {
+  const { data: allReadings = [] } = useHRVHistory(28);
+
+  const readings = allReadings.filter((r) => (r.hrv_metric ?? 'rmssd') === metric);
 
   const baseline7d = calculateBaseline(readings, 7);
   const baseline28d = calculateBaseline(readings, 28);
   const cv7d = calculateCV(readings.slice(0, 7));
   const rhrBaseline = calculateRHRBaseline(readings);
-  const baselines = calculateBaselines(readings);
+  const baselines = calculateBaselines(readings, metric);
 
   return {
     baseline7d,
@@ -58,8 +70,12 @@ export function useHRVBaseline() {
   };
 }
 
-export function useCurrentHRVStatus(latestRMSSD: number, latestRHR: number | null) {
-  const { baseline7d, rhrBaseline, readingCount } = useHRVBaseline();
+export function useCurrentHRVStatus(
+  latestRMSSD: number,
+  latestRHR: number | null,
+  metric: HRVMetric = 'rmssd',
+) {
+  const { baseline7d, rhrBaseline, readingCount } = useHRVBaseline(metric);
 
   const hrvStatus = classifyHRVStatus(latestRMSSD, baseline7d, readingCount);
   const rhrStatus =

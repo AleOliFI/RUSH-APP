@@ -57,7 +57,7 @@ export default function MeasureScreen() {
           {[
             'Meça sempre no mesmo horário (ao acordar)',
             'Fique em repouso por 2 min antes',
-            'Os primeiros 60s são descartados (estabilização) — mantenha o dedo firme',
+            'Use cinta peitoral e mantenha os eletrodos umedecidos',
             'Ambiente calmo e temperatura agradável',
             'Não meça após café ou exercício',
           ].map((tip) => (

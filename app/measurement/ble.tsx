@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,14 @@ import { H2, Body, Caption } from '../../src/components/ui/Typography';
 import { Button } from '../../src/components/ui/Button';
 import { Card } from '../../src/components/ui/Card';
 import { useBleHeartRate, ACQUISITION_SECONDS } from '../../src/hooks/useBleHeartRate';
-import { calculateRMSSD } from '../../src/lib/algorithms/hrv';
+import {
+  RR_MAX_ARTEFACT_RATE,
+  calculateRMSSD,
+  filterRRArtefacts,
+} from '../../src/lib/algorithms/hrv';
+
+/** Mínimo de intervalos, já filtrados, para um RMSSD confiável. */
+const MIN_ACCEPTED_INTERVALS = 20;
 
 export default function BleMeasurementScreen() {
   const {
@@ -23,23 +30,50 @@ export default function BleMeasurementScreen() {
     reset,
   } = useBleHeartRate();
 
+  const [rejection, setRejection] = useState<string | null>(null);
+
   const handleFinish = useCallback((rr: number[]) => {
-    // Under ~20 beats there isn't enough data for a trustworthy RMSSD.
-    if (rr.length < 20) {
+    // Filtrar antes de calcular não é refinamento: o RMSSD eleva ao quadrado a
+    // diferença entre batimentos, então um único batimento perdido — que cabe
+    // na faixa fisiológica e passa pelo isPlausibleRR — pode dobrar o valor e
+    // devolver uma prescrição de alta intensidade a quem deveria descansar.
+    const { accepted, artefactRate } = filterRRArtefacts(rr);
+
+    if (accepted.length < MIN_ACCEPTED_INTERVALS) {
+      setRejection(
+        `Foram aproveitados apenas ${accepted.length} intervalos. É preciso um sinal estável para calcular a VFC com confiança.`,
+      );
       return;
     }
+
+    if (artefactRate > RR_MAX_ARTEFACT_RATE) {
+      setRejection(
+        `${Math.round(artefactRate * 100)}% dos batimentos foram descartados por irregularidade. Ajuste a cinta, umedeça os eletrodos e meça novamente em repouso.`,
+      );
+      return;
+    }
+
+    const meanRr = accepted.reduce((s, v) => s + v, 0) / accepted.length;
+
     router.replace({
       pathname: '/measurement/wellbeing',
       params: {
-        rmssd: String(Math.round(calculateRMSSD(rr))),
-        rhr: String(Math.round(60000 / (rr.reduce((s, v) => s + v, 0) / rr.length))),
-        quality: String(Math.min(1, rr.length / 45).toFixed(2)),
-        rrIntervals: JSON.stringify(rr),
+        rmssd: String(Math.round(calculateRMSSD(accepted))),
+        rhr: String(Math.round(60000 / meanRr)),
+        // A qualidade agora reflete quanto do sinal era limpo. Antes era
+        // rr.length/45, que media só a quantidade e era cega a artefato.
+        quality: (1 - artefactRate).toFixed(2),
+        rrIntervals: JSON.stringify(accepted),
         metric: 'rmssd',
         method: 'ble_hrm',
       },
     });
   }, []);
+
+  const retry = useCallback(() => {
+    setRejection(null);
+    reset();
+  }, [reset]);
 
   // BLE is a native module; on web the manager throws as soon as it is built.
   if (Platform.OS === 'web') {
@@ -190,17 +224,14 @@ export default function BleMeasurementScreen() {
           </View>
         )}
 
-        {stage === 'done' && beatCount < 20 && (
+        {stage === 'done' && rejection && (
           <View className="flex-1 items-center justify-center gap-6">
             <Text className="text-6xl">⚠️</Text>
             <View className="items-center gap-2">
-              <H2>Batimentos insuficientes</H2>
-              <Body className="text-text-secondary text-center">
-                Foram captados apenas {beatCount} intervalos. É preciso um sinal estável para
-                calcular a VFC com confiança.
-              </Body>
+              <H2>Sinal insuficiente</H2>
+              <Body className="text-text-secondary text-center">{rejection}</Body>
             </View>
-            <Button title="Tentar novamente" size="lg" onPress={reset} />
+            <Button title="Tentar novamente" size="lg" onPress={retry} />
           </View>
         )}
       </View>

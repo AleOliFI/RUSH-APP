@@ -1,5 +1,46 @@
 import type { HRVMetric, HRVReading, HRVStatus, RHRStatus, WellbeingStatus } from '../../types/hrv';
 
+/** Máximo desvio aceito de um intervalo RR para o anterior (filtro de Malik). */
+export const RR_ARTEFACT_THRESHOLD = 0.2;
+
+/** Acima desta fração de intervalos descartados, a leitura não é confiável. */
+export const RR_MAX_ARTEFACT_RATE = 0.05;
+
+export interface RRFilterResult {
+  /** Intervalos aceitos, na ordem original. */
+  accepted: number[];
+  /** Fração descartada (0–1). */
+  artefactRate: number;
+}
+
+/**
+ * Remove batimentos ectópicos e falhas de leitura de uma série de intervalos RR.
+ *
+ * O RMSSD eleva ao quadrado a diferença entre batimentos sucessivos, o que o
+ * torna desproporcionalmente sensível a artefato: um único batimento perdido —
+ * 1850 ms onde deveria haver ~900 — cabe na faixa fisiológica e ainda assim
+ * pode levar o RMSSD de ~45 ms para ~250 ms, saturando o S_VFC e produzindo
+ * uma prescrição verde de alta intensidade para um atleta que deveria descansar.
+ *
+ * Por isso a faixa de plausibilidade sozinha não basta: é preciso comparar cada
+ * intervalo com o anterior.
+ */
+export function filterRRArtefacts(rrIntervals: number[]): RRFilterResult {
+  if (rrIntervals.length === 0) return { accepted: [], artefactRate: 0 };
+
+  const accepted: number[] = [rrIntervals[0]];
+  for (let i = 1; i < rrIntervals.length; i++) {
+    const previous = accepted[accepted.length - 1];
+    const deviation = Math.abs(rrIntervals[i] - previous) / previous;
+    if (deviation <= RR_ARTEFACT_THRESHOLD) accepted.push(rrIntervals[i]);
+  }
+
+  return {
+    accepted,
+    artefactRate: 1 - accepted.length / rrIntervals.length,
+  };
+}
+
 /** Root Mean Square of Successive Differences — primary HRV metric */
 export function calculateRMSSD(rrIntervals: number[]): number {
   if (rrIntervals.length < 2) return 0;

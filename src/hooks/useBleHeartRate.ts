@@ -32,6 +32,18 @@ function getManager(): BleManager {
   return manager;
 }
 
+/**
+ * Devolve o manager apenas se ele já existir.
+ *
+ * A limpeza roda em todo unmount, inclusive no web, onde a tela nem chega a
+ * usar BLE — e construir um BleManager ali lança. Usar getManager() na limpeza
+ * anularia a guarda `Platform.OS === 'web'` da tela: não há o que limpar antes
+ * de haver o que criar.
+ */
+function peekManager(): BleManager | null {
+  return manager;
+}
+
 /** Android 12+ needs the new BLE runtime permissions; older needs location. */
 async function ensureAndroidPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
@@ -65,13 +77,22 @@ export function useBleHeartRate() {
   const deviceRef = useRef<Device | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const framesRef = useRef(0);
+  const elapsedRef = useRef(0);
+  /**
+   * Identifica a medição corrente. Toda limpeza o incrementa, então qualquer
+   * await que estava em voo percebe que foi cancelado e não escreve estado —
+   * sair da tela durante "Conectando..." deixava subscription e timer vivos,
+   * que depois navegavam a partir de uma tela já desmontada.
+   */
+  const runIdRef = useRef(0);
 
   const cleanup = useCallback(() => {
+    runIdRef.current += 1;
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     subRef.current?.remove();
     subRef.current = null;
-    getManager().stopDeviceScan();
+    peekManager()?.stopDeviceScan();
     deviceRef.current?.cancelConnection().catch(() => {});
     deviceRef.current = null;
   }, []);
@@ -107,7 +128,8 @@ export function useBleHeartRate() {
   }, []);
 
   const stopScan = useCallback(() => {
-    getManager().stopDeviceScan();
+    // Parar não deve criar o manager: se ele não existe, não há varredura.
+    peekManager()?.stopDeviceScan();
     if (stage === 'scanning') setStage('idle');
   }, [stage]);
 
@@ -115,18 +137,30 @@ export function useBleHeartRate() {
   const measure = useCallback(
     async (deviceId: string, onFinish: (rr: number[]) => void) => {
       getManager().stopDeviceScan();
+      // Invalida qualquer medição anterior ainda em voo e reserva este id.
+      runIdRef.current += 1;
+      const runId = runIdRef.current;
+      const cancelled = () => runIdRef.current !== runId;
+
       setStage('connecting');
       setError(null);
       rrRef.current = [];
       framesRef.current = 0;
+      elapsedRef.current = 0;
       setBeatCount(0);
       setElapsed(0);
       setRrUnsupported(false);
 
       try {
         const device = await getManager().connectToDevice(deviceId);
+        if (cancelled()) {
+          await device.cancelConnection().catch(() => {});
+          return;
+        }
         deviceRef.current = device;
+
         await device.discoverAllServicesAndCharacteristics();
+        if (cancelled()) return;
 
         setStage('measuring');
 
@@ -134,7 +168,20 @@ export function useBleHeartRate() {
           HEART_RATE_SERVICE,
           HEART_RATE_MEASUREMENT_CHAR,
           (err, characteristic) => {
-            if (err || !characteristic?.value) return;
+            if (cancelled()) return;
+
+            // Erro do monitor significa cinta que caiu ou falha de GATT.
+            // Ignorar em silêncio fazia uma leitura interrompida aos 20 s ser
+            // gravada como medição completa de 60 s.
+            if (err) {
+              cleanup();
+              setError(
+                'A conexão com o sensor caiu durante a medição. Aproxime o dispositivo e tente de novo.',
+              );
+              setStage('error');
+              return;
+            }
+            if (!characteristic?.value) return;
 
             const parsed = parseHeartRateMeasurement(base64ToBytes(characteristic.value));
             if (!parsed) return;
@@ -154,18 +201,24 @@ export function useBleHeartRate() {
           },
         );
 
+        // O contador vive num ref e o efeito colateral fica fora do updater do
+        // setState. Dentro dele, a dupla invocação do StrictMode encerrava a
+        // conexão duas vezes e navegava duas vezes.
         timerRef.current = setInterval(() => {
-          setElapsed((prev) => {
-            const next = prev + 1;
-            if (next >= ACQUISITION_SECONDS) {
-              cleanup();
-              setStage('done');
-              onFinish(rrRef.current);
-            }
-            return next;
-          });
+          if (cancelled()) return;
+
+          elapsedRef.current += 1;
+          setElapsed(elapsedRef.current);
+
+          if (elapsedRef.current >= ACQUISITION_SECONDS) {
+            const collected = rrRef.current;
+            cleanup();
+            setStage('done');
+            onFinish(collected);
+          }
         }, 1000);
       } catch (e) {
+        if (cancelled()) return;
         cleanup();
         setError((e as Error).message);
         setStage('error');
@@ -176,9 +229,15 @@ export function useBleHeartRate() {
 
   const reset = useCallback(() => {
     cleanup();
+    elapsedRef.current = 0;
+    framesRef.current = 0;
+    rrRef.current = [];
     setStage('idle');
     setDevices([]);
     setHeartRate(0);
+    // Sem isto, o aviso "sensor sem contato" da medição anterior reaparecia
+    // no início da próxima, antes de qualquer leitura nova.
+    setContact('unsupported');
     setBeatCount(0);
     setElapsed(0);
     setError(null);

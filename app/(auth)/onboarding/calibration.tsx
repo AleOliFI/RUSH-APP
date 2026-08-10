@@ -6,7 +6,7 @@ import { Button } from '../../../src/components/ui/Button';
 
 const STEPS = [
   {
-    icon: '📸',
+    icon: '⌚',
     title: 'Meça todo dia ao acordar',
     desc: '60 segundos em repouso com sua cinta ou relógio conectado. Quanto mais consistente, mais precisa a prescrição.',
   },
