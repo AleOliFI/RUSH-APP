@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  typecheck:
+  verificacao:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +17,12 @@ jobs:
       # O projeto tem conflitos de peer deps (Expo 56 + RN 0.85), então o lock
       # é resolvido com --legacy-peer-deps; o ci precisa usar a mesma flag.
       - run: npm ci --legacy-peer-deps
-      - run: npx tsc --noEmit
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Cobre a lógica pura de VFC. Existe porque a filtragem de artefato já
+      # foi removida uma vez sem ninguém notar, e um RMSSD inflado vira
+      # prescrição de treino forte para quem deveria descansar.
+      - name: Testes
+        run: npx jest
