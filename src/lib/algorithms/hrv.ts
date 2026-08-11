@@ -1,4 +1,45 @@
-import type { HRVReading, HRVStatus, RHRStatus, WellbeingStatus } from '../../types/hrv';
+import type { HRVMetric, HRVReading, HRVStatus, RHRStatus, WellbeingStatus } from '../../types/hrv';
+
+/** Máximo desvio aceito de um intervalo RR para o anterior (filtro de Malik). */
+export const RR_ARTEFACT_THRESHOLD = 0.2;
+
+/** Acima desta fração de intervalos descartados, a leitura não é confiável. */
+export const RR_MAX_ARTEFACT_RATE = 0.05;
+
+export interface RRFilterResult {
+  /** Intervalos aceitos, na ordem original. */
+  accepted: number[];
+  /** Fração descartada (0–1). */
+  artefactRate: number;
+}
+
+/**
+ * Remove batimentos ectópicos e falhas de leitura de uma série de intervalos RR.
+ *
+ * O RMSSD eleva ao quadrado a diferença entre batimentos sucessivos, o que o
+ * torna desproporcionalmente sensível a artefato: um único batimento perdido —
+ * 1850 ms onde deveria haver ~900 — cabe na faixa fisiológica e ainda assim
+ * pode levar o RMSSD de ~45 ms para ~250 ms, saturando o S_VFC e produzindo
+ * uma prescrição verde de alta intensidade para um atleta que deveria descansar.
+ *
+ * Por isso a faixa de plausibilidade sozinha não basta: é preciso comparar cada
+ * intervalo com o anterior.
+ */
+export function filterRRArtefacts(rrIntervals: number[]): RRFilterResult {
+  if (rrIntervals.length === 0) return { accepted: [], artefactRate: 0 };
+
+  const accepted: number[] = [rrIntervals[0]];
+  for (let i = 1; i < rrIntervals.length; i++) {
+    const previous = accepted[accepted.length - 1];
+    const deviation = Math.abs(rrIntervals[i] - previous) / previous;
+    if (deviation <= RR_ARTEFACT_THRESHOLD) accepted.push(rrIntervals[i]);
+  }
+
+  return {
+    accepted,
+    artefactRate: 1 - accepted.length / rrIntervals.length,
+  };
+}
 
 /** Root Mean Square of Successive Differences — primary HRV metric */
 export function calculateRMSSD(rrIntervals: number[]): number {
@@ -10,18 +51,42 @@ export function calculateRMSSD(rrIntervals: number[]): number {
   return Math.sqrt(squaredDiffs.reduce((s, v) => s + v, 0) / squaredDiffs.length);
 }
 
-// lnRMSSD linearisation constants
-const LN_RMSSD_MIN = Math.log(5);   // ln(5 ms)
-const LN_RMSSD_MAX = Math.log(250); // ln(250 ms)
+/** Standard Deviation of NN intervals — the metric Apple Health exposes */
+export function calculateSDNN(rrIntervals: number[]): number {
+  if (rrIntervals.length < 2) return 0;
+  const avg = rrIntervals.reduce((s, v) => s + v, 0) / rrIntervals.length;
+  const variance =
+    rrIntervals.reduce((s, v) => s + (v - avg) ** 2, 0) / rrIntervals.length;
+  return Math.sqrt(variance);
+}
 
 /**
- * Convert RMSSD to a 0–100 linearised HRV score (S_VFC).
- * S_VFC = (ln(RMSSD) - ln(5)) / (ln(250) - ln(5)) × 100
+ * Linearisation envelopes per metric, in ms.
+ *
+ * RMSSD is the primary metric (BLE straps expose RR intervals, so we compute it
+ * ourselves). Apple Health only publishes SDNN, so readings imported from a
+ * watch carry that instead.
+ *
+ * The two are NOT interchangeable — they capture different components of
+ * variability and a value of 40 ms means different things in each. That is why
+ * baselines are partitioned by metric (see calculateBaselines): the readiness
+ * zones are driven by how far today sits from the user's own history for the
+ * same metric, which stays valid even where the absolute envelope is only an
+ * approximation.
  */
-export function calculateSVFC(rmssd: number): number {
-  if (rmssd <= 0) return 0;
-  const lnRmssd = Math.log(rmssd);
-  return Math.min(100, Math.max(0, ((lnRmssd - LN_RMSSD_MIN) / (LN_RMSSD_MAX - LN_RMSSD_MIN)) * 100));
+const SVFC_ENVELOPE: Record<HRVMetric, { min: number; max: number }> = {
+  rmssd: { min: Math.log(5), max: Math.log(250) },
+  sdnn: { min: Math.log(5), max: Math.log(250) },
+};
+
+/**
+ * Convert an HRV value to a 0–100 linearised score (S_VFC).
+ * S_VFC = (ln(v) - ln(min)) / (ln(max) - ln(min)) × 100
+ */
+export function calculateSVFC(value: number, metric: HRVMetric = 'rmssd'): number {
+  if (value <= 0) return 0;
+  const { min, max } = SVFC_ENVELOPE[metric];
+  return Math.min(100, Math.max(0, ((Math.log(value) - min) / (max - min)) * 100));
 }
 
 /**
@@ -76,16 +141,27 @@ function stddev(arr: number[], mean: number): number {
   return Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length);
 }
 
-/** Compute all baselines needed by the V2 readiness engine. */
-export function calculateBaselines(readings: HRVReading[]): HRVBaselines {
-  const r7 = filterByDays(readings, 7);
-  const r28 = filterByDays(readings, 28);
+/**
+ * Compute all baselines needed by the V2 readiness engine.
+ *
+ * `metric` partitions the history: an SDNN reading from a watch is never
+ * averaged together with RMSSD readings from a strap, because the same number
+ * means different things in each and the mix would skew µ28/σ28 — the very
+ * values the readiness zones are measured against.
+ */
+export function calculateBaselines(
+  readings: HRVReading[],
+  metric: HRVMetric = 'rmssd',
+): HRVBaselines {
+  const sameMetric = readings.filter((r) => (r.hrv_metric ?? 'rmssd') === metric);
+  const r7 = filterByDays(sameMetric, 7);
+  const r28 = filterByDays(sameMetric, 28);
 
   const mu7 = avg(r7.map((r) => r.rmssd));
   const mu28 = avg(r28.map((r) => r.rmssd));
 
-  const svc28 = r28.map((r) => calculateSVFC(r.rmssd));
-  const svc7 = r7.map((r) => calculateSVFC(r.rmssd));
+  const svc28 = r28.map((r) => calculateSVFC(r.rmssd, metric));
+  const svc7 = r7.map((r) => calculateSVFC(r.rmssd, metric));
   const mu28SVC = avg(svc28);
   const mu7SVC = avg(svc7);
   const sigma28SVC = stddev(svc28, mu28SVC);

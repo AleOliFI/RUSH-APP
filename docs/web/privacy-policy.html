@@ -110,8 +110,8 @@
 
     <p><strong>2.2 Dados de saúde</strong></p>
     <ul>
-      <li>Leituras de VFC (RMSSD) capturadas pela câmera do dispositivo via PPG</li>
-      <li>Frequência cardíaca em repouso (RHR)</li>
+      <li>Leituras de VFC (RMSSD) recebidas do seu sensor de frequência cardíaca por Bluetooth</li>
+      <li>Frequência cardíaca em repouso (RHR) e intervalos entre batimentos (RR)</li>
       <li>Questionário de bem-estar diário (sono, estresse, fadiga muscular)</li>
       <li>Data de início do ciclo menstrual (opcional, somente para usuárias femininas)</li>
       <li>Dados de sessões de treino (duração, FC média, TRIMP estimado)</li>
@@ -186,11 +186,18 @@
       <a href="mailto:afilho785@gmail.com">afilho785@gmail.com</a>
     </p>
 
-    <h2>8. Câmera e permissões</h2>
+    <h2>8. Bluetooth e permissões</h2>
     <p>
-      O RUSH solicita acesso à câmera traseira exclusivamente para capturar o sinal PPG (luz refletida
-      no dedo) e calcular a VFC. <strong>Nenhum vídeo ou imagem é gravado, transmitido ou armazenado.</strong>
-      O processamento é feito localmente no dispositivo em tempo real.
+      O RUSH solicita acesso ao Bluetooth exclusivamente para se conectar ao seu sensor de
+      frequência cardíaca (cinta peitoral ou relógio) e receber os intervalos entre batimentos,
+      a partir dos quais a VFC é calculada.
+      <strong>Não usamos o Bluetooth para rastrear sua localização</strong> e não nos conectamos a
+      nenhum dispositivo sem que você o selecione.
+    </p>
+    <p>
+      No Android, o sistema exige a permissão de localização para varredura Bluetooth. O app
+      declara <code>neverForLocation</code>, indicando ao sistema que os dados de Bluetooth
+      <strong>não são usados para inferir sua posição geográfica</strong>.
     </p>
 
     <h2>9. Menores de idade</h2>

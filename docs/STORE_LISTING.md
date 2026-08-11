@@ -7,18 +7,21 @@
 Prescrição de treino por VFC
 
 ## Descrição curta (Google Play — máx 80 caracteres)
-Mede sua VFC pela câmera e prescreve o treino certo para cada dia.
+Lê sua VFC da cinta ou relógio e prescreve o treino certo para cada dia.
 
 ## Descrição longa (PT-BR)
 
-**RUSH usa a câmera do seu celular para medir sua Variabilidade da Frequência Cardíaca (VFC/HRV) e te dizer exatamente como treinar hoje.**
+**RUSH conecta à sua cinta cardíaca ou relógio por Bluetooth, mede sua Variabilidade da Frequência Cardíaca (VFC/HRV) e te diz exatamente como treinar hoje.**
 
 Chega de treinar no chute. Em 2 minutos de medição você sabe se seu corpo está pronto para uma sessão intensa, precisa de Zona 2 ou de descanso ativo.
 
 ### Como funciona
-1. Apoie o dedo na câmera traseira
-2. 60s de estabilização + 60s de captura ativa
+1. Conecte sua cinta ou relógio por Bluetooth
+2. 60 segundos em repouso
 3. Receba sua prescrição de treino personalizada
+
+### Precisão
+O RUSH lê os intervalos entre batimentos direto do sensor, com resolução de ~1 milissegundo — o mesmo dado que estudos de VFC usam. Compatível com Polar H10, Garmin HRM, Wahoo TICKR e outros sensores do padrão Bluetooth de frequência cardíaca.
 
 ### O que o RUSH analisa
 - **S_VFC** — score de VFC linearizado (0–100) baseado em RMSSD
@@ -40,7 +43,7 @@ Algoritmo baseado em protocolos científicos de HRV4Training, WHOOP e literatura
 ---
 
 ## Palavras-chave (App Store)
-hrv,variabilidade cardíaca,treino,corrida,recuperação,vfc,frequência cardíaca,fitness,runner,atleta
+hrv,variabilidade cardíaca,treino,corrida,recuperação,vfc,frequência cardíaca,polar h10,cinta cardíaca,atleta
 
 ## Categoria
 - App Store: **Saúde e Forma Física**
@@ -51,10 +54,10 @@ hrv,variabilidade cardíaca,treino,corrida,recuperação,vfc,frequência cardía
 - Google Play: Todos
 
 ## URL de suporte
-https://rushapp.com.br/suporte  (a criar)
+https://aleolifi.github.io/rush-app/support.html
 
 ## URL de privacidade
-https://rushapp.com.br/privacidade  (a criar — OBRIGATÓRIA para apps com câmera)
+https://aleolifi.github.io/rush-app/privacy-policy.html
 
 ---
 

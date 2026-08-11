@@ -14,8 +14,8 @@
 - Módulo hormonal feminino: fases do ciclo, correção lútea ×1.15, perfis SOP e AHF/RED-S
 - Detecção de downregulation metabólica masculina (penalização 45%)
 - Fator catabólico T:C via TRIMP acumulado (3 dias)
-- Filtro de artefatos R-R com interpolação spline cúbica
-- Medição 2 fases: 60s estabilização + 60s aquisição ativa
+- Medição por sensor Bluetooth (GATT Heart Rate): intervalos RR a ~1ms, sessão de 60s
+- Métrica explícita por leitura (RMSSD/SDNN) com baselines particionadas
 - Baselines µ_VFC7, µ_VFC28, σ_VFC28 com banda σ no gráfico
 - Gráfico S_VFC com banda µ±σ (`SVFCTrendChart.tsx`)
 - Onboarding com perfil hormonal + data da última menstruação
@@ -54,3 +54,5 @@
 | 2026-06-01 | — | Setup do workflow de desenvolvimento diário | — |
 | 2026-06-22 | WHOOP 4.0 | Behavior Insights: chips de hábitos diários + correlação com S_VFC + card de disruptores na home (Premium) | #8 |
 | 2026-06-23 | Garmin Connect | Streak de dias consecutivos + consistência mensal com dots visuais e badge de recorde pessoal (Free) | #10 |
+| 2026-08-06 | — | Auditoria de arquitetura: correções de segurança do paywall, datas em UTC e robustez de UX | #11 |
+| 2026-08-06 | — | Medição migrada da câmera (sinal era sintético) para sensores Bluetooth com intervalos RR reais | #12 |

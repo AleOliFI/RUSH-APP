@@ -1,17 +1,26 @@
 export type MeasurementMethod =
-  | 'camera_ppg'
-  | 'accelerometer_scg'
+  | 'ble_hrm'
   | 'strava'
   | 'garmin'
   | 'apple_health'
   | 'google_fit'
   | 'manual';
 
+/**
+ * Which variability metric a reading carries.
+ * BLE straps expose RR intervals so we compute RMSSD ourselves; Apple Health
+ * only publishes SDNN. They are not interchangeable — baselines are computed
+ * per metric so the two never mix.
+ */
+export type HRVMetric = 'rmssd' | 'sdnn';
+
 export interface HRVReading {
   id: string;
   user_id: string;
   measured_at: string;
+  /** Value of the metric named by `hrv_metric`, in ms. */
   rmssd: number;
+  hrv_metric: HRVMetric;
   rhr: number | null;
   measurement_method: MeasurementMethod;
   duration_seconds: number | null;

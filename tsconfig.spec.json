@@ -1,0 +1,18 @@
+{
+  // Configuração exclusiva dos testes.
+  //
+  // Isolada de propósito: o tsconfig do app estende expo/tsconfig.base, que usa
+  // moduleResolution "bundler" com a condição "react-native" — sob a qual os
+  // tipos globais do Jest (describe/it/expect) não são resolvidos. Ajustar
+  // aquele arquivo mudaria como o app inteiro é tipado só para atender à
+  // suíte, então os testes têm o seu.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "customConditions": null,
+    "types": ["jest", "node"],
+    "isolatedModules": false
+  },
+  "include": ["src/lib/**/*.ts"]
+}
