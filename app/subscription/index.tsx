@@ -85,24 +85,41 @@ export default function SubscriptionScreen() {
   async function handlePurchase() {
     setLoading(true);
     try {
-      // ── Native IAP via RevenueCat (App Store / Play Store) ───────────────
-      if (Platform.OS !== 'web' && rcPackages.length > 0) {
+      // ── Compra dentro do app: exclusivamente pela loja ────────────────────
+      //
+      // Assinatura digital consumida dentro do app precisa passar pelo
+      // in-app purchase — é a diretriz 3.1.1 da App Store e a política
+      // equivalente do Google Play. Cobrar por fora (Stripe, cartão, PIX)
+      // é rejeição na revisão, não multa depois.
+      //
+      // Por isso aqui NÃO há fallback: se o RevenueCat não trouxe os pacotes,
+      // a compra fica indisponível e o usuário é avisado. Cair no Stripe
+      // quando o IAP falha era exatamente o caminho que reprovaria o app.
+      if (Platform.OS !== 'web') {
         const pkg = rcPackages.find((p) =>
           selectedPlan === 'annual'
             ? p.packageType === 'ANNUAL'
             : p.packageType === 'MONTHLY',
         );
-        if (pkg) {
-          const { customerInfo } = await Purchases.purchasePackage(pkg);
-          if (customerInfo.entitlements.active['premium']) {
-            setTier('premium');
-            router.back();
-          }
+
+        if (!pkg) {
+          Alert.alert(
+            'Assinatura indisponível',
+            'Não foi possível carregar os planos da loja. Verifique sua conexão e tente novamente em instantes.',
+          );
           return;
         }
+
+        const { customerInfo } = await Purchases.purchasePackage(pkg);
+        if (customerInfo.entitlements.active['premium']) {
+          setTier('premium');
+          router.back();
+        }
+        return;
       }
 
-      // ── Stripe Payment Sheet ──────────────────────────────────────────────
+      // ── Web: Stripe ───────────────────────────────────────────────────────
+      // Fora das lojas não há IAP, e cobrar por Stripe é permitido.
       if (!user) {
         Alert.alert('Erro', 'Você precisa estar logado para assinar.');
         return;
@@ -244,10 +261,20 @@ export default function SubscriptionScreen() {
 
         {/* Payment footnote */}
         <View className="items-center gap-1">
+          {/* O texto acompanha o meio de pagamento real da plataforma.
+              Anunciar Stripe dentro do app, mesmo sem usá-lo, chama atenção
+              da revisão para uma cobrança externa que não existe. */}
           <Caption className="text-center text-text-muted">
-            Pagamento seguro via{' '}
-            <Text className="text-rush-red font-bold">Stripe</Text>
-            {rcPackages.length > 0 ? ' ou App Store / Play Store' : ''}.
+            {Platform.OS === 'web' ? (
+              <>
+                Pagamento seguro via{' '}
+                <Text className="text-rush-red font-bold">Stripe</Text>.
+              </>
+            ) : Platform.OS === 'ios' ? (
+              'Pagamento processado pela App Store.'
+            ) : (
+              'Pagamento processado pelo Google Play.'
+            )}
           </Caption>
           <Caption className="text-center text-text-muted">
             Cancele quando quiser. Sem compromisso.
