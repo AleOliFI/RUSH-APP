@@ -20,7 +20,8 @@ module.exports = function activitiesRoutes(db) {
       const {
         type, title, date, distance_km, duration_seconds,
         avg_pace, avg_hr, max_hr, calories, elevation_gain,
-        rpe, description, privacy = 'public', session_id, splits
+        rpe, rpe_score, feeling_notes, workout_rating, image_url, description,
+        privacy = 'public', session_id, splits
       } = req.body;
 
       if (!type || distance_km == null || duration_seconds == null) {
@@ -44,8 +45,9 @@ module.exports = function activitiesRoutes(db) {
       const privacySetting = VALID_PRIVACY_LEVELS.includes(privacy) ? privacy : 'public';
 
       let numRpe = null;
-      if (rpe !== undefined && rpe !== null) {
-        numRpe = Number(rpe);
+      const effectiveRpe = rpe_score !== undefined ? rpe_score : rpe;
+      if (effectiveRpe !== undefined && effectiveRpe !== null) {
+        numRpe = Number(effectiveRpe);
         if (isNaN(numRpe) || numRpe < 1 || numRpe > 10) {
           return res.status(400).json({ error: 'rpe deve ser um número entre 1 e 10' });
         }
@@ -76,13 +78,20 @@ module.exports = function activitiesRoutes(db) {
 
       const createActivity = db.transaction(() => {
         db.prepare(`
-          INSERT INTO activities (id, user_id, type, title, date, distance_km, duration_seconds, avg_pace, avg_hr, max_hr, calories, elevation_gain, rpe, hrv_status_display, description, privacy, session_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO activities (
+            id, user_id, type, title, date, distance_km, duration_seconds,
+            avg_pace, avg_hr, max_hr, calories, elevation_gain, rpe, rpe_score,
+            feeling_notes, workout_rating, image_url, hrv_status_display, description, privacy, session_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id, req.user.id, type, title ? String(title).trim() : `${type === 'run' ? 'Corrida' : type} de ${numDist} km`,
           activityDate, numDist, numDuration,
           avg_pace ? String(avg_pace).trim() : null, numAvgHr, numMaxHr,
-          calories != null ? Number(calories) : null, elevation_gain != null ? Number(elevation_gain) : null, numRpe,
+          calories != null ? Number(calories) : null, elevation_gain != null ? Number(elevation_gain) : null,
+          numRpe, numRpe, feeling_notes ? String(feeling_notes).trim() : null,
+          workout_rating != null ? Number(workout_rating) : null,
+          image_url ? String(image_url).trim() : null,
           dailyStatus?.status || null, description ? String(description).trim() : null, privacySetting, session_id || null
         );
 

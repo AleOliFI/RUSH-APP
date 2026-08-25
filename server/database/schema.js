@@ -17,6 +17,8 @@ module.exports = function initializeDatabase(db) {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'athlete' CHECK (role IN ('athlete', 'coach', 'owner', 'admin')),
       academy_id TEXT,
+      reset_token TEXT DEFAULT NULL,
+      reset_token_expires TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       deleted_at TEXT DEFAULT NULL
@@ -26,6 +28,13 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_users_academy ON users(academy_id);
   `);
+
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT DEFAULT NULL`);
+  } catch (_) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_profiles (
@@ -39,12 +48,41 @@ module.exports = function initializeDatabase(db) {
       gender TEXT DEFAULT NULL CHECK (gender IN ('male', 'female', 'other', NULL)),
       weight_kg REAL DEFAULT NULL,
       height_cm REAL DEFAULT NULL,
+      instagram TEXT DEFAULT NULL,
+      strava TEXT DEFAULT NULL,
+      pace_5k TEXT DEFAULT NULL,
+      hr_max_tested INTEGER DEFAULT NULL,
+      hr_rest_tested INTEGER DEFAULT NULL,
+      prior_hrv_rmssd REAL DEFAULT NULL,
+      custom_zones_json TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_profiles_username ON user_profiles(username);
   `);
+
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN instagram TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN strava TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN pace_5k TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_max_tested INTEGER DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_rest_tested INTEGER DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN prior_hrv_rmssd REAL DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE user_profiles ADD COLUMN custom_zones_json TEXT DEFAULT NULL`);
+  } catch (_) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_settings (
@@ -323,6 +361,10 @@ module.exports = function initializeDatabase(db) {
       rpe INTEGER DEFAULT NULL CHECK (rpe BETWEEN 1 AND 10 OR rpe IS NULL),
       hrv_status_display TEXT DEFAULT NULL,
       description TEXT DEFAULT NULL,
+      image_url TEXT DEFAULT NULL,
+      rpe_score INTEGER DEFAULT NULL,
+      feeling_notes TEXT DEFAULT NULL,
+      workout_rating INTEGER DEFAULT NULL,
       privacy TEXT NOT NULL DEFAULT 'public' CHECK (privacy IN ('public', 'followers', 'private')),
       session_id TEXT REFERENCES training_sessions(id) ON DELETE SET NULL,
       created_at TEXT DEFAULT (datetime('now')),
@@ -333,6 +375,19 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_activities_privacy ON activities(privacy, date);
     CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
   `);
+
+  try {
+    db.exec(`ALTER TABLE activities ADD COLUMN image_url TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE activities ADD COLUMN rpe_score INTEGER DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE activities ADD COLUMN feeling_notes TEXT DEFAULT NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`ALTER TABLE activities ADD COLUMN workout_rating INTEGER DEFAULT NULL`);
+  } catch (_) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_splits (

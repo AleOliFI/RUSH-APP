@@ -1,22 +1,39 @@
 // ============================================================
-// RUSH PERFORMANCE — Athlete Profile & Achievements
-// Profile, 90-day statistics, achievements & menstrual cycle settings
+// RUSH PERFORMANCE — Athlete Profile & Settings
+// Profile, stats, social links (Instagram/Strava), zones, test & menstrual cycle
 // ============================================================
 
 import { useState, useEffect } from 'react';
-import { users, challenges, activities, auth, clearAuth, menstrual } from '../api';
+import { users, challenges, activities, auth, clearAuth, menstrual, hrv } from '../api';
 import { 
   LogOut, Activity, Clock, MapPin, Target, Trophy, Award, 
-  CheckCircle2, Shield, Heart, Sparkles, Check, Info 
+  CheckCircle2, Shield, Heart, Sparkles, Check, Info, 
+  ExternalLink, Settings, Edit3, Camera, User, Flame 
 } from 'lucide-react';
+import { InstagramIcon, StravaIcon } from '../components/SocialIcons';
+import FieldTestModal from '../components/FieldTestModal';
 
 export default function Profile({ user, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [earned, setEarned] = useState([]);
   const [allAch, setAllAch] = useState([]);
   const [stats, setStats] = useState(null);
+  const [zonesData, setZonesData] = useState(null);
   const [tab, setTab] = useState('stats');
   const [loading, setLoading] = useState(true);
+
+  // Edit Profile Form State
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('');
+  const [location, setLocation] = useState('');
+  const [weightKg, setWeightKg] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [strava, setStrava] = useState('');
+  const [pace5k, setPace5k] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
 
   // Menstrual Profile State
   const [lmpDate, setLmpDate] = useState('');
@@ -26,34 +43,78 @@ export default function Profile({ user, onLogout }) {
   const [savingMenstrual, setSavingMenstrual] = useState(false);
   const [menstrualSuccess, setMenstrualSuccess] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [p, a, s, m] = await Promise.all([
-          users.profile().catch(() => null),
-          challenges.achievements().catch(() => ({ earned: [], all: [] })),
-          activities.stats(90).catch(() => null),
-          menstrual.getProfile().catch(() => null),
-        ]);
-        setProfile(p);
-        setEarned(a?.earned || []);
-        setAllAch(a?.all || []);
-        setStats(s);
+  // Field test modal state
+  const [isFieldTestOpen, setIsFieldTestOpen] = useState(false);
 
-        if (m?.profile) {
-          setLmpDate(m.profile.lmp_date || '');
-          setCycleLength(String(m.profile.cycle_length_days || 28));
-          setUsesContraceptive(!!m.profile.uses_hormonal_contraceptive);
-          setContraceptiveType(m.profile.contraceptive_type || '');
-        }
-      } catch (e) {
-        console.error('Profile load error:', e);
-      } finally {
-        setLoading(false);
+  const loadData = async () => {
+    try {
+      const [p, a, s, m, z] = await Promise.all([
+        users.profile().catch(() => null),
+        challenges.achievements().catch(() => ({ earned: [], all: [] })),
+        activities.stats(90).catch(() => null),
+        menstrual.getProfile().catch(() => null),
+        hrv.zones().catch(() => null),
+      ]);
+      setProfile(p);
+      setEarned(a?.earned || []);
+      setAllAch(a?.all || []);
+      setStats(s);
+      setZonesData(z);
+
+      if (p) {
+        setName(p.name || '');
+        setUsername(p.username || '');
+        setBio(p.bio || '');
+        setLocation(p.location || '');
+        setWeightKg(p.weight_kg ? String(p.weight_kg) : '');
+        setHeightCm(p.height_cm ? String(p.height_cm) : '');
+        setInstagram(p.instagram || '');
+        setStrava(p.strava || '');
+        setPace5k(p.pace_5k || '');
       }
+
+      if (m?.profile) {
+        setLmpDate(m.profile.lmp_date || '');
+        setCycleLength(String(m.profile.cycle_length_days || 28));
+        setUsesContraceptive(!!m.profile.uses_hormonal_contraceptive);
+        setContraceptiveType(m.profile.contraceptive_type || '');
+      }
+    } catch (e) {
+      console.error('Profile load error:', e);
+    } finally {
+      setLoading(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      await users.updateProfile({
+        name,
+        username,
+        bio,
+        location,
+        weight_kg: weightKg ? parseFloat(weightKg) : null,
+        height_cm: heightCm ? parseFloat(heightCm) : null,
+        instagram,
+        strava,
+        pace_5k: pace5k,
+      });
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 2000);
+      await loadData();
+    } catch (err) {
+      console.error('Profile update error:', err);
+      alert('Erro ao salvar dados do perfil: ' + (err.message || 'Tente novamente'));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleSaveMenstrual = async (e) => {
     e.preventDefault();
@@ -158,7 +219,53 @@ export default function Profile({ user, onLogout }) {
           </p>
         )}
 
-        <div className="flex items-center justify-center gap-md" style={{ marginTop: 8 }}>
+        {/* Social Links (Instagram / Strava) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12 }}>
+          {profile?.instagram && (
+            <a
+              href={`https://instagram.com/${profile.instagram.replace('@', '')}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.75rem',
+                color: 'var(--text-primary)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '4px 10px',
+                borderRadius: 'var(--radius-xs)',
+                textDecoration: 'none',
+              }}
+            >
+              <InstagramIcon size={13} color="#E1306C" />
+              <span>@{profile.instagram.replace('@', '')}</span>
+            </a>
+          )}
+          {profile?.strava && (
+            <a
+              href={profile.strava.startsWith('http') ? profile.strava : `https://strava.com/athletes/${profile.strava}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.75rem',
+                color: 'var(--text-primary)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                padding: '4px 10px',
+                borderRadius: 'var(--radius-xs)',
+                textDecoration: 'none',
+              }}
+            >
+              <Activity size={13} color="#FC4C02" />
+              <span>Strava</span>
+            </a>
+          )}
+        </div>
+
+        <div className="flex items-center justify-center gap-md" style={{ marginTop: 4 }}>
           {profile?.location && (
             <div className="flex items-center gap-xs text-small">
               <MapPin size={12} color="var(--accent-primary)" />
@@ -185,10 +292,17 @@ export default function Profile({ user, onLogout }) {
         </button>
         <button
           type="button"
-          className={`tab-pill ${tab === 'achievements' ? 'tab-pill--active' : ''}`}
-          onClick={() => setTab('achievements')}
+          className={`tab-pill ${tab === 'settings' ? 'tab-pill--active' : ''}`}
+          onClick={() => setTab('settings')}
         >
-          Conquistas ({earned.length})
+          Editar Dados
+        </button>
+        <button
+          type="button"
+          className={`tab-pill ${tab === 'zones' ? 'tab-pill--active' : ''}`}
+          onClick={() => setTab('zones')}
+        >
+          Paces & Zonas
         </button>
         <button
           type="button"
@@ -196,6 +310,13 @@ export default function Profile({ user, onLogout }) {
           onClick={() => setTab('menstrual')}
         >
           Ciclo Hormonal
+        </button>
+        <button
+          type="button"
+          className={`tab-pill ${tab === 'achievements' ? 'tab-pill--active' : ''}`}
+          onClick={() => setTab('achievements')}
+        >
+          Conquistas ({earned.length})
         </button>
       </div>
 
@@ -262,90 +383,199 @@ export default function Profile({ user, onLogout }) {
         </>
       )}
 
-      {/* TAB 2: Achievements */}
-      {tab === 'achievements' && (
+      {/* TAB 2: Edit Profile & Social Settings */}
+      {tab === 'settings' && (
         <div className="section">
-          {/* Progress bar */}
-          <div className="card-surface" style={{ marginBottom: 18, padding: '16px 18px' }}>
-            <div className="flex items-center justify-between mb-sm">
-              <span className="label-mono">PROGRESSO DE CONQUISTAS</span>
-              <span className="scoreboard" style={{ color: 'var(--status-favorable)', fontSize: '0.85rem' }}>
-                {earned.length} / {Math.max(allAch.length, 1)}
-              </span>
-            </div>
-            <div className="progress-bar">
-              <div
-                className="progress-fill--green"
-                style={{
-                  width: `${(earned.length / Math.max(allAch.length, 1)) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
+          <div className="card-surface" style={{ padding: '20px' }}>
+            <h3 className="heading-md" style={{ marginBottom: 14 }}>Informações do Atleta</h3>
 
-          {/* Badges List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {allAch.length === 0 ? (
-              <div className="empty-state">
-                <Trophy size={32} color="var(--accent-primary)" style={{ margin: '0 auto 10px' }} />
-                <p className="heading-sm">Conquistas em breve</p>
-                <p className="empty-state-text">Continue treinando para liberar insígnias exclusivas.</p>
+            <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.68rem', display: 'block', marginBottom: 4 }}>NOME COMPLETO</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="input-field"
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.68rem', display: 'block', marginBottom: 4 }}>USERNAME</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    className="input-field"
+                    style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
               </div>
-            ) : (
-              allAch.map((ach) => {
-                const isEarned = earned.some((e) => e.id === ach.id);
-                const earnedData = earned.find((e) => e.id === ach.id);
-                return (
-                  <div
-                    key={ach.id}
-                    className="achievement-card"
-                    style={{
-                      opacity: isEarned ? 1 : 0.45,
-                      borderColor: isEarned ? 'rgba(0, 214, 143, 0.25)' : undefined,
-                    }}
-                  >
-                    <div
-                      className={`achievement-icon ${
-                        isEarned ? 'achievement-icon--earned' : 'achievement-icon--locked'
-                      }`}
-                    >
-                      {ach.icon || '🏆'}
-                    </div>
 
-                    <div className="flex-1">
-                      <div className="flex items-center gap-sm">
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                          {ach.name}
-                        </span>
-                        {isEarned && (
-                          <CheckCircle2 size={14} color="var(--status-favorable)" />
-                        )}
-                      </div>
-                      <div className="text-small" style={{ marginTop: 2, fontSize: '0.78rem' }}>
-                        {ach.description}
-                      </div>
-                      {earnedData && (
-                        <div
-                          className="label-mono"
-                          style={{
-                            marginTop: 4,
-                            fontSize: '0.65rem',
-                            color: 'var(--status-favorable)',
-                          }}
-                        >
-                          DESBLOQUEADO EM {new Date(earnedData.earned_at).toLocaleDateString('pt-BR')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+              <div>
+                <label className="label-mono" style={{ fontSize: '0.68rem', display: 'block', marginBottom: 4 }}>BIO / OBJETIVO ESPORTIVO</label>
+                <textarea
+                  rows="2"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Ex: Corredor amador buscando os 5K sub-20..."
+                  className="input-field"
+                  style={{ width: '100%', resize: 'none', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.65rem', display: 'block', marginBottom: 4 }}>CIDADE</label>
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="São Paulo, SP"
+                    className="input-field"
+                    style={{ fontSize: '0.82rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.65rem', display: 'block', marginBottom: 4 }}>PESO (KG)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                    placeholder="70.5"
+                    className="input-field"
+                    style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.65rem', display: 'block', marginBottom: 4 }}>ALTURA (CM)</label>
+                  <input
+                    type="number"
+                    value={heightCm}
+                    onChange={(e) => setHeightCm(e.target.value)}
+                    placeholder="178"
+                    className="input-field"
+                    style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Social links */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <InstagramIcon size={13} color="#E1306C" /> INSTAGRAM
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="@seu_perfil"
+                    value={instagram}
+                    onChange={(e) => setInstagram(e.target.value)}
+                    className="input-field"
+                    style={{ fontSize: '0.82rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="label-mono" style={{ fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <Activity size={13} color="#FC4C02" /> STRAVA (LINK/ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="strava.com/athletes/123"
+                    value={strava}
+                    onChange={(e) => setStrava(e.target.value)}
+                    className="input-field"
+                    style={{ fontSize: '0.82rem' }}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingProfile}
+                className="btn btn-primary"
+                style={{ marginTop: 10, width: '100%', padding: '12px' }}
+              >
+                {profileSuccess ? (
+                  <>
+                    <Check size={16} /> Perfil Atualizado!
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} /> {savingProfile ? 'Salvando...' : 'Salvar Alterações'}
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </div>
       )}
 
-      {/* TAB 3: Menstrual Cycle Settings */}
+      {/* TAB 3: Paces & Heart Rate Zones */}
+      {tab === 'zones' && (
+        <div className="section">
+          <div className="card-surface" style={{ padding: '20px', marginBottom: 16 }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+              <div className="flex items-center gap-sm">
+                <Target size={18} color="var(--color-primary)" />
+                <h3 className="heading-md" style={{ margin: 0 }}>Zonas de Frequência Cardíaca</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFieldTestOpen(true)}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.7rem', padding: '6px 10px' }}
+              >
+                <Sparkles size={12} /> Fazer Teste de Campo
+              </button>
+            </div>
+
+            <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 16, lineHeight: 1.45 }}>
+              Suas zonas são individualizadas pela equação de <strong>Gellish et al.</strong> e calibradas com base nos seus testes de campo e VFC matinal.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {zonesData?.zones ? (
+                Object.entries(zonesData.zones).map(([key, z]) => (
+                  <div key={key} className="card-surface" style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--color-primary)' }}>
+                        {key} — {z.name}
+                      </div>
+                      <div className="label-mono" style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
+                        {z.purpose}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="scoreboard" style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
+                        {z.minBpm} – {z.maxBpm} <span className="label-mono" style={{ fontSize: '0.65rem' }}>BPM</span>
+                      </div>
+                      <div className="label-mono" style={{ fontSize: '0.65rem', color: 'var(--color-primary)' }}>
+                        {z.pctRange}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                  <p className="text-body" style={{ fontSize: '0.82rem' }}>Zonas padrão calculadas.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: Menstrual Cycle Settings */}
       {tab === 'menstrual' && (
         <div className="section">
           <div className="card-surface" style={{ padding: '20px' }}>
@@ -446,6 +676,98 @@ export default function Profile({ user, onLogout }) {
           </div>
         </div>
       )}
+
+      {/* TAB 5: Achievements */}
+      {tab === 'achievements' && (
+        <div className="section">
+          {/* Progress bar */}
+          <div className="card-surface" style={{ marginBottom: 18, padding: '16px 18px' }}>
+            <div className="flex items-center justify-between mb-sm">
+              <span className="label-mono">PROGRESSO DE CONQUISTAS</span>
+              <span className="scoreboard" style={{ color: 'var(--status-favorable)', fontSize: '0.85rem' }}>
+                {earned.length} / {Math.max(allAch.length, 1)}
+              </span>
+            </div>
+            <div className="progress-bar">
+              <div
+                className="progress-fill--green"
+                style={{
+                  width: `${(earned.length / Math.max(allAch.length, 1)) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Badges List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {allAch.length === 0 ? (
+              <div className="empty-state">
+                <Trophy size={32} color="var(--accent-primary)" style={{ margin: '0 auto 10px' }} />
+                <p className="heading-sm">Conquistas em breve</p>
+                <p className="empty-state-text">Continue treinando para liberar insígnias exclusivas.</p>
+              </div>
+            ) : (
+              allAch.map((ach) => {
+                const isEarned = earned.some((e) => e.id === ach.id);
+                const earnedData = earned.find((e) => e.id === ach.id);
+                return (
+                  <div
+                    key={ach.id}
+                    className="achievement-card"
+                    style={{
+                      opacity: isEarned ? 1 : 0.45,
+                      borderColor: isEarned ? 'rgba(0, 214, 143, 0.25)' : undefined,
+                    }}
+                  >
+                    <div
+                      className={`achievement-icon ${
+                        isEarned ? 'achievement-icon--earned' : 'achievement-icon--locked'
+                      }`}
+                    >
+                      {ach.icon || '🏆'}
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="flex items-center gap-sm">
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                          {ach.name}
+                        </span>
+                        {isEarned && (
+                          <CheckCircle2 size={14} color="var(--status-favorable)" />
+                        )}
+                      </div>
+                      <div className="text-small" style={{ marginTop: 2, fontSize: '0.78rem' }}>
+                        {ach.description}
+                      </div>
+                      {earnedData && (
+                        <div
+                          className="label-mono"
+                          style={{
+                            marginTop: 4,
+                            fontSize: '0.65rem',
+                            color: 'var(--status-favorable)',
+                          }}
+                        >
+                          DESBLOQUEADO EM {new Date(earnedData.earned_at).toLocaleDateString('pt-BR')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Field Test Modal */}
+      <FieldTestModal
+        isOpen={isFieldTestOpen}
+        onClose={() => setIsFieldTestOpen(false)}
+        onTestCompleted={async () => {
+          await loadData();
+        }}
+      />
     </div>
   );
 }

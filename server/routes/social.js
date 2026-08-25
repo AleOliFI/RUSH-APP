@@ -338,5 +338,48 @@ module.exports = function socialRoutes(db) {
     }
   });
 
+  // -------------------------------------------------------
+  // GET /api/social/user/:userId/profile — Perfil público do atleta
+  // -------------------------------------------------------
+  router.get('/user/:userId/profile', authenticate, (req, res) => {
+    try {
+      const targetId = req.params.userId;
+      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(targetId);
+      if (!profile) {
+        return res.status(404).json({ error: 'Atleta não encontrado' });
+      }
+
+      const isFollowing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
+      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
+      const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(targetId);
+      const activityCount = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ?').get(targetId);
+      const totalKm = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(targetId);
+
+      const recentActivities = db.prepare(`
+        SELECT * FROM activities
+        WHERE user_id = ? AND privacy = 'public'
+        ORDER BY date DESC LIMIT 6
+      `).all(targetId);
+
+      res.json({
+        profile: {
+          ...profile,
+          is_following: !!isFollowing,
+          is_self: targetId === req.user.id,
+          stats: {
+            followers: followers.count,
+            following: following.count,
+            activities: activityCount.count,
+            total_km: +totalKm.total.toFixed(1),
+          },
+          recent_activities: recentActivities,
+        }
+      });
+    } catch (err) {
+      console.error('Get athlete public profile error:', err);
+      res.status(500).json({ error: 'Erro ao buscar perfil público' });
+    }
+  });
+
   return router;
 };

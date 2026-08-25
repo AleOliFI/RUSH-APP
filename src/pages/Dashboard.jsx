@@ -1,19 +1,18 @@
-// ============================================================
-// RUSH PERFORMANCE — Athlete Dashboard
-// High-performance sports dashboard matching rushperformance.com.br
-// ============================================================
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { hrv, training, activities, notifications, menstrual } from '../api';
 import { 
   Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
   Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, 
-  AlertTriangle, Smile, Play, Award, Check, Target
+  AlertTriangle, Smile, Play, Award, Check, Target, Camera, Shield, Calendar, ArrowRight
 } from 'lucide-react';
 import RecoveryAlert from '../components/RecoveryAlert';
 import CyclePhaseCard from '../components/CyclePhaseCard';
 import HeartRateZonesModal from '../components/HeartRateZonesModal';
+import CameraHrvMonitor from '../components/CameraHrvMonitor';
+import WarmupGuideModal from '../components/WarmupGuideModal';
+import FieldTestModal from '../components/FieldTestModal';
+import PostWorkoutModal from '../components/PostWorkoutModal';
 
 const STATUS_MAP = {
   favorable: {
@@ -62,6 +61,10 @@ export default function Dashboard({ user }) {
   const [zonesData, setZonesData] = useState(null);
   const [cycleData, setCycleData] = useState(null);
   const [isZonesModalOpen, setIsZonesModalOpen] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isWarmupModalOpen, setIsWarmupModalOpen] = useState(false);
+  const [isFieldTestModalOpen, setIsFieldTestModalOpen] = useState(false);
+  const [isPostWorkoutModalOpen, setIsPostWorkoutModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Morning Measurement Modal State
@@ -320,6 +323,17 @@ export default function Dashboard({ user }) {
           <p className="text-body" style={{ fontSize: '0.82rem', lineHeight: 1.55 }}>
             {s.explanation_text || statusInfo.desc}
           </p>
+
+          <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => setIsCameraModalOpen(true)}
+              className="btn btn-secondary btn-sm"
+              style={{ flex: 1, fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Camera size={13} color="var(--color-primary)" />
+              <span>Medir com Câmera (PPG)</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="card-surface" style={{ marginBottom: 24, textAlign: 'center', padding: '28px 20px' }}>
@@ -328,9 +342,14 @@ export default function Dashboard({ user }) {
           <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 16 }}>
             Monitore seu sistema nervoso autônomo ao acordar para calibrar seus treinos.
           </p>
-          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary btn-sm">
-            <Sparkles size={14} /> Registrar VFC Matinal
-          </button>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button onClick={() => setIsCameraModalOpen(true)} className="btn btn-primary btn-sm">
+              <Camera size={14} /> Medir com Câmera (60s)
+            </button>
+            <button onClick={() => setIsModalOpen(true)} className="btn btn-secondary btn-sm">
+              <Sparkles size={14} /> Digitar Dados
+            </button>
+          </div>
         </div>
       )}
 
@@ -392,6 +411,29 @@ export default function Dashboard({ user }) {
                   </p>
                 </div>
               )}
+
+              {/* Scientific Tools Quick Actions */}
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setIsWarmupModalOpen(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.7rem', padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <Shield size={13} color="var(--color-primary)" />
+                  <span>Aquecimento & Drills</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsFieldTestModalOpen(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.7rem', padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <Target size={13} color="var(--color-primary)" />
+                  <span>Teste de Zonas</span>
+                </button>
+              </div>
 
               {/* Agent recommendation banner */}
               {s && s.status !== 'favorable' && (
@@ -462,11 +504,11 @@ export default function Dashboard({ user }) {
                   </div>
                 ) : (
                   <button 
-                    onClick={() => handleCompleteWorkout(effectiveSession)}
+                    onClick={() => setIsPostWorkoutModalOpen(true)}
                     className="btn btn-primary"
                     style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
                   >
-                    <Check size={16} /> Marcar como Concluído
+                    <Check size={16} /> Concluir & Registrar Treino (RPE)
                   </button>
                 )}
               </div>
@@ -488,6 +530,42 @@ export default function Dashboard({ user }) {
           </div>
         </div>
       )}
+
+      {/* ============================================================ */}
+      {/* TOMORROW'S WORKOUT PREVIEW                                   */}
+      {/* ============================================================ */}
+      <div className="section">
+        <div className="section-header">
+          <div className="flex items-center gap-sm">
+            <span className="label-mono">№ 03 / PREVISÃO DO TREINO DE AMANHÃ</span>
+          </div>
+          <span className="label-mono" style={{ color: 'var(--text-tertiary)', fontSize: '0.65rem' }}>
+            PREVISTO
+          </span>
+        </div>
+
+        <div className="card-surface" style={{ padding: '16px 18px' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+              🏃 Rodagem Aeróbica Z2 (Base)
+            </span>
+            <span className="scoreboard" style={{ fontSize: '0.95rem', color: 'var(--color-primary)' }}>
+              6.0 KM
+            </span>
+          </div>
+
+          <p className="text-body" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.4 }}>
+            Sessão contínua em ritmo conversacional para desenvolvimento de capilarização e biogênese mitocondrial.
+          </p>
+
+          <div className="zones-science-tip" style={{ padding: '8px 10px', fontSize: '0.7rem' }}>
+            <Calendar size={13} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+            <span>
+              <strong>Nota da IA:</strong> Esta é a previsão do plano semanal. O treino final será calibrado amanhã de manhã após seu check-in de VFC.
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* 30-Day Quick Stats */}
       {stats?.stats && (
@@ -910,6 +988,52 @@ export default function Dashboard({ user }) {
         isOpen={isZonesModalOpen} 
         onClose={() => setIsZonesModalOpen(false)} 
         zonesData={zonesData} 
+      />
+
+      {/* Camera PPG HRV Monitor Modal */}
+      <CameraHrvMonitor
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        onComplete={async (data) => {
+          setRmssd(String(data.rmssd_ms));
+          setHrRest(String(data.hr_rest_bpm));
+          try {
+            await hrv.measure({
+              rmssd_ms: data.rmssd_ms,
+              hr_rest_bpm: data.hr_rest_bpm,
+              duration_seconds: 60,
+            });
+            await loadDashboardData();
+          } catch (e) {
+            console.error('Auto save camera HRV error:', e);
+          }
+        }}
+      />
+
+      {/* Scientific Warm-up & Drills Guide */}
+      <WarmupGuideModal
+        isOpen={isWarmupModalOpen}
+        onClose={() => setIsWarmupModalOpen(false)}
+      />
+
+      {/* Field Test for Zones & Paces Calibration */}
+      <FieldTestModal
+        isOpen={isFieldTestModalOpen}
+        onClose={() => setIsFieldTestModalOpen(false)}
+        onTestCompleted={async () => {
+          await loadDashboardData();
+        }}
+      />
+
+      {/* Post-Workout Logging Modal */}
+      <PostWorkoutModal
+        isOpen={isPostWorkoutModalOpen}
+        onClose={() => setIsPostWorkoutModalOpen(false)}
+        plannedSession={effectiveSession}
+        onSaved={async () => {
+          setWorkoutCompleted(true);
+          await loadDashboardData();
+        }}
       />
     </div>
   );

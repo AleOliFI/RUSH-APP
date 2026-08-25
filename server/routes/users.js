@@ -136,6 +136,13 @@ module.exports = function usersRoutes(db) {
       if (weight_kg !== undefined) { fields.push('weight_kg = ?'); values.push(weight_kg != null ? Number(weight_kg) : null); }
       if (height_cm !== undefined) { fields.push('height_cm = ?'); values.push(height_cm != null ? Number(height_cm) : null); }
       if (avatar_url !== undefined) { fields.push('avatar_url = ?'); values.push(avatar_url ? String(avatar_url).trim() : null); }
+      if (req.body.instagram !== undefined) { fields.push('instagram = ?'); values.push(req.body.instagram ? String(req.body.instagram).trim() : null); }
+      if (req.body.strava !== undefined) { fields.push('strava = ?'); values.push(req.body.strava ? String(req.body.strava).trim() : null); }
+      if (req.body.pace_5k !== undefined) { fields.push('pace_5k = ?'); values.push(req.body.pace_5k ? String(req.body.pace_5k).trim() : null); }
+      if (req.body.hr_max_tested !== undefined) { fields.push('hr_max_tested = ?'); values.push(req.body.hr_max_tested ? parseInt(req.body.hr_max_tested, 10) : null); }
+      if (req.body.hr_rest_tested !== undefined) { fields.push('hr_rest_tested = ?'); values.push(req.body.hr_rest_tested ? parseInt(req.body.hr_rest_tested, 10) : null); }
+      if (req.body.prior_hrv_rmssd !== undefined) { fields.push('prior_hrv_rmssd = ?'); values.push(req.body.prior_hrv_rmssd ? parseFloat(req.body.prior_hrv_rmssd) : null); }
+      if (req.body.custom_zones_json !== undefined) { fields.push('custom_zones_json = ?'); values.push(req.body.custom_zones_json ? String(req.body.custom_zones_json) : null); }
 
       if (fields.length === 0) {
         return res.status(400).json({ error: 'Nenhum campo para atualizar' });
@@ -151,6 +158,86 @@ module.exports = function usersRoutes(db) {
     } catch (err) {
       console.error('Users update profile error:', err);
       res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/users/field-test — Processar teste de campo para iniciantes/avançados
+  // -------------------------------------------------------
+  router.post('/field-test', authenticate, (req, res) => {
+    try {
+      const { test_type, distance_km, duration_seconds, avg_hr, max_hr, rest_hr } = req.body;
+
+      if (!test_type) {
+        return res.status(400).json({ error: 'test_type é obrigatório' });
+      }
+
+      const numDist = Number(distance_km) || 0;
+      const numDur = Number(duration_seconds) || 720; // 12 min padrão
+      const numAvgHr = Number(avg_hr) || 165;
+      const numMaxHr = Number(max_hr) || 185;
+      const numRestHr = Number(rest_hr) || 55;
+
+      // Calcular Pace Médio do Teste (segundos por km)
+      let paceSecondsPerKm = numDist > 0 ? numDur / numDist : 330; // ~5:30/km fallback
+      const paceMin = Math.floor(paceSecondsPerKm / 60);
+      const paceSec = Math.floor(paceSecondsPerKm % 60);
+      const paceFormatted = `${paceMin}:${paceSec < 10 ? '0' : ''}${paceSec}`;
+
+      // Paces calculados para as 5 Zonas (baseado no pace do teste de 12/30 min):
+      // Z1: Pace de teste + 80s a 120s
+      // Z2: Pace de teste + 45s a 75s (base aeróbica)
+      // Z3: Pace de teste + 15s a 35s (maratona)
+      // Z4: Pace de teste (limiar / 10k)
+      // Z5: Pace de teste - 15s a 30s (tiros 3k/5k)
+      const formatPaceDelta = (deltaSec) => {
+        const total = Math.max(120, paceSecondsPerKm + deltaSec);
+        const m = Math.floor(total / 60);
+        const s = Math.floor(total % 60);
+        return `${m}:${s < 10 ? '0' : ''}${s}/km`;
+      };
+
+      const calculatedPaces = {
+        Z1: `${formatPaceDelta(90)} – ${formatPaceDelta(130)}`,
+        Z2: `${formatPaceDelta(45)} – ${formatPaceDelta(75)}`,
+        Z3: `${formatPaceDelta(15)} – ${formatPaceDelta(35)}`,
+        Z4: `${formatPaceDelta(0)} – ${formatPaceDelta(10)}`,
+        Z5: `< ${formatPaceDelta(-15)}`,
+      };
+
+      // Zonas de FC (Karvonen / FCmax)
+      const effectiveMaxHr = Math.max(140, numMaxHr);
+      const calculatedHrZones = {
+        Z1: { minBpm: Math.round(effectiveMaxHr * 0.50), maxBpm: Math.round(effectiveMaxHr * 0.60), pace: calculatedPaces.Z1 },
+        Z2: { minBpm: Math.round(effectiveMaxHr * 0.60), maxBpm: Math.round(effectiveMaxHr * 0.70), pace: calculatedPaces.Z2 },
+        Z3: { minBpm: Math.round(effectiveMaxHr * 0.70), maxBpm: Math.round(effectiveMaxHr * 0.80), pace: calculatedPaces.Z3 },
+        Z4: { minBpm: Math.round(effectiveMaxHr * 0.80), maxBpm: Math.round(effectiveMaxHr * 0.90), pace: calculatedPaces.Z4 },
+        Z5: { minBpm: Math.round(effectiveMaxHr * 0.90), maxBpm: effectiveMaxHr, pace: calculatedPaces.Z5 },
+      };
+
+      // Persistir no perfil do usuário
+      db.prepare(`
+        UPDATE user_profiles SET
+          pace_5k = ?,
+          hr_max_tested = ?,
+          hr_rest_tested = ?,
+          custom_zones_json = ?,
+          updated_at = datetime('now')
+        WHERE user_id = ?
+      `).run(paceFormatted, effectiveMaxHr, numRestHr, JSON.stringify(calculatedHrZones), req.user.id);
+
+      res.json({
+        success: true,
+        test_type,
+        test_pace: `${paceFormatted}/km`,
+        max_hr: effectiveMaxHr,
+        rest_hr: numRestHr,
+        zones: calculatedHrZones,
+        message: 'Teste de campo processado e zonas individualizadas salvas!',
+      });
+    } catch (err) {
+      console.error('Field test error:', err);
+      res.status(500).json({ error: 'Erro ao processar teste de campo' });
     }
   });
 

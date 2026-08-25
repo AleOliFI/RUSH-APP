@@ -129,6 +129,8 @@ export const auth = {
   me: () => request('/users/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
   refresh: (refreshToken) => request('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }),
+  forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (data) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const authApi = auth;
@@ -142,6 +144,7 @@ export const users = {
   settings: (data) => request('/users/settings', { method: 'PUT', body: JSON.stringify(data) }),
   privacy: (data) => request('/users/privacy', { method: 'PUT', body: JSON.stringify(data) }),
   getUser: (username) => request(`/users/${username}`),
+  fieldTest: (data) => request('/users/field-test', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // HRV
@@ -189,6 +192,7 @@ export const social = {
   search: (q) => request(`/social/search?q=${q}`),
   followers: () => request('/social/followers'),
   following: () => request('/social/following'),
+  userProfile: (userId) => request(`/social/user/${userId}/profile`),
 };
 
 // Challenges

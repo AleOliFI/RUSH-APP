@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Zap, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 
 export default function Login({ mode: initialMode = 'login' }) {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function Login({ mode: initialMode = 'login' }) {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -183,6 +185,27 @@ export default function Login({ mode: initialMode = 'login' }) {
             </div>
           </div>
 
+          {mode === 'login' && (
+            <div style={{ textAlign: 'right', marginTop: -6 }}>
+              <button
+                type="button"
+                onClick={() => setIsForgotModalOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-primary)',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  padding: 0,
+                  textDecoration: 'underline',
+                  fontFamily: 'var(--font-mono)'
+                }}
+              >
+                Esqueceu a senha?
+              </button>
+            </div>
+          )}
+
           {error && (
             <div
               style={{
@@ -281,6 +304,19 @@ export default function Login({ mode: initialMode = 'login' }) {
           </div>
         )}
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+        onResetSuccess={(res) => {
+          if (res?.user?.has_onboarding) {
+            navigate('/');
+          } else {
+            navigate('/onboarding');
+          }
+        }}
+      />
     </div>
   );
 }

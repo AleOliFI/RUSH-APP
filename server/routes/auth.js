@@ -303,5 +303,103 @@ module.exports = function authRoutes(db) {
     }
   });
 
+  // -------------------------------------------------------
+  // POST /api/auth/forgot-password
+  // -------------------------------------------------------
+  router.post('/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ error: 'Email é obrigatório' });
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+      const user = db.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Nenhum usuário cadastrado com este email' });
+      }
+
+      // Generate 6-digit numeric verification code
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora
+
+      db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(resetCode, expiresAt, user.id);
+
+      res.json({
+        success: true,
+        message: 'Código de recuperação gerado com sucesso.',
+        code: resetCode, // Enviado para facilitar teste/simulação em ambiente local
+      });
+    } catch (err) {
+      console.error('Forgot password error:', err);
+      res.status(500).json({ error: 'Erro ao processar recuperação de senha' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/auth/reset-password
+  // -------------------------------------------------------
+  router.post('/reset-password', async (req, res) => {
+    try {
+      const { email, code, new_password } = req.body;
+
+      if (!email || !code || !new_password) {
+        return res.status(400).json({ error: 'Email, código e nova senha são obrigatórios' });
+      }
+
+      if (new_password.length < 6) {
+        return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres' });
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+      const user = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      if (!user.reset_token || user.reset_token !== String(code).trim()) {
+        return res.status(400).json({ error: 'Código de recuperação inválido' });
+      }
+
+      if (user.reset_token_expires && new Date(user.reset_token_expires) < new Date()) {
+        return res.status(400).json({ error: 'Código de recuperação expirado. Solicite outro.' });
+      }
+
+      const passwordHash = await bcrypt.hash(new_password, 10);
+      db.prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?').run(passwordHash, user.id);
+
+      // Auto login: generate fresh tokens
+      const userPayload = { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id };
+      const accessToken = generateAccessToken(userPayload);
+      const refreshToken = generateUniqueRefreshToken(userPayload);
+
+      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(user.id);
+      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(user.id);
+      const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
+
+      res.json({
+        success: true,
+        message: 'Senha redefinida com sucesso!',
+        token: accessToken,
+        refreshToken: refreshToken,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: profile?.name || user.email.split('@')[0],
+          username: profile?.username || user.email.split('@')[0],
+          role: user.role,
+          has_onboarding: hasOnboarding,
+        }
+      });
+    } catch (err) {
+      console.error('Reset password error:', err);
+      res.status(500).json({ error: 'Erro ao redefinir senha' });
+    }
+  });
+
   return router;
 };
