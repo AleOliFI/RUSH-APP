@@ -5,7 +5,10 @@
 
 import { useState, useEffect } from 'react';
 import { hrv, training, activities, notifications } from '../api';
-import { Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, Flame, ShieldAlert, Sparkles } from 'lucide-react';
+import { 
+  Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
+  Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, AlertTriangle, Smile
+} from 'lucide-react';
 
 const STATUS_MAP = {
   favorable: {
@@ -52,27 +55,75 @@ export default function Dashboard({ user }) {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [hrvData, planData, statsData, notifData] = await Promise.all([
-          hrv.status().catch(() => null),
-          training.myPlan().catch(() => null),
-          activities.stats(30).catch(() => null),
-          notifications.unreadCount().catch(() => ({ unread_count: 0 })),
-        ]);
-        setStatus(hrvData);
-        setPlan(planData);
-        setStats(statsData);
-        setUnread(notifData?.unread_count || 0);
-      } catch (e) {
-        console.error('Dashboard data fetch error:', e);
-      } finally {
-        setLoading(false);
-      }
+  // Morning Measurement Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [rmssd, setRmssd] = useState('65');
+  const [hrRest, setHrRest] = useState('52');
+  const [sleep, setSleep] = useState(4);
+  const [fatigue, setFatigue] = useState(2);
+  const [soreness, setSoreness] = useState(2);
+  const [stress, setStress] = useState(2);
+  const [submitting, setSubmitting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const loadDashboardData = async () => {
+    try {
+      const [hrvData, planData, statsData, notifData] = await Promise.all([
+        hrv.status().catch(() => null),
+        training.myPlan().catch(() => null),
+        activities.stats(30).catch(() => null),
+        notifications.unreadCount().catch(() => ({ unread_count: 0 })),
+      ]);
+      setStatus(hrvData);
+      setPlan(planData);
+      setStats(statsData);
+      setUnread(notifData?.unread_count || 0);
+    } catch (e) {
+      console.error('Dashboard data fetch error:', e);
+    } finally {
+      setLoading(false);
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadDashboardData();
   }, []);
+
+  const handleSaveMeasurement = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      // 1. Enviar Medição de VFC (RMSSD e FC Repouso)
+      await hrv.measure({
+        rmssd_ms: parseFloat(rmssd),
+        hr_rest_bpm: parseInt(hrRest, 10),
+        duration_seconds: 60,
+      });
+
+      // 2. Enviar Avaliação de Bem-Estar Matinal (Hooper-Mackinnon)
+      await hrv.wellness({
+        sleep: parseInt(sleep, 10),
+        fatigue: parseInt(fatigue, 10),
+        soreness: parseInt(soreness, 10),
+        stress: parseInt(stress, 10),
+        readiness: Math.max(1, Math.min(5, Math.round((sleep + (6 - fatigue) + (6 - soreness) + (6 - stress)) / 4))),
+      });
+
+      // 3. Recarregar dados para refletir calibração instantânea
+      await loadDashboardData();
+
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setIsModalOpen(false);
+      }, 1200);
+    } catch (err) {
+      console.error('Erro ao salvar medição matinal:', err);
+      alert('Erro ao registrar medição: ' + (err.message || 'Tente novamente'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const s = status?.status;
   const statusInfo = s ? STATUS_MAP[s.status] || STATUS_MAP.favorable : null;
@@ -106,6 +157,14 @@ export default function Dashboard({ user }) {
           <span className="logo-sub">SPORT<br />PERFORMANCE</span>
         </div>
         <div className="top-actions">
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="btn btn-secondary btn-sm"
+            style={{ padding: '6px 12px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <Sparkles size={13} color="var(--accent-primary)" />
+            <span>Medição Matinal</span>
+          </button>
           <button className="btn-icon" style={{ position: 'relative' }} aria-label="Notificações">
             <Bell size={18} />
             {unread > 0 && <span className="nav-badge">{unread > 9 ? '9+' : unread}</span>}
@@ -131,9 +190,27 @@ export default function Dashboard({ user }) {
               <span className={`live-dot ${statusInfo.dotClass}`} />
               <span className="label-mono">№ 01 / STATUS DIÁRIO</span>
             </div>
-            <span className={`status-badge ${statusInfo.badgeClass}`}>
-              {statusInfo.label}
-            </span>
+            <div className="flex items-center gap-sm">
+              <span className={`status-badge ${statusInfo.badgeClass}`}>
+                {statusInfo.label}
+              </span>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                title="Atualizar medição de hoje"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 'var(--radius-xs)',
+                  color: 'var(--text-secondary)',
+                  padding: '3px 8px',
+                  fontSize: '0.65rem',
+                  fontFamily: 'var(--font-mono)',
+                  cursor: 'pointer'
+                }}
+              >
+                EDITAR
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-lg" style={{ marginBottom: 16 }}>
@@ -170,7 +247,7 @@ export default function Dashboard({ user }) {
           <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 16 }}>
             Monitore seu sistema nervoso autônomo ao acordar para calibrar seus treinos.
           </p>
-          <button className="btn btn-primary btn-sm">
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary btn-sm">
             <Sparkles size={14} /> Registrar VFC Matinal
           </button>
         </div>
@@ -265,34 +342,48 @@ export default function Dashboard({ user }) {
                         fontSize: '0.68rem',
                       }}
                     >
-                      AGENTE RUSH — AJUSTE VFC
+                      AJUSTE DO AGENTE RUSH
                     </span>
                   </div>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    {plan.daily_status.suggested_action === 'reduce'
-                      ? 'Status em Atenção: Sugerimos reduzir o volume ou intensidade deste treino.'
-                      : 'Status em Recuperação: Recomendamos descanso total ou rodagem regenerativa leve.'}
+                  <p className="text-body" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    {plan.daily_status.explanation_text}
                   </p>
                 </div>
               )}
             </div>
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="card-surface" style={{ padding: '20px', marginBottom: 24 }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="heading-sm">SEM TREINO AGENDADO</p>
+              <p className="text-body" style={{ fontSize: '0.82rem', marginTop: 4 }}>
+                Crie ou selecione um plano na aba Treinos.
+              </p>
+            </div>
+            <ChevronRight size={20} color="var(--text-secondary)" />
+          </div>
+        </div>
+      )}
 
-      {/* 30-Day Activity Stats */}
+      {/* 30-Day Quick Stats */}
       {stats?.stats && (
         <div className="section">
           <div className="section-header">
-            <span className="label-mono">№ 03 / RESUMO 30 DIAS</span>
+            <span className="label-mono">№ 03 / RESUMO (30 DIAS)</span>
+            <span className="label-mono" style={{ color: 'var(--accent-primary)' }}>
+              MÉTRICAS
+            </span>
           </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             <div className="card-surface" style={{ padding: '14px 10px', textAlign: 'center' }}>
-              <MapPin size={16} color="var(--accent-primary)" style={{ margin: '0 auto 6px' }} />
+              <Flame size={16} color="var(--accent-primary)" style={{ margin: '0 auto 6px' }} />
               <div className="scoreboard" style={{ fontSize: '1.35rem', color: 'var(--text-primary)' }}>
-                {stats.stats.total_distance_km}
+                {Math.round(stats.stats.total_distance_km)}
               </div>
-              <div className="label-mono" style={{ fontSize: '0.62rem', marginTop: 2 }}>KM TOTAL</div>
+              <div className="label-mono" style={{ fontSize: '0.62rem', marginTop: 2 }}>KM TOTAIS</div>
             </div>
 
             <div className="card-surface" style={{ padding: '14px 10px', textAlign: 'center' }}>
@@ -408,6 +499,285 @@ export default function Dashboard({ user }) {
                   );
                 })}
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MORNING MEASUREMENT MODAL                                    */}
+      {/* ============================================================ */}
+      {isModalOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 100,
+            background: 'rgba(0, 0, 0, 0.82)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            animation: 'fadeIn 0.25s ease-out',
+          }}
+        >
+          <div 
+            className="card-surface" 
+            style={{
+              width: '100%',
+              maxWidth: 400,
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '1px solid rgba(255, 56, 0, 0.3)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 24,
+              boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+              position: 'relative'
+            }}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between" style={{ marginBottom: 18 }}>
+              <div className="flex items-center gap-sm">
+                <div 
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: 'rgba(255, 56, 0, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Sparkles size={16} color="var(--accent-primary)" />
+                </div>
+                <div>
+                  <h3 className="heading-sm" style={{ letterSpacing: '0.02em' }}>MEDIÇÃO MATINAL</h3>
+                  <p className="label-mono" style={{ fontSize: '0.62rem' }}>VFC & BEM-ESTAR (HOOPER)</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="btn-icon" 
+                style={{ width: 32, height: 32 }}
+                aria-label="Fechar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {saveSuccess ? (
+              <div style={{ textAlign: 'center', padding: '36px 0' }}>
+                <CheckCircle2 size={48} color="var(--status-favorable)" style={{ margin: '0 auto 12px' }} />
+                <p className="heading-md" style={{ color: 'var(--status-favorable)', marginBottom: 6 }}>
+                  MEDIÇÃO SALVA!
+                </p>
+                <p className="text-body" style={{ fontSize: '0.82rem' }}>
+                  Treino do dia recalibrado com sucesso com base na sua prontidão.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveMeasurement}>
+                {/* 1. Métricas Fisiológicas */}
+                <div style={{ marginBottom: 20 }}>
+                  <span className="label-mono" style={{ color: 'var(--accent-primary)', display: 'block', marginBottom: 10 }}>
+                    1. DADOS CARDÍACOS AO ACORDAR
+                  </span>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label className="label-mono" style={{ fontSize: '0.68rem', display: 'block', marginBottom: 6 }}>
+                        RMSSD (ms)
+                      </label>
+                      <input 
+                        type="number" 
+                        step="1"
+                        min="10"
+                        max="250"
+                        value={rmssd}
+                        onChange={(e) => setRmssd(e.target.value)}
+                        required
+                        className="input-field"
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', textAlign: 'center' }}
+                      />
+                      <span style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginTop: 2, display: 'block' }}>
+                        Ideal: 35–110 ms
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="label-mono" style={{ fontSize: '0.68rem', display: 'block', marginBottom: 6 }}>
+                        FC REPOUSO (bpm)
+                      </label>
+                      <input 
+                        type="number" 
+                        step="1"
+                        min="30"
+                        max="140"
+                        value={hrRest}
+                        onChange={(e) => setHrRest(e.target.value)}
+                        required
+                        className="input-field"
+                        style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', textAlign: 'center' }}
+                      />
+                      <span style={{ fontSize: '0.6rem', color: 'var(--text-tertiary)', marginTop: 2, display: 'block' }}>
+                        Ideal: 40–65 bpm
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Questionário Hooper-Mackinnon */}
+                <div style={{ marginBottom: 22 }}>
+                  <span className="label-mono" style={{ color: 'var(--accent-primary)', display: 'block', marginBottom: 12 }}>
+                    2. AVALIAÇÃO SUBJETIVA (1 A 5)
+                  </span>
+
+                  {/* Qualidade do Sono */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <span className="label-mono" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Moon size={13} color="var(--accent-primary)" /> Qualidade do Sono
+                      </span>
+                      <span className="scoreboard" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                        {sleep}/5 ({sleep >= 4 ? 'Excelente' : sleep >= 3 ? 'Normal' : 'Ruim'})
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                      {[1, 2, 3, 4, 5].map((val) => (
+                        <button
+                          type="button"
+                          key={val}
+                          onClick={() => setSleep(val)}
+                          style={{
+                            padding: '6px 0',
+                            borderRadius: 'var(--radius-xs)',
+                            border: sleep === val ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
+                            background: sleep === val ? 'rgba(255, 56, 0, 0.2)' : 'var(--bg-input)',
+                            color: sleep === val ? '#fff' : 'var(--text-secondary)',
+                            fontWeight: 'bold',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Nível de Fadiga */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <span className="label-mono" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Battery size={13} color="var(--accent-primary)" /> Nível de Fadiga
+                      </span>
+                      <span className="scoreboard" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                        {fatigue}/5 ({fatigue <= 2 ? 'Leve' : fatigue <= 3 ? 'Moderada' : 'Alta'})
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                      {[1, 2, 3, 4, 5].map((val) => (
+                        <button
+                          type="button"
+                          key={val}
+                          onClick={() => setFatigue(val)}
+                          style={{
+                            padding: '6px 0',
+                            borderRadius: 'var(--radius-xs)',
+                            border: fatigue === val ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
+                            background: fatigue === val ? 'rgba(255, 56, 0, 0.2)' : 'var(--bg-input)',
+                            color: fatigue === val ? '#fff' : 'var(--text-secondary)',
+                            fontWeight: 'bold',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dor Muscular (Soreness) */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <span className="label-mono" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <AlertTriangle size={13} color="var(--accent-primary)" /> Dor Muscular (DOMS)
+                      </span>
+                      <span className="scoreboard" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                        {soreness}/5 ({soreness <= 2 ? 'Sem dor' : soreness <= 3 ? 'Moderada' : 'Forte'})
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                      {[1, 2, 3, 4, 5].map((val) => (
+                        <button
+                          type="button"
+                          key={val}
+                          onClick={() => setSoreness(val)}
+                          style={{
+                            padding: '6px 0',
+                            borderRadius: 'var(--radius-xs)',
+                            border: soreness === val ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
+                            background: soreness === val ? 'rgba(255, 56, 0, 0.2)' : 'var(--bg-input)',
+                            color: soreness === val ? '#fff' : 'var(--text-secondary)',
+                            fontWeight: 'bold',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Nível de Estresse */}
+                  <div>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+                      <span className="label-mono" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Smile size={13} color="var(--accent-primary)" /> Estresse Psicológico
+                      </span>
+                      <span className="scoreboard" style={{ fontSize: '0.85rem', color: 'var(--accent-primary)' }}>
+                        {stress}/5 ({stress <= 2 ? 'Baixo' : stress <= 3 ? 'Médio' : 'Alto'})
+                      </span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                      {[1, 2, 3, 4, 5].map((val) => (
+                        <button
+                          type="button"
+                          key={val}
+                          onClick={() => setStress(val)}
+                          style={{
+                            padding: '6px 0',
+                            borderRadius: 'var(--radius-xs)',
+                            border: stress === val ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
+                            background: stress === val ? 'rgba(255, 56, 0, 0.2)' : 'var(--bg-input)',
+                            color: stress === val ? '#fff' : 'var(--text-secondary)',
+                            fontWeight: 'bold',
+                            fontSize: '0.8rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botão de Envio */}
+                <button 
+                  type="submit" 
+                  disabled={submitting}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '14px', fontSize: '0.9rem' }}
+                >
+                  <Sparkles size={16} />
+                  <span>{submitting ? 'Calibrando Treino...' : 'Salvar e Calibrar Treino'}</span>
+                </button>
+              </form>
             )}
           </div>
         </div>
