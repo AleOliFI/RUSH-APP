@@ -5,12 +5,15 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { hrv, training, activities, notifications } from '../api';
+import { hrv, training, activities, notifications, menstrual } from '../api';
 import { 
   Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
   Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, 
-  AlertTriangle, Smile, Play, Award, Check
+  AlertTriangle, Smile, Play, Award, Check, Target
 } from 'lucide-react';
+import RecoveryAlert from '../components/RecoveryAlert';
+import CyclePhaseCard from '../components/CyclePhaseCard';
+import HeartRateZonesModal from '../components/HeartRateZonesModal';
 
 const STATUS_MAP = {
   favorable: {
@@ -27,7 +30,7 @@ const STATUS_MAP = {
     bgClass: 'status-hero--attention',
     badgeClass: 'status-badge--attention',
     dotClass: 'live-dot--attention',
-    desc: 'Leve desvio da linha de base de 7 dias. Reduza o volume ou intensidade para evitar sobrecarga.',
+    desc: 'Leve desvio da baseline. Reduza o volume ou intensidade para evitar sobrecarga.',
   },
   recovery: {
     label: 'Recuperação',
@@ -56,6 +59,9 @@ export default function Dashboard({ user }) {
   const [plan, setPlan] = useState(null);
   const [stats, setStats] = useState(null);
   const [unread, setUnread] = useState(0);
+  const [zonesData, setZonesData] = useState(null);
+  const [cycleData, setCycleData] = useState(null);
+  const [isZonesModalOpen, setIsZonesModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Morning Measurement Modal State
@@ -74,16 +80,20 @@ export default function Dashboard({ user }) {
 
   const loadDashboardData = async () => {
     try {
-      const [hrvData, planData, statsData, notifData] = await Promise.all([
+      const [hrvData, planData, statsData, notifData, zonesInfo, cycleInfo] = await Promise.all([
         hrv.status().catch(() => null),
         training.myPlan().catch(() => null),
         activities.stats(30).catch(() => null),
         notifications.unreadCount().catch(() => ({ unread_count: 0 })),
+        hrv.zones().catch(() => null),
+        menstrual.today().catch(() => null),
       ]);
       setStatus(hrvData);
       setPlan(planData);
       setStats(statsData);
       setUnread(notifData?.unread_count || 0);
+      setZonesData(zonesInfo);
+      setCycleData(cycleInfo);
     } catch (e) {
       console.error('Dashboard data fetch error:', e);
     } finally {
@@ -220,6 +230,20 @@ export default function Dashboard({ user }) {
         </h1>
       </div>
 
+      {/* Recovery Alert / Overreaching Warning Banner */}
+      <RecoveryAlert 
+        consecutiveLowDays={status?.measurement?.consecutive_low_days || (s?.status === 'recovery' ? 2 : 0)}
+        recoveryLevel={status?.suggestion?.recovery_level}
+      />
+
+      {/* Menstrual Cycle Phase Card (Female Athletes) */}
+      {cycleData?.has_profile && (
+        <CyclePhaseCard 
+          cycleData={cycleData} 
+          onOpenTracking={() => navigate('/profile')} 
+        />
+      )}
+
       {/* Status Hero Card (HRV & Readiness) */}
       {statusInfo ? (
         <div className={`status-hero ${statusInfo.bgClass}`} style={{ marginBottom: 24 }}>
@@ -229,6 +253,25 @@ export default function Dashboard({ user }) {
               <span className="label-mono">№ 01 / STATUS DIÁRIO</span>
             </div>
             <div className="flex items-center gap-sm">
+              <button
+                onClick={() => setIsZonesModalOpen(true)}
+                title="Visualizar zonas individualizadas de FC"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 'var(--radius-xs)',
+                  color: 'var(--color-primary)',
+                  padding: '3px 8px',
+                  fontSize: '0.65rem',
+                  fontFamily: 'var(--font-mono)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                <Target size={11} /> ZONAS Z1-Z5
+              </button>
               <span className={`status-badge ${statusInfo.badgeClass}`}>
                 {statusInfo.label}
               </span>
@@ -861,6 +904,13 @@ export default function Dashboard({ user }) {
           </div>
         </div>
       )}
+
+      {/* Heart Rate Zones Modal (Z1 - Z5) */}
+      <HeartRateZonesModal 
+        isOpen={isZonesModalOpen} 
+        onClose={() => setIsZonesModalOpen(false)} 
+        zonesData={zonesData} 
+      />
     </div>
   );
 }

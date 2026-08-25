@@ -1192,3 +1192,328 @@ img {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* ============================================================
+   Recovery Alert & Overreaching Banner
+   ============================================================ */
+.recovery-alert-banner {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+  animation: slideInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.recovery-alert--warning {
+  border-color: rgba(255, 179, 0, 0.4);
+  background: linear-gradient(135deg, rgba(255, 179, 0, 0.08) 0%, rgba(20, 20, 20, 0.95) 100%);
+}
+
+.recovery-alert--critical {
+  border-color: rgba(255, 56, 0, 0.6);
+  background: linear-gradient(135deg, rgba(255, 56, 0, 0.12) 0%, rgba(20, 20, 20, 0.95) 100%);
+  box-shadow: 0 0 20px rgba(255, 56, 0, 0.15);
+}
+
+.recovery-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.recovery-alert-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 56, 0, 0.15);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.recovery-alert--warning .recovery-alert-icon-box {
+  background: rgba(255, 179, 0, 0.15);
+  color: #FFB300;
+}
+
+.recovery-alert-title-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.recovery-alert-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+}
+
+.recovery-alert--warning .recovery-alert-tag {
+  color: #FFB300;
+}
+
+.recovery-alert-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.recovery-alert-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0 0 12px 0;
+}
+
+.recovery-checklist {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.checklist-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.recovery-checklist-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recovery-checklist-item {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.checklist-bullet {
+  color: var(--color-primary);
+  font-weight: 900;
+}
+
+/* ============================================================
+   Cycle Phase Card
+   ============================================================ */
+.cycle-phase-card {
+  border: 1px solid;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: all var(--transition-normal);
+}
+
+.cycle-phase-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cycle-phase-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cycle-phase-emoji {
+  font-size: 1.4rem;
+}
+
+.cycle-phase-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.cycle-phase-tag {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.cycle-phase-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+
+.cycle-phase-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+
+.cycle-phase-rec {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-text-action {
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.btn-text-action:hover {
+  text-decoration: underline;
+}
+
+/* ============================================================
+   Heart Rate Zones Modal & Cards
+   ============================================================ */
+.modal-card--zones {
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.zones-header-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.zones-max-hr {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.zones-hr-number {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  font-weight: 900;
+  font-style: italic;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.zones-hr-unit {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.zones-polarized-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  display: block;
+  margin-top: 4px;
+}
+
+.zones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.zone-item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.zone-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.zone-item-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zone-code-tag {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.zone-item-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.zone-item-bpm {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.zone-item-details {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.zone-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.zone-purpose-text {
+  color: var(--text-muted);
+}
+
+.zones-science-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(255, 56, 0, 0.06);
+  border: 1px solid rgba(255, 56, 0, 0.15);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}

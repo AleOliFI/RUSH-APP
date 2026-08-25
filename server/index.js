@@ -69,6 +69,7 @@ const socialRoutes = require('./routes/social');
 const challengesRoutes = require('./routes/challenges');
 const academiesRoutes = require('./routes/academies');
 const notificationsRoutes = require('./routes/notifications');
+const menstrualRoutes = require('./routes/menstrual');
 
 app.use('/api/auth', authRoutes(db));
 app.use('/api/users', usersRoutes(db));
@@ -79,6 +80,7 @@ app.use('/api/social', socialRoutes(db));
 app.use('/api/challenges', challengesRoutes(db));
 app.use('/api/academies', academiesRoutes(db));
 app.use('/api/notifications', notificationsRoutes(db));
+app.use('/api/menstrual', menstrualRoutes(db));
 
 // ============================================================
 // Health Check

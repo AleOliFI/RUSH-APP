@@ -6,6 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../middleware/auth');
 const { generateTrainingSuggestion, calculateLnRmssd, calculateStats } = require('../agent/trainingAgent');
+const { getCyclePhase, calcMenstrualSymptomScore } = require('../agent/menstrualModule');
 
 module.exports = function hrvRoutes(db) {
   const router = express.Router();
@@ -25,21 +26,63 @@ module.exports = function hrvRoutes(db) {
 
     if (!measurement) return null;
 
-    // Calculate 7-day rolling baseline (excluding today)
+    // Calculate 28-day rolling baseline (excluding today) (Plews et al. 2013, Buchheit 2014)
+    const twentyEightDaysAgo = new Date(new Date(todayStr).getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const recent28dMeasurements = db.prepare(`
+      SELECT lnrmssd, hr_rest_bpm, rhr_bpm FROM hrv_measurements
+      WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
+      ORDER BY timestamp DESC
+    `).all(userId, twentyEightDaysAgo, todayStr);
+
+    const lnValues28 = recent28dMeasurements.map(m => m.lnrmssd).filter(v => typeof v === 'number' && !isNaN(v));
+    const rhrValues28 = recent28dMeasurements.map(m => m.rhr_bpm || m.hr_rest_bpm).filter(v => typeof v === 'number' && !isNaN(v));
+
+    let stats28 = calculateStats(lnValues28);
+    let rhrStats28 = calculateStats(rhrValues28);
+
+    // Initializing baseline flow
+    if (stats28.mean === 0 || lnValues28.length === 0) {
+      stats28 = { mean: measurement.lnrmssd, sd: 0.08 };
+    }
+
+    const currentRhr = measurement.rhr_bpm || measurement.hr_rest_bpm;
+    if (rhrStats28.mean === 0 || rhrValues28.length === 0) {
+      rhrStats28 = { mean: currentRhr || 55, sd: 4 };
+    }
+
+    // Calculate 7-day rolling baseline for comparison
     const sevenDaysAgo = new Date(new Date(todayStr).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const recentMeasurements = db.prepare(`
+    const recent7d = db.prepare(`
       SELECT lnrmssd FROM hrv_measurements
       WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
       ORDER BY timestamp DESC
     `).all(userId, sevenDaysAgo, todayStr);
+    const lnValues7 = recent7d.map(m => m.lnrmssd).filter(v => typeof v === 'number' && !isNaN(v));
+    const stats7 = calculateStats(lnValues7);
 
-    const lnValues = recentMeasurements.map(m => m.lnrmssd);
-    let stats = calculateStats(lnValues);
+    // Calculate consecutive low days (SWC threshold)
+    const swc = Math.max((stats28.sd || 0.08) * 0.5, 0.05);
+    const pastMeasurements = db.prepare(`
+      SELECT lnrmssd FROM hrv_measurements
+      WHERE user_id = ? AND timestamp < ?
+      ORDER BY timestamp DESC LIMIT 14
+    `).all(userId, todayStr);
 
-    // Day-1 / Initializing baseline flow: fallback to today's measurement if no 7d history
-    if (stats.mean === 0 || lnValues.length === 0) {
-      stats = { mean: measurement.lnrmssd, sd: 0.08 };
+    let consecutiveLowDays = (measurement.lnrmssd < stats28.mean - swc) ? 1 : 0;
+    if (consecutiveLowDays > 0) {
+      for (const m of pastMeasurements) {
+        if (m.lnrmssd < stats28.mean - swc) {
+          consecutiveLowDays++;
+        } else {
+          break;
+        }
+      }
     }
+
+    // Update consecutive_low_days on measurement
+    try {
+      db.prepare('UPDATE hrv_measurements SET consecutive_low_days = ? WHERE id = ?').run(consecutiveLowDays, measurement.id);
+    } catch (_) {}
 
     // Today's wellness scores
     const wellness = db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(userId, todayStr);
@@ -75,16 +118,46 @@ module.exports = function hrvRoutes(db) {
 
     const defaultSession = plannedSession || {
       type: 'easy_run', distance_km: 8, duration_min: 45,
-      target_pace: null, target_hr_zone: 'Z2', is_fixed: false
+      target_pace: null, target_hr_zone: 'Z2', is_fixed: false,
+      description: 'Treino padrão'
     };
+
+    // Check Menstrual Profile for female athletes
+    const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+    let menstrualData = null;
+    if (profile?.gender === 'female') {
+      const menstrualProf = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
+      if (menstrualProf?.lmp_date) {
+        const phase = getCyclePhase(menstrualProf.lmp_date, menstrualProf.cycle_length_days, todayStr);
+        const todayTracking = db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, todayStr);
+        const symptomScore = calcMenstrualSymptomScore(todayTracking);
+        menstrualData = { phase, symptomScore };
+      }
+    }
+
+    // User Profile for Gellish Max HR calculation
+    const userProfileData = profile ? {
+      age: profile.date_of_birth ? Math.max(15, new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear()) : 30,
+      gender: profile.gender || 'male',
+      weightKg: profile.weight_kg,
+      heightCm: profile.height_cm,
+    } : { age: 30, gender: 'male' };
 
     const suggestion = generateTrainingSuggestion({
       lnrmssdToday: measurement.lnrmssd,
-      lnrmssd7dMean: stats.mean,
-      lnrmssd7dSd: stats.sd || 0.05,
+      rhrToday: currentRhr,
+      lnrmssd28dMean: stats28.mean,
+      lnrmssd28dSd: stats28.sd || 0.08,
+      rhr28dMean: rhrStats28.mean,
+      rhr28dSd: rhrStats28.sd || 4,
+      lnrmssd7dMean: stats7.mean || stats28.mean,
+      lnrmssd7dSd: stats7.sd || stats28.sd || 0.05,
+      consecutiveLowDays,
       wellnessScores: wellnessData,
+      menstrualData,
       plannedSession: defaultSession,
       weeksToRace,
+      userProfile: userProfileData,
     });
 
     const statusId = uuidv4();
@@ -102,12 +175,12 @@ module.exports = function hrvRoutes(db) {
         explanation_text = excluded.explanation_text
     `).run(
       statusId, userId, todayStr, suggestion.status, measurement.lnrmssd,
-      stats.mean, stats.sd || 0.05,
+      stats28.mean, stats28.sd || 0.05,
       JSON.stringify(wellnessData), suggestion.reason_code,
       suggestion.action, suggestion.explanation_text
     );
 
-    return { suggestion, stats, lnValuesCount: lnValues.length };
+    return { suggestion, stats28, stats7, consecutiveLowDays, sampleCount: lnValues28.length };
   }
 
   // -------------------------------------------------------
@@ -115,15 +188,16 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   router.post('/measurement', authenticate, (req, res) => {
     try {
-      const { rmssd_ms, hr_rest_bpm, duration_seconds, device_id, timestamp } = req.body;
+      const { rmssd_ms, hr_rest_bpm, rhr_bpm, duration_seconds, device_id, timestamp } = req.body;
+      const effectiveRhr = rhr_bpm != null ? rhr_bpm : hr_rest_bpm;
 
-      if (!rmssd_ms || !hr_rest_bpm || !duration_seconds) {
-        return res.status(400).json({ error: 'rmssd_ms, hr_rest_bpm e duration_seconds são obrigatórios' });
+      if (!rmssd_ms || !effectiveRhr) {
+        return res.status(400).json({ error: 'rmssd_ms e hr_rest_bpm / rhr_bpm são obrigatórios' });
       }
 
       const numRmssd = Number(rmssd_ms);
-      const numHrRest = Number(hr_rest_bpm);
-      const numDuration = Number(duration_seconds);
+      const numHrRest = Number(effectiveRhr);
+      const numDuration = Number(duration_seconds) || 60;
 
       if (isNaN(numRmssd) || numRmssd < 10 || numRmssd > 200) {
         return res.status(400).json({ error: 'RMSSD deve ser um número entre 10 e 200 ms' });
@@ -133,21 +207,17 @@ module.exports = function hrvRoutes(db) {
         return res.status(400).json({ error: 'FC de repouso deve ser um número entre 30 e 120 bpm' });
       }
 
-      if (isNaN(numDuration) || numDuration < 60) {
-        return res.status(400).json({ error: 'Duração da medição deve ser de pelo menos 60 segundos' });
-      }
-
       const id = uuidv4();
       const lnrmssd = calculateLnRmssd(numRmssd);
       const ts = timestamp || new Date().toISOString();
       const today = ts.split('T')[0];
 
       db.prepare(`
-        INSERT INTO hrv_measurements (id, user_id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, device_id, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, req.user.id, ts, numRmssd, lnrmssd, numHrRest, device_id || null, numDuration);
+        INSERT INTO hrv_measurements (id, user_id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, rhr_bpm, device_id, duration_seconds)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, req.user.id, ts, numRmssd, lnrmssd, numHrRest, numHrRest, device_id || null, numDuration);
 
-      // Recalculate daily status (handles Day-1 and established baselines)
+      // Recalculate daily status
       const statusCalculation = recalculateDailyStatus(req.user.id, today);
 
       res.status(201).json({
@@ -156,16 +226,17 @@ module.exports = function hrvRoutes(db) {
           rmssd_ms: numRmssd,
           lnrmssd: +lnrmssd.toFixed(4),
           hr_rest_bpm: numHrRest,
+          rhr_bpm: numHrRest,
           duration_seconds: numDuration,
           timestamp: ts,
         },
         daily_status: statusCalculation?.suggestion || null,
-        stats_7d: {
-          mean: +(statusCalculation?.stats.mean || lnrmssd).toFixed(4),
-          sd: +(statusCalculation?.stats.sd || 0.08).toFixed(4),
-          sample_size: statusCalculation?.lnValuesCount || 0,
-          is_baseline_learning: (statusCalculation?.lnValuesCount || 0) === 0
-        }
+        stats_28d: {
+          mean: +(statusCalculation?.stats28.mean || lnrmssd).toFixed(4),
+          sd: +(statusCalculation?.stats28.sd || 0.08).toFixed(4),
+          sample_size: statusCalculation?.sampleCount || 0,
+        },
+        consecutive_low_days: statusCalculation?.consecutiveLowDays || 0,
       });
     } catch (err) {
       console.error('HRV measurement error:', err);
@@ -222,7 +293,7 @@ module.exports = function hrvRoutes(db) {
   });
 
   // -------------------------------------------------------
-  // GET /api/hrv/status — Status do dia
+  // GET /api/hrv/status — Status do dia com métricas e zonas
   // -------------------------------------------------------
   router.get('/status', authenticate, (req, res) => {
     try {
@@ -234,9 +305,9 @@ module.exports = function hrvRoutes(db) {
         SELECT * FROM hrv_measurements WHERE user_id = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 1
       `).get(req.user.id, today);
 
-      // If measurement exists but daily_status is missing, compute it now
-      if (measurement && !status) {
-        recalculateDailyStatus(req.user.id, today);
+      let calculation = null;
+      if (measurement) {
+        calculation = recalculateDailyStatus(req.user.id, today);
         status = db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, today);
       }
 
@@ -245,100 +316,78 @@ module.exports = function hrvRoutes(db) {
         status: status || null,
         wellness: wellness || null,
         measurement: measurement || null,
+        suggestion: calculation?.suggestion || null,
         has_measured_today: !!measurement,
         has_wellness_today: !!wellness,
       });
     } catch (err) {
-      console.error('Get status error:', err);
-      res.status(500).json({ error: 'Erro ao obter status diário' });
+      console.error('HRV status error:', err);
+      res.status(500).json({ error: 'Erro ao buscar status de VFC' });
     }
   });
 
   // -------------------------------------------------------
-  // GET /api/hrv/history — Histórico de VFC
+  // GET /api/hrv/history — Histórico de VFC (7, 28, 60 dias)
   // -------------------------------------------------------
   router.get('/history', authenticate, (req, res) => {
     try {
-      const parsedDays = parseInt(req.query.days, 10);
-      const days = (!isNaN(parsedDays) && parsedDays > 0 && parsedDays <= 365) ? parsedDays : 30;
+      const days = Math.min(90, Math.max(7, Number(req.query.days) || 28));
       const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-      const startDateStr = startDate.split('T')[0];
 
       const measurements = db.prepare(`
-        SELECT * FROM hrv_measurements
+        SELECT id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, rhr_bpm, consecutive_low_days, quality_score
+        FROM hrv_measurements
         WHERE user_id = ? AND timestamp >= ?
-        ORDER BY timestamp DESC
+        ORDER BY timestamp ASC
       `).all(req.user.id, startDate);
 
-      const statuses = db.prepare(`
-        SELECT * FROM daily_status
+      const wellness = db.prepare(`
+        SELECT date, sleep, fatigue, soreness, stress, readiness
+        FROM wellness_scores
         WHERE user_id = ? AND date >= ?
-        ORDER BY date DESC
-      `).all(req.user.id, startDateStr);
+        ORDER BY date ASC
+      `).all(req.user.id, startDate.split('T')[0]);
 
-      const wellnessScores = db.prepare(`
-        SELECT * FROM wellness_scores
+      const statuses = db.prepare(`
+        SELECT date, status, lnrmssd, lnrmssd_7d_mean, reason_code, suggested_action
+        FROM daily_status
         WHERE user_id = ? AND date >= ?
-        ORDER BY date DESC
-      `).all(req.user.id, startDateStr);
+        ORDER BY date ASC
+      `).all(req.user.id, startDate.split('T')[0]);
 
       res.json({
+        period_days: days,
         measurements,
-        statuses,
-        wellness_scores: wellnessScores,
-        total_measurements: measurements.length,
-        days_range: days,
+        wellness,
+        daily_statuses: statuses,
       });
     } catch (err) {
-      console.error('Get history error:', err);
+      console.error('HRV history error:', err);
       res.status(500).json({ error: 'Erro ao buscar histórico de VFC' });
     }
   });
 
   // -------------------------------------------------------
-  // GET /api/hrv/vo2max — Histórico de VO2max
+  // GET /api/hrv/zones — Zonas de FC calculadas (Z1-Z5)
   // -------------------------------------------------------
-  router.get('/vo2max', authenticate, (req, res) => {
+  router.get('/zones', authenticate, (req, res) => {
     try {
-      const estimates = db.prepare(`
-        SELECT * FROM vo2max_estimates WHERE user_id = ? ORDER BY date DESC LIMIT 20
-      `).all(req.user.id);
+      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const userProfileData = profile ? {
+        age: profile.date_of_birth ? Math.max(15, new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear()) : 30,
+        gender: profile.gender || 'male',
+        weightKg: profile.weight_kg,
+        heightCm: profile.height_cm,
+      } : { age: 30, gender: 'male' };
 
-      res.json({ estimates });
+      const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
+      const maxHr = calculateMaxHr(userProfileData);
+      const zones = calculateHrZones(maxHr);
+
+      res.json({ max_hr: maxHr, zones });
     } catch (err) {
-      console.error('Get VO2max error:', err);
-      res.status(500).json({ error: 'Erro ao buscar estimativas de VO2max' });
-    }
-  });
-
-  // -------------------------------------------------------
-  // POST /api/hrv/vo2max — Registrar VO2max
-  // -------------------------------------------------------
-  router.post('/vo2max', authenticate, (req, res) => {
-    try {
-      const { vo2max_value, method, date, device_id, notes } = req.body;
-
-      if (vo2max_value == null || !method) {
-        return res.status(400).json({ error: 'vo2max_value e method são obrigatórios' });
-      }
-
-      const numVo2max = Number(vo2max_value);
-      if (isNaN(numVo2max) || numVo2max < 20 || numVo2max > 100) {
-        return res.status(400).json({ error: 'vo2max_value deve ser um número entre 20 e 100 ml/kg/min' });
-      }
-
-      const id = uuidv4();
-      const today = date || new Date().toISOString().split('T')[0];
-
-      db.prepare(`
-        INSERT INTO vo2max_estimates (id, user_id, date, vo2max_value, method, device_id, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, req.user.id, today, numVo2max, String(method).trim(), device_id || null, notes || null);
-
-      res.status(201).json({ id, vo2max_value: numVo2max, method: String(method).trim(), date: today });
-    } catch (err) {
-      console.error('Post VO2max error:', err);
-      res.status(500).json({ error: 'Erro ao registrar estimativa de VO2max' });
+      console.error('Zones calculation error:', err);
+      res.status(500).json({ error: 'Erro ao calcular zonas de FC' });
     }
   });
 

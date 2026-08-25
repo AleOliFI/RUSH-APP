@@ -127,6 +127,8 @@ module.exports = function initializeDatabase(db) {
       rmssd_ms REAL NOT NULL CHECK (rmssd_ms BETWEEN 10 AND 200),
       lnrmssd REAL NOT NULL,
       hr_rest_bpm INTEGER NOT NULL CHECK (hr_rest_bpm BETWEEN 30 AND 120),
+      rhr_bpm REAL DEFAULT NULL,
+      consecutive_low_days INTEGER DEFAULT 0,
       device_id TEXT REFERENCES wearable_devices(id) ON DELETE SET NULL,
       duration_seconds INTEGER NOT NULL CHECK (duration_seconds >= 60),
       quality_score REAL DEFAULT NULL CHECK (quality_score BETWEEN 0 AND 1),
@@ -134,6 +136,58 @@ module.exports = function initializeDatabase(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_hrv_user_ts ON hrv_measurements(user_id, timestamp);
+  `);
+
+  // Migrações dinâmicas para tabelas existentes
+  try {
+    db.exec(`ALTER TABLE hrv_measurements ADD COLUMN rhr_bpm REAL DEFAULT NULL`);
+  } catch (_) { /* coluna já existe */ }
+  try {
+    db.exec(`ALTER TABLE hrv_measurements ADD COLUMN consecutive_low_days INTEGER DEFAULT 0`);
+  } catch (_) { /* coluna já existe */ }
+
+  // ============================================================
+  // CICLO MENSTRUAL & BASELINES POR FASE (McNulty et al. 2020)
+  // ============================================================
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_menstrual_profile (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      lmp_date TEXT DEFAULT NULL,
+      cycle_length_days INTEGER DEFAULT 28,
+      uses_hormonal_contraceptive INTEGER DEFAULT 0,
+      contraceptive_type TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS menstrual_tracking (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date TEXT NOT NULL,
+      phase TEXT NOT NULL CHECK (phase IN ('menstrual', 'follicular', 'ovulatory', 'luteal')),
+      cramp_level INTEGER DEFAULT 0 CHECK (cramp_level BETWEEN 0 AND 5),
+      bloating_level INTEGER DEFAULT 0 CHECK (bloating_level BETWEEN 0 AND 5),
+      energy_level INTEGER DEFAULT 3 CHECK (energy_level BETWEEN 0 AND 5),
+      mood_level INTEGER DEFAULT 3 CHECK (mood_level BETWEEN 0 AND 5),
+      bleeding_intensity TEXT DEFAULT NULL CHECK (bleeding_intensity IN ('none', 'light', 'moderate', 'heavy', NULL)),
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_menstrual_user_date ON menstrual_tracking(user_id, date);
+
+    CREATE TABLE IF NOT EXISTS hrv_phase_baselines (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      phase TEXT NOT NULL CHECK (phase IN ('menstrual', 'follicular', 'ovulatory', 'luteal', 'global')),
+      lnrmssd_mean REAL NOT NULL DEFAULT 0,
+      lnrmssd_sd REAL NOT NULL DEFAULT 0,
+      rhr_mean REAL NOT NULL DEFAULT 0,
+      rhr_sd REAL NOT NULL DEFAULT 0,
+      sample_count INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, phase)
+    );
   `);
 
   db.exec(`

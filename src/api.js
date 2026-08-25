@@ -151,6 +151,15 @@ export const hrv = {
   wellness: (data) => request('/hrv/wellness', { method: 'POST', body: JSON.stringify(data) }),
   history: (days = 30) => request(`/hrv/history?days=${days}`),
   vo2max: () => request('/hrv/vo2max'),
+  zones: () => request('/hrv/zones'),
+};
+
+// Menstrual
+export const menstrual = {
+  getProfile: () => request('/menstrual/profile'),
+  saveProfile: (data) => request('/menstrual/profile', { method: 'POST', body: JSON.stringify(data) }),
+  today: (date) => request(`/menstrual/today${date ? `?date=${date}` : ''}`),
+  track: (data) => request('/menstrual/tracking', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // Training

@@ -1,11 +1,14 @@
 // ============================================================
 // RUSH PERFORMANCE — Athlete Profile & Achievements
-// Profile, 90-day statistics & achievements matching rushperformance.com.br
+// Profile, 90-day statistics, achievements & menstrual cycle settings
 // ============================================================
 
 import { useState, useEffect } from 'react';
-import { users, challenges, activities, auth, clearAuth } from '../api';
-import { LogOut, Activity, Clock, MapPin, Target, Trophy, Award, CheckCircle2, Shield } from 'lucide-react';
+import { users, challenges, activities, auth, clearAuth, menstrual } from '../api';
+import { 
+  LogOut, Activity, Clock, MapPin, Target, Trophy, Award, 
+  CheckCircle2, Shield, Heart, Sparkles, Check, Info 
+} from 'lucide-react';
 
 export default function Profile({ user, onLogout }) {
   const [profile, setProfile] = useState(null);
@@ -15,18 +18,34 @@ export default function Profile({ user, onLogout }) {
   const [tab, setTab] = useState('stats');
   const [loading, setLoading] = useState(true);
 
+  // Menstrual Profile State
+  const [lmpDate, setLmpDate] = useState('');
+  const [cycleLength, setCycleLength] = useState('28');
+  const [usesContraceptive, setUsesContraceptive] = useState(false);
+  const [contraceptiveType, setContraceptiveType] = useState('');
+  const [savingMenstrual, setSavingMenstrual] = useState(false);
+  const [menstrualSuccess, setMenstrualSuccess] = useState(false);
+
   useEffect(() => {
     async function load() {
       try {
-        const [p, a, s] = await Promise.all([
+        const [p, a, s, m] = await Promise.all([
           users.profile().catch(() => null),
           challenges.achievements().catch(() => ({ earned: [], all: [] })),
           activities.stats(90).catch(() => null),
+          menstrual.getProfile().catch(() => null),
         ]);
         setProfile(p);
         setEarned(a?.earned || []);
         setAllAch(a?.all || []);
         setStats(s);
+
+        if (m?.profile) {
+          setLmpDate(m.profile.lmp_date || '');
+          setCycleLength(String(m.profile.cycle_length_days || 28));
+          setUsesContraceptive(!!m.profile.uses_hormonal_contraceptive);
+          setContraceptiveType(m.profile.contraceptive_type || '');
+        }
       } catch (e) {
         console.error('Profile load error:', e);
       } finally {
@@ -35,6 +54,31 @@ export default function Profile({ user, onLogout }) {
     }
     load();
   }, []);
+
+  const handleSaveMenstrual = async (e) => {
+    e.preventDefault();
+    if (!lmpDate) {
+      alert('Por favor informe a data de início do último período.');
+      return;
+    }
+
+    setSavingMenstrual(true);
+    try {
+      await menstrual.saveProfile({
+        lmp_date: lmpDate,
+        cycle_length_days: parseInt(cycleLength, 10) || 28,
+        uses_hormonal_contraceptive: usesContraceptive,
+        contraceptive_type: contraceptiveType || null,
+      });
+      setMenstrualSuccess(true);
+      setTimeout(() => setMenstrualSuccess(false), 2000);
+    } catch (err) {
+      console.error('Erro ao salvar perfil menstrual:', err);
+      alert('Erro ao salvar: ' + (err.message || 'Tente novamente'));
+    } finally {
+      setSavingMenstrual(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -98,105 +142,89 @@ export default function Profile({ user, onLogout }) {
       <div className="card-surface" style={{ marginBottom: 20, textAlign: 'center', padding: '24px 20px' }}>
         <div
           className="avatar avatar-lg orange-glow"
-          style={{
-            margin: '0 auto 12px',
-            background: 'linear-gradient(135deg, #1c1c1c 0%, #292929 100%)',
-          }}
+          style={{ margin: '0 auto 12px', fontSize: '1.4rem' }}
         >
-          <span className="text-gradient">{initials}</span>
+          {initials}
         </div>
-
-        <h2 className="heading-md" style={{ marginBottom: 2, color: 'var(--text-primary)' }}>
+        <h2 className="heading-md" style={{ marginBottom: 4 }}>
           {athleteName}
         </h2>
-        <p className="label-mono" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>
+        <p className="label-mono" style={{ color: 'var(--accent-primary)', marginBottom: 8 }}>
           @{athleteUsername}
         </p>
-
         {profile?.bio && (
-          <p className="text-body" style={{ marginTop: 10, fontSize: '0.82rem', lineHeight: 1.45 }}>
+          <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 12 }}>
             {profile.bio}
           </p>
         )}
 
-        {/* Stats Row */}
-        <div className="profile-stats">
-          <div className="profile-stat">
-            <div className="profile-stat-value scoreboard">{profile?.stats?.followers || 0}</div>
-            <div className="profile-stat-label">Seguidores</div>
-          </div>
-          <div className="profile-stat">
-            <div className="profile-stat-value scoreboard">{profile?.stats?.following || 0}</div>
-            <div className="profile-stat-label">Seguindo</div>
-          </div>
-          <div className="profile-stat">
-            <div className="profile-stat-value scoreboard">{profile?.stats?.activities || 0}</div>
-            <div className="profile-stat-label">Atividades</div>
-          </div>
+        <div className="flex items-center justify-center gap-md" style={{ marginTop: 8 }}>
+          {profile?.location && (
+            <div className="flex items-center gap-xs text-small">
+              <MapPin size={12} color="var(--accent-primary)" />
+              <span>{profile.location}</span>
+            </div>
+          )}
+          {profile?.weight_kg && (
+            <div className="flex items-center gap-xs text-small">
+              <Activity size={12} color="var(--accent-primary)" />
+              <span>{profile.weight_kg} kg</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="tabs">
+      {/* Navigation Tabs */}
+      <div className="tab-pill-group" style={{ marginBottom: 20 }}>
         <button
           type="button"
-          className={`tab${tab === 'stats' ? ' active' : ''}`}
+          className={`tab-pill ${tab === 'stats' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('stats')}
         >
           Estatísticas (90d)
         </button>
         <button
           type="button"
-          className={`tab${tab === 'achievements' ? ' active' : ''}`}
+          className={`tab-pill ${tab === 'achievements' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('achievements')}
         >
           Conquistas ({earned.length})
         </button>
+        <button
+          type="button"
+          className={`tab-pill ${tab === 'menstrual' ? 'tab-pill--active' : ''}`}
+          onClick={() => setTab('menstrual')}
+        >
+          Ciclo Hormonal
+        </button>
       </div>
 
+      {/* TAB 1: Statistics */}
       {tab === 'stats' && stats?.stats && (
         <>
-          {/* Big Number Mileage Banner */}
-          <div className="card-surface" style={{ marginBottom: 18, textAlign: 'center', padding: '24px 18px' }}>
-            <div
-              className="display-massive text-gradient"
-              style={{ fontSize: '3.6rem', lineHeight: 0.95 }}
-            >
-              {stats.stats.total_distance_km}
+          <div className="stats-grid profile-stats" style={{ marginBottom: 20 }}>
+            <div className="card-surface stat-box">
+              <div className="scoreboard" style={{ fontSize: '1.8rem', color: 'var(--accent-primary)' }}>
+                {(+stats.stats.total_distance_km).toFixed(1)}
+              </div>
+              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 4 }}>KM TOTAIS</div>
             </div>
-            <div className="label-mono" style={{ marginTop: 6, color: 'var(--text-secondary)' }}>
-              KM NOS ÚLTIMOS 90 DIAS
-            </div>
-          </div>
 
-          {/* 2x2 Stats Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-            <div className="card" style={{ padding: '16px 14px' }}>
-              <Activity size={16} color="var(--accent-primary)" style={{ marginBottom: 6 }} />
-              <div className="scoreboard" style={{ fontSize: '1.4rem', color: 'var(--text-primary)' }}>
+            <div className="card-surface stat-box">
+              <div className="scoreboard" style={{ fontSize: '1.8rem', color: 'var(--text-primary)' }}>
                 {stats.stats.total_activities}
               </div>
-              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 2 }}>ATIVIDADES</div>
+              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 4 }}>ATIVIDADES</div>
             </div>
 
-            <div className="card" style={{ padding: '16px 14px' }}>
-              <Clock size={16} color="var(--accent-primary)" style={{ marginBottom: 6 }} />
-              <div className="scoreboard" style={{ fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-                {stats.stats.total_hours} <span style={{ fontSize: '0.8rem' }}>H</span>
+            <div className="card-surface stat-box">
+              <div className="scoreboard" style={{ fontSize: '1.4rem', color: 'var(--status-favorable)' }}>
+                {stats.stats.avg_pace || '--:--'}
               </div>
-              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 2 }}>TEMPO TOTAL</div>
+              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 2 }}>PACE MÉDIO /KM</div>
             </div>
 
-            <div className="card" style={{ padding: '16px 14px' }}>
-              <MapPin size={16} color="var(--accent-primary)" style={{ marginBottom: 6 }} />
-              <div className="scoreboard" style={{ fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-                {stats.stats.avg_distance_km} <span style={{ fontSize: '0.8rem' }}>KM</span>
-              </div>
-              <div className="label-mono" style={{ fontSize: '0.65rem', marginTop: 2 }}>KM MÉDIO</div>
-            </div>
-
-            <div className="card" style={{ padding: '16px 14px' }}>
-              <Target size={16} color="var(--accent-primary)" style={{ marginBottom: 6 }} />
+            <div className="card-surface stat-box">
               <div className="scoreboard" style={{ fontSize: '1.4rem', color: 'var(--text-primary)' }}>
                 {stats.stats.max_distance_km} <span style={{ fontSize: '0.8rem' }}>KM</span>
               </div>
@@ -234,6 +262,7 @@ export default function Profile({ user, onLogout }) {
         </>
       )}
 
+      {/* TAB 2: Achievements */}
       {tab === 'achievements' && (
         <div className="section">
           {/* Progress bar */}
@@ -312,6 +341,108 @@ export default function Profile({ user, onLogout }) {
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Menstrual Cycle Settings */}
+      {tab === 'menstrual' && (
+        <div className="section">
+          <div className="card-surface" style={{ padding: '20px' }}>
+            <div className="flex items-center gap-sm" style={{ marginBottom: 12 }}>
+              <Heart size={20} color="var(--accent-primary)" />
+              <h3 className="heading-md" style={{ margin: 0 }}>Fisiologia & Ciclo Menstrual</h3>
+            </div>
+            <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 18, lineHeight: 1.5 }}>
+              O cérebro do RUSH App calibra sua VFC e ajusta seus treinos para cada fase (folicular, ovulatória, lútea e menstrual), garantindo que quedas naturais de VFC na fase lútea não sejam confundidas com sobretreino.
+            </p>
+
+            <form onSubmit={handleSaveMenstrual} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label className="label-mono" style={{ fontSize: '0.7rem', display: 'block', marginBottom: 6 }}>
+                  INÍCIO DO ÚLTIMO PERÍODO (LMP)
+                </label>
+                <input
+                  type="date"
+                  value={lmpDate}
+                  onChange={(e) => setLmpDate(e.target.value)}
+                  required
+                  className="input-field"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label className="label-mono" style={{ fontSize: '0.7rem', display: 'block', marginBottom: 6 }}>
+                  DURAÇÃO MÉDIA DO CICLO (DIAS)
+                </label>
+                <input
+                  type="number"
+                  min="21"
+                  max="35"
+                  value={cycleLength}
+                  onChange={(e) => setCycleLength(e.target.value)}
+                  required
+                  className="input-field"
+                  style={{ width: '100%', fontFamily: 'var(--font-mono)' }}
+                />
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: 2, display: 'block' }}>
+                  Padrão comum: 28 dias (faixa normal 21 a 35 dias)
+                </span>
+              </div>
+
+              <div style={{ marginTop: 6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={usesContraceptive}
+                    onChange={(e) => setUsesContraceptive(e.target.checked)}
+                    style={{ width: 18, height: 18, accentColor: 'var(--accent-primary)' }}
+                  />
+                  <span>Uso contraceptivo hormonal (pílula, DIU hormonal, implante)</span>
+                </label>
+              </div>
+
+              {usesContraceptive && (
+                <div style={{ animation: 'fadeIn 0.2s ease-in-out' }}>
+                  <label className="label-mono" style={{ fontSize: '0.7rem', display: 'block', marginBottom: 6 }}>
+                    TIPO DE CONTRACEPTIVO (OPCIONAL)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Pílula combinada, DIU Mirena"
+                    value={contraceptiveType}
+                    onChange={(e) => setContraceptiveType(e.target.value)}
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+
+              <div className="zones-science-tip" style={{ marginTop: 6 }}>
+                <Info size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+                <span>
+                  <strong>Nota Científica:</strong> Contraceptivos hormonais reduzem as oscilações naturais de VFC entre fases. O algoritmo ajustará o peso da fase de acordo.
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingMenstrual}
+                className="btn btn-primary"
+                style={{ marginTop: 10, width: '100%', padding: '12px' }}
+              >
+                {menstrualSuccess ? (
+                  <>
+                    <Check size={16} /> Salvo com Sucesso!
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} /> {savingMenstrual ? 'Salvando...' : 'Salvar Configuração do Ciclo'}
+                  </>
+                )}
+              </button>
+            </form>
           </div>
         </div>
       )}
