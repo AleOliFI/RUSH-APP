@@ -4,10 +4,12 @@
 // ============================================================
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { hrv, training, activities, notifications } from '../api';
 import { 
   Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
-  Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, AlertTriangle, Smile
+  Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, 
+  AlertTriangle, Smile, Play, Award, Check
 } from 'lucide-react';
 
 const STATUS_MAP = {
@@ -38,17 +40,18 @@ const STATUS_MAP = {
 };
 
 const SESSION_TYPE_LABELS = {
-  easy_run: '🏃 Rodagem Leve',
-  interval: '⚡ Intervalado / Tiros',
-  long_run: '🔥 Longão de Resistência',
-  tempo: '💨 Tempo Run / Limiar',
-  strength: '💪 Fortalecimento',
-  recovery: '🧘 Regenerativo',
-  test: '🎯 Teste de Desempenho',
-  rest: '😴 Dia de Descanso',
+  easy_run: '🏃 Rodagem Leve (Z2)',
+  interval: '⚡ Intervalado / Tiros (Z4-Z5)',
+  long_run: '🔥 Longão de Resistência (Z2)',
+  tempo: '💨 Tempo Run / Limiar (Z3-Z4)',
+  strength: '💪 Fortalecimento Funcional',
+  recovery: '🧘 Regenerativo Ativo (Z1)',
+  test: '🎯 Teste de Desempenho (VO₂)',
+  rest: '😴 Descanso Total',
 };
 
 export default function Dashboard({ user }) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [plan, setPlan] = useState(null);
   const [stats, setStats] = useState(null);
@@ -65,6 +68,9 @@ export default function Dashboard({ user }) {
   const [stress, setStress] = useState(2);
   const [submitting, setSubmitting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Workout Action state
+  const [workoutCompleted, setWorkoutCompleted] = useState(false);
 
   const loadDashboardData = async () => {
     try {
@@ -109,7 +115,7 @@ export default function Dashboard({ user }) {
         readiness: Math.max(1, Math.min(5, Math.round((sleep + (6 - fatigue) + (6 - soreness) + (6 - stress)) / 4))),
       });
 
-      // 3. Recarregar dados para refletir calibração instantânea
+      // 3. Recarregar dados para refletir calibração instantânea do treino
       await loadDashboardData();
 
       setSaveSuccess(true);
@@ -125,8 +131,40 @@ export default function Dashboard({ user }) {
     }
   };
 
+  const handleCompleteWorkout = async (session) => {
+    try {
+      await activities.create({
+        type: 'running',
+        title: session?.type ? (SESSION_TYPE_LABELS[session.type] || 'Treino Concluído') : 'Corrida Matinal',
+        distance_km: session?.distance_km || 5,
+        duration_seconds: (session?.duration_min || 30) * 60,
+        hr_avg_bpm: 145,
+        hr_max_bpm: 168,
+        perceived_effort: 7,
+        notes: `Treino do dia concluído com base no status VFC: ${statusInfo?.label || 'Normal'}`,
+      });
+      setWorkoutCompleted(true);
+      await loadDashboardData();
+    } catch (err) {
+      console.error('Erro ao registrar treino:', err);
+    }
+  };
+
   const s = status?.status;
   const statusInfo = s ? STATUS_MAP[s.status] || STATUS_MAP.favorable : null;
+
+  // Determinar o treino programado de hoje
+  const effectiveSession = plan?.today_session || (s ? {
+    type: s.status === 'recovery' ? 'recovery' : s.status === 'attention' ? 'easy_run' : 'interval',
+    distance_km: s.status === 'recovery' ? 3.5 : s.status === 'attention' ? 6.0 : 8.5,
+    duration_min: s.status === 'recovery' ? 25 : s.status === 'attention' ? 40 : 50,
+    target_hr_zone: s.status === 'recovery' ? 'Z1' : s.status === 'attention' ? 'Z2' : 'Z4-Z5',
+    description: s.status === 'recovery' 
+      ? 'Caminhada leve ou rodagem muito regenerativa para restabelecer o equilíbrio autonômico.'
+      : s.status === 'attention'
+      ? 'Rodagem aeróbica contínua em Zona 2. Volume moderado para manter a base sem acumular fadiga.'
+      : 'Aquecimento 15 min Z2 + 6x 400m em Z5 com 90s de recuperação ativa + 10 min volta à calma.',
+  } : null);
 
   if (loading) {
     return (
@@ -253,15 +291,17 @@ export default function Dashboard({ user }) {
         </div>
       )}
 
-      {/* Today's Workout Card */}
-      {plan?.today_session ? (
+      {/* ============================================================ */}
+      {/* TODAY'S PROGRAMMED WORKOUT CARD                              */}
+      {/* ============================================================ */}
+      {effectiveSession ? (
         <div className="section">
           <div className="section-header">
             <div className="flex items-center gap-sm">
-              <span className="label-mono">№ 02 / TREINO DO DIA</span>
+              <span className="label-mono">№ 02 / TREINO PROGRAMADO DE HOJE</span>
             </div>
             <span className="label-mono" style={{ color: 'var(--accent-primary)' }}>
-              SEMANA {plan.plan?.current_week || 1}
+              {plan?.plan?.name ? `SEMANA ${plan.plan.current_week || 1}` : 'RECOMENDAÇÃO DO DIA'}
             </span>
           </div>
 
@@ -269,11 +309,11 @@ export default function Dashboard({ user }) {
             <div style={{ padding: '18px 20px 0' }}>
               <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
                 <span className="workout-type-badge">
-                  {SESSION_TYPE_LABELS[plan.today_session.type] || plan.today_session.type}
+                  {SESSION_TYPE_LABELS[effectiveSession.type] || effectiveSession.type}
                 </span>
-                {plan.today_session.target_hr_zone && (
-                  <span className="label-mono" style={{ color: 'var(--accent-primary)', fontSize: '0.7rem' }}>
-                    {plan.today_session.target_hr_zone}
+                {effectiveSession.target_hr_zone && (
+                  <span className="label-mono" style={{ color: 'var(--accent-primary)', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                    ZONA ALVO: {effectiveSession.target_hr_zone}
                   </span>
                 )}
               </div>
@@ -281,43 +321,48 @@ export default function Dashboard({ user }) {
 
             <div style={{ padding: '0 20px 20px' }}>
               <div className="workout-metrics">
-                {plan.today_session.distance_km && (
+                {effectiveSession.distance_km && (
                   <div className="workout-metric">
-                    <div className="workout-metric-label">Distância</div>
+                    <div className="workout-metric-label">Distância Prevista</div>
                     <div className="workout-metric-value scoreboard">
-                      {plan.today_session.distance_km} <span style={{ fontSize: '0.85rem' }}>KM</span>
+                      {effectiveSession.distance_km} <span style={{ fontSize: '0.85rem' }}>KM</span>
                     </div>
                   </div>
                 )}
-                {plan.today_session.duration_min && (
+                {effectiveSession.duration_min && (
                   <div className="workout-metric">
-                    <div className="workout-metric-label">Duração</div>
+                    <div className="workout-metric-label">Duração Estimada</div>
                     <div className="workout-metric-value scoreboard">
-                      {plan.today_session.duration_min} <span style={{ fontSize: '0.85rem' }}>MIN</span>
+                      {effectiveSession.duration_min} <span style={{ fontSize: '0.85rem' }}>MIN</span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {plan.today_session.description && (
-                <p className="text-body" style={{ marginTop: 14, fontSize: '0.82rem', lineHeight: 1.5 }}>
-                  {plan.today_session.description}
-                </p>
+              {effectiveSession.description && (
+                <div style={{ marginTop: 14, padding: '12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-primary)' }}>
+                  <span className="label-mono" style={{ fontSize: '0.65rem', display: 'block', marginBottom: 4, color: 'var(--text-secondary)' }}>
+                    ESTRUTURA DA SESSÃO:
+                  </span>
+                  <p className="text-body" style={{ fontSize: '0.82rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                    {effectiveSession.description}
+                  </p>
+                </div>
               )}
 
               {/* Agent recommendation banner */}
-              {plan.daily_status && plan.daily_status.status !== 'favorable' && (
+              {s && s.status !== 'favorable' && (
                 <div
                   style={{
                     marginTop: 14,
                     padding: '12px 14px',
                     borderRadius: 'var(--radius-md)',
                     background:
-                      plan.daily_status.status === 'attention'
+                      s.status === 'attention'
                         ? 'var(--status-attention-bg)'
                         : 'var(--status-recovery-bg)',
                     border: `1px solid ${
-                      plan.daily_status.status === 'attention'
+                      s.status === 'attention'
                         ? 'rgba(255, 184, 0, 0.3)'
                         : 'rgba(255, 59, 92, 0.3)'
                     }`,
@@ -327,7 +372,7 @@ export default function Dashboard({ user }) {
                     <Zap
                       size={14}
                       color={
-                        plan.daily_status.status === 'attention'
+                        s.status === 'attention'
                           ? 'var(--status-attention)'
                           : 'var(--status-recovery)'
                       }
@@ -336,20 +381,52 @@ export default function Dashboard({ user }) {
                       className="label-mono"
                       style={{
                         color:
-                          plan.daily_status.status === 'attention'
+                          s.status === 'attention'
                             ? 'var(--status-attention)'
                             : 'var(--status-recovery)',
                         fontSize: '0.68rem',
                       }}
                     >
-                      AJUSTE DO AGENTE RUSH
+                      ADAPTAÇÃO AUTOMÁTICA PELA VFC
                     </span>
                   </div>
                   <p className="text-body" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    {plan.daily_status.explanation_text}
+                    {s.explanation_text}
                   </p>
                 </div>
               )}
+
+              {/* Action Buttons */}
+              <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                {workoutCompleted ? (
+                  <div 
+                    style={{ 
+                      flex: 1, 
+                      padding: '12px', 
+                      background: 'rgba(0, 214, 143, 0.15)', 
+                      border: '1px solid var(--status-favorable)', 
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      color: 'var(--status-favorable)',
+                      fontWeight: 'bold',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    <Check size={16} /> Treino de Hoje Concluído!
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => handleCompleteWorkout(effectiveSession)}
+                    className="btn btn-primary"
+                    style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
+                  >
+                    <Check size={16} /> Marcar como Concluído
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -359,10 +436,12 @@ export default function Dashboard({ user }) {
             <div>
               <p className="heading-sm">SEM TREINO AGENDADO</p>
               <p className="text-body" style={{ fontSize: '0.82rem', marginTop: 4 }}>
-                Crie ou selecione um plano na aba Treinos.
+                Faça sua medição matinal para gerar o treino ideal de hoje.
               </p>
             </div>
-            <ChevronRight size={20} color="var(--text-secondary)" />
+            <button onClick={() => setIsModalOpen(true)} className="btn btn-primary btn-sm">
+              <Sparkles size={14} /> Gerar Treino
+            </button>
           </div>
         </div>
       )}
