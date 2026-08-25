@@ -1,0 +1,31 @@
+{
+  "name": "rush-performance",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "server": "node server/index.js",
+    "seed": "node seed.js",
+    "test": "node server/test/masterE2EAcceptance.test.js",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.0.5",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "uuid": "^14.0.1"
+  }
+}
