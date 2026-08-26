@@ -8,7 +8,7 @@
 
 import { subscriptions } from '../api';
 
-const REVENUECAT_PUBLIC_KEY = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || 'appl_rush_demo_key';
+const REVENUECAT_PUBLIC_KEY = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || 'test_QVdSKIsEdHtkQrZlFpYIDMDByiH';
 const RUSH_PRO_MONTHLY_ID = 'rush_pro_monthly_2990'; // R$ 29,90 / mês com 7 dias trial
 const RUSH_PRO_YEARLY_ID = 'rush_pro_yearly_23880'; // R$ 238,80 / ano
 
