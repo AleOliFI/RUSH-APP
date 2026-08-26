@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { hrv, training, activities, notifications, menstrual } from '../api';
 import { 
   Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
@@ -53,6 +54,7 @@ const SESSION_TYPE_LABELS = {
 };
 
 export default function Dashboard({ user }) {
+  const { isPro, openUpgradeModal } = useAuth();
   const navigate = useNavigate();
   const [status, setStatus] = useState(null);
   const [plan, setPlan] = useState(null);
@@ -232,6 +234,43 @@ export default function Dashboard({ user }) {
           BOM DIA, <span className="text-gradient">{athleteName}</span>
         </h1>
       </div>
+
+      {/* RUSH PRO Subscription Banner (Free Users) */}
+      {!isPro && (
+        <div 
+          onClick={openUpgradeModal}
+          className="card-surface" 
+          style={{ 
+            marginBottom: 18, 
+            padding: '12px 16px', 
+            background: 'linear-gradient(90deg, rgba(255,56,0,0.16) 0%, rgba(255,106,0,0.08) 100%)',
+            border: '1px solid rgba(255,56,0,0.35)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            boxShadow: '0 4px 15px rgba(255,56,0,0.15)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: 'var(--accent-primary)', color: '#fff', padding: 6, borderRadius: 'var(--radius-xs)', display: 'flex' }}>
+              <Zap size={15} fill="#fff" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.84rem', color: '#fff' }}>
+                DESBLOQUEIE O RUSH PRO
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                7 dias grátis · IA de Treino e Módulo Hormonal por R$ 29,90/mês
+              </div>
+            </div>
+          </div>
+          <span className="label-mono" style={{ fontSize: '0.68rem', color: 'var(--accent-primary)', fontWeight: 800 }}>
+            TESTAR GRÁTIS →
+          </span>
+        </div>
+      )}
 
       {/* Recovery Alert / Overreaching Warning Banner */}
       <RecoveryAlert 

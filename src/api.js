@@ -145,6 +145,7 @@ export const users = {
   privacy: (data) => request('/users/privacy', { method: 'PUT', body: JSON.stringify(data) }),
   getUser: (username) => request(`/users/${username}`),
   fieldTest: (data) => request('/users/field-test', { method: 'POST', body: JSON.stringify(data) }),
+  deleteAccount: () => request('/users/me', { method: 'DELETE' }),
 };
 
 // HRV
@@ -219,6 +220,14 @@ export const academies = {
   athleteDetails: (id) => request(`/academies/athlete/${id}`),
   prescribe: (athleteId, data) => request(`/academies/athlete/${athleteId}/prescribe`, { method: 'POST', body: JSON.stringify(data) }),
   create: (data) => request('/academies', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// Subscriptions (RUSH PRO)
+export const subscriptions = {
+  status: () => request('/subscriptions/status'),
+  startTrial: () => request('/subscriptions/start-trial', { method: 'POST' }),
+  activate: (planType = 'monthly', provider = 'in_app') => request('/subscriptions/activate', { method: 'POST', body: JSON.stringify({ plan_type: planType, provider }) }),
+  cancel: () => request('/subscriptions/cancel', { method: 'POST' }),
 };
 
 export { setAuth, clearAuth, getUser, getToken, getRefreshToken, tryRefresh, request };

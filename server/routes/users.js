@@ -14,7 +14,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   router.get('/me', authenticate, (req, res) => {
     try {
-      const user = db.prepare('SELECT id, email, role, academy_id, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
+      const user = db.prepare('SELECT id, email, role, academy_id, subscription_tier, subscription_status, trial_ends_at, subscription_expires_at, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
@@ -23,6 +23,11 @@ module.exports = function usersRoutes(db) {
       const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
       const privacy = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
 
+      const isPro = ['coach', 'owner', 'admin'].includes(user.role) || 
+                    user.subscription_tier === 'pro' || 
+                    (user.subscription_status === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) ||
+                    (user.subscription_status === 'active');
+
       const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
 
       res.json({
@@ -30,6 +35,9 @@ module.exports = function usersRoutes(db) {
         email: user.email,
         role: user.role,
         academy_id: user.academy_id,
+        subscription_tier: user.subscription_tier || 'free',
+        subscription_status: user.subscription_status || 'free',
+        is_pro: isPro,
         created_at: user.created_at,
         has_onboarding: hasOnboarding,
         name: profile?.name || user.email.split('@')[0],
@@ -404,6 +412,19 @@ module.exports = function usersRoutes(db) {
     } catch (err) {
       console.error('Users update privacy error:', err);
       res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // DELETE /api/users/me — Exclusão definitiva de conta (Apple 5.1.1)
+  // -------------------------------------------------------
+  router.delete('/me', authenticate, (req, res) => {
+    try {
+      db.prepare("UPDATE users SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(req.user.id);
+      res.json({ success: true, message: 'Conta excluída com sucesso.' });
+    } catch (err) {
+      console.error('Delete account error:', err);
+      res.status(500).json({ error: 'Erro ao excluir conta' });
     }
   });
 

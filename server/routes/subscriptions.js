@@ -1,0 +1,183 @@
+// ============================================================
+// RUSH PERFORMANCE — Subscriptions & Recurring Billing Routes
+// RUSH PRO (R$ 29,90/mês com 7 dias grátis de teste)
+// ============================================================
+
+const express = require('express');
+const { v4: uuidv4 } = require('uuid');
+const { authenticate } = require('../middleware/auth');
+
+module.exports = function subscriptionsRoutes(db) {
+  const router = express.Router();
+
+  // -------------------------------------------------------
+  // GET /api/subscriptions/status — Retorna status da assinatura
+  // -------------------------------------------------------
+  router.get('/status', authenticate, (req, res) => {
+    try {
+      const user = db.prepare(`
+        SELECT id, email, role, subscription_tier, subscription_status,
+               subscription_provider, trial_ends_at, subscription_expires_at
+        FROM users WHERE id = ?
+      `).get(req.user.id);
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      const now = new Date();
+      let isPro = false;
+      let trialDaysLeft = 0;
+
+      // Coaches, owners and admins have PRO access by default
+      if (['coach', 'owner', 'admin'].includes(user.role)) {
+        isPro = true;
+      } else if (user.subscription_tier === 'pro' || user.subscription_tier === 'lifetime') {
+        if (user.subscription_status === 'active') {
+          isPro = true;
+        } else if (user.subscription_status === 'trial' && user.trial_ends_at) {
+          const trialEnd = new Date(user.trial_ends_at);
+          if (trialEnd > now) {
+            isPro = true;
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)));
+          }
+        }
+      }
+
+      res.json({
+        tier: user.subscription_tier || 'free',
+        status: user.subscription_status || 'free',
+        is_pro: isPro,
+        trial_days_left: trialDaysLeft,
+        trial_ends_at: user.trial_ends_at,
+        expires_at: user.subscription_expires_at,
+        provider: user.subscription_provider,
+        monthly_price_brl: 29.90,
+      });
+    } catch (err) {
+      console.error('Subscription status error:', err);
+      res.status(500).json({ error: 'Erro ao consultar assinatura' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/subscriptions/start-trial — Iniciar 7 dias de teste grátis
+  // -------------------------------------------------------
+  router.post('/start-trial', authenticate, (req, res) => {
+    try {
+      const user = db.prepare('SELECT subscription_status, trial_ends_at FROM users WHERE id = ?').get(req.user.id);
+      
+      if (user && user.trial_ends_at) {
+        return res.status(400).json({ error: 'Você já utilizou seu período de teste grátis.' });
+      }
+
+      const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      db.prepare(`
+        UPDATE users SET
+          subscription_tier = 'pro',
+          subscription_status = 'trial',
+          trial_ends_at = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).run(trialEndsAt, req.user.id);
+
+      // Notification
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, type, message)
+        VALUES (?, ?, 'system', 'Parabéns! Seus 7 dias de teste do RUSH PRO foram ativados com sucesso.')
+      `).run(uuidv4(), req.user.id);
+
+      res.json({
+        success: true,
+        message: 'Período de teste grátis de 7 dias ativado!',
+        tier: 'pro',
+        status: 'trial',
+        is_pro: true,
+        trial_ends_at: trialEndsAt,
+        trial_days_left: 7,
+      });
+    } catch (err) {
+      console.error('Start trial error:', err);
+      res.status(500).json({ error: 'Erro ao ativar período de teste' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/subscriptions/activate — Ativar assinatura RUSH PRO
+  // -------------------------------------------------------
+  router.post('/activate', authenticate, (req, res) => {
+    try {
+      const { plan_type = 'monthly', provider = 'in_app' } = req.body;
+      const days = plan_type === 'yearly' ? 365 : 30;
+      const amountCents = plan_type === 'yearly' ? 23880 : 2990;
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+      const subId = uuidv4();
+
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE users SET
+            subscription_tier = 'pro',
+            subscription_status = 'active',
+            subscription_provider = ?,
+            subscription_expires_at = ?,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `).run(provider, expiresAt, req.user.id);
+
+        db.prepare(`
+          INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, current_period_end)
+          VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
+        `).run(subId, req.user.id, amountCents, provider, expiresAt);
+
+        db.prepare(`
+          INSERT INTO notifications (id, user_id, type, message)
+          VALUES (?, ?, 'system', 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.')
+        `).run(uuidv4(), req.user.id);
+      })();
+
+      res.json({
+        success: true,
+        message: 'Assinatura RUSH PRO ativada com sucesso!',
+        tier: 'pro',
+        status: 'active',
+        is_pro: true,
+        expires_at: expiresAt,
+      });
+    } catch (err) {
+      console.error('Activate subscription error:', err);
+      res.status(500).json({ error: 'Erro ao ativar assinatura' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/subscriptions/cancel — Cancelar renovação automática
+  // -------------------------------------------------------
+  router.post('/cancel', authenticate, (req, res) => {
+    try {
+      db.prepare(`
+        UPDATE users SET
+          subscription_status = 'canceled',
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).run(req.user.id);
+
+      db.prepare(`
+        UPDATE subscriptions SET
+          status = 'canceled',
+          canceled_at = datetime('now')
+        WHERE user_id = ? AND status = 'active'
+      `).run(req.user.id);
+
+      res.json({
+        success: true,
+        message: 'Renovação automática cancelada com sucesso.',
+      });
+    } catch (err) {
+      console.error('Cancel subscription error:', err);
+      res.status(500).json({ error: 'Erro ao cancelar assinatura' });
+    }
+  });
+
+  return router;
+};

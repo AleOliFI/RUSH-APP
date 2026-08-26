@@ -1,9 +1,6 @@
-// ============================================================
-// RUSH PERFORMANCE — Authentication Context & Session State
-// ============================================================
-
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth, users, setAuth, clearAuth, getUser, getToken } from '../api';
+import UpgradeProModal from '../components/UpgradeProModal';
 
 const AuthContext = createContext(null);
 
@@ -11,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getUser());
   const [token, setToken] = useState(() => getToken());
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // Synchronize and validate active session on mount
   const refreshUser = useCallback(async () => {
@@ -108,13 +106,25 @@ export function AuthProvider({ children }) {
     });
   };
 
+  const openUpgradeModal = () => setIsUpgradeModalOpen(true);
+  const closeUpgradeModal = () => setIsUpgradeModalOpen(false);
+
   const isAuthenticated = Boolean(user && token);
+  const isPro = Boolean(
+    user?.is_pro ||
+    ['coach', 'owner', 'admin'].includes(user?.role) ||
+    user?.subscription_tier === 'pro' ||
+    user?.subscription_tier === 'lifetime'
+  );
 
   const value = {
     user,
     token,
     isAuthenticated,
     isLoading,
+    isPro,
+    openUpgradeModal,
+    closeUpgradeModal,
     login,
     register,
     logout,
@@ -122,7 +132,16 @@ export function AuthProvider({ children }) {
     refreshUser,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <UpgradeProModal
+        isOpen={isUpgradeModalOpen}
+        onClose={closeUpgradeModal}
+        onUpgraded={refreshUser}
+      />
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

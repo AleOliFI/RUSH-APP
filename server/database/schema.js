@@ -29,12 +29,34 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_users_academy ON users(academy_id);
   `);
 
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT DEFAULT NULL`);
-  } catch (_) {}
-  try {
-    db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT DEFAULT NULL`);
-  } catch (_) {}
+  // Subscriptions & Auth Migrations
+  try { db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT DEFAULT NULL`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT DEFAULT NULL`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'free'`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_provider TEXT DEFAULT NULL`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_id TEXT DEFAULT NULL`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at TEXT DEFAULT NULL`); } catch (_) {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_expires_at TEXT DEFAULT NULL`); } catch (_) {}
+
+  // Subscriptions history table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      plan_tier TEXT NOT NULL DEFAULT 'pro',
+      status TEXT NOT NULL DEFAULT 'active',
+      amount_cents INTEGER DEFAULT 2990,
+      currency TEXT DEFAULT 'BRL',
+      provider TEXT DEFAULT 'manual',
+      provider_subscription_id TEXT DEFAULT NULL,
+      started_at TEXT DEFAULT (datetime('now')),
+      current_period_end TEXT DEFAULT NULL,
+      canceled_at TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+  `);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_profiles (

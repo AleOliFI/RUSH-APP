@@ -4,16 +4,18 @@
 // ============================================================
 
 import { useState, useEffect } from 'react';
-import { users, challenges, activities, auth, clearAuth, menstrual, hrv } from '../api';
+import { users, challenges, activities, auth, clearAuth, menstrual, hrv, subscriptions } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Activity, Clock, MapPin, Target, Trophy, Award, 
   CheckCircle2, Shield, Heart, Sparkles, Check, Info, 
-  ExternalLink, Settings, Edit3, Camera, User, Flame 
+  ExternalLink, Settings, Edit3, Camera, User, Flame, Trash2, Zap 
 } from 'lucide-react';
 import { InstagramIcon, StravaIcon } from '../components/SocialIcons';
 import FieldTestModal from '../components/FieldTestModal';
 
 export default function Profile({ user, onLogout }) {
+  const { isPro, openUpgradeModal } = useAuth();
   const [profile, setProfile] = useState(null);
   const [earned, setEarned] = useState([]);
   const [allAch, setAllAch] = useState([]);
@@ -515,6 +517,72 @@ export default function Profile({ user, onLogout }) {
                 )}
               </button>
             </form>
+
+            {/* Subscription & Plan Status */}
+            <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border-secondary)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                <span className="label-mono" style={{ fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Zap size={14} color="var(--accent-primary)" /> PLANO ATUAL
+                </span>
+                <span className={`status-badge ${isPro ? 'status-badge--favorable' : 'status-badge--neutral'}`} style={{ fontSize: '0.68rem' }}>
+                  {isPro ? '⚡ RUSH PRO ATIVO' : 'PLANO GRATUITO'}
+                </span>
+              </div>
+
+              {isPro ? (
+                <p className="text-body" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Você possui acesso ilimitado a todos os recursos científicos, IA de treino adaptativo e módulo menstrual.
+                </p>
+              ) : (
+                <div style={{ background: 'rgba(255, 56, 0, 0.08)', border: '1px solid rgba(255, 56, 0, 0.25)', borderRadius: 'var(--radius-md)', padding: 12 }}>
+                  <p className="text-body" style={{ fontSize: '0.8rem', marginBottom: 8, color: 'var(--text-primary)' }}>
+                    Desbloqueie treinos adaptativos diários por VFC por apenas <strong>R$ 29,90/mês</strong> com 7 dias grátis.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openUpgradeModal}
+                    className="btn btn-primary btn-sm"
+                    style={{ width: '100%', fontSize: '0.78rem', padding: '8px' }}
+                  >
+                    <Sparkles size={13} /> Fazer Upgrade para RUSH PRO
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Apple Guideline 5.1.1: Account Deletion */}
+            <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border-secondary)' }}>
+              <span className="label-mono" style={{ fontSize: '0.68rem', color: 'var(--status-recovery)', display: 'block', marginBottom: 6 }}>
+                ZONA DE PRIVACIDADE & CONTA
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm('Tem certeza de que deseja excluir permanentemente sua conta e todos os seus dados de treino? Essa ação não pode ser desfeita.')) {
+                    try {
+                      await users.deleteAccount();
+                      handleLogout();
+                    } catch (e) {
+                      alert('Erro ao excluir conta: ' + (e.message || 'Tente novamente'));
+                    }
+                  }
+                }}
+                style={{
+                  background: 'none',
+                  border: '1px solid rgba(255, 59, 92, 0.3)',
+                  color: 'var(--status-recovery)',
+                  borderRadius: 'var(--radius-xs)',
+                  padding: '8px 12px',
+                  fontSize: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                <Trash2 size={13} /> Excluir Minha Conta Permanentemente
+              </button>
+            </div>
           </div>
         </div>
       )}
