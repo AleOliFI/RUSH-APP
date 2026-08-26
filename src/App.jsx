@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Feed from './pages/Feed';
 import Training from './pages/Training';
 import Profile from './pages/Profile';
+import CoachDashboard from './pages/CoachDashboard';
 import BottomNav from './components/BottomNav';
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
@@ -117,6 +118,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <Training user={user} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/coach"
+          element={
+            <ProtectedRoute>
+              <CoachDashboard user={user} />
             </ProtectedRoute>
           }
         />

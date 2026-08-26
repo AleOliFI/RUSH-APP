@@ -277,5 +277,125 @@ module.exports = function academiesRoutes(db) {
     }
   });
 
+  // -------------------------------------------------------
+  // POST /api/academies/register-athlete — Cadastro direto de aluno pelo treinador
+  // -------------------------------------------------------
+  router.post('/register-athlete', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
+    try {
+      const { email, password, name, username, distance_km, level, weight_kg, gender } = req.body;
+
+      if (!email || !name) {
+        return res.status(400).json({ error: 'Nome e email são obrigatórios' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanUsername = username ? username.trim().toLowerCase() : cleanEmail.split('@')[0] + Math.floor(Math.random() * 900 + 100);
+
+      // Check if user already exists
+      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+      if (existing) {
+        return res.status(409).json({ error: 'Email já cadastrado na plataforma' });
+      }
+
+      if (!req.user.academy_id) {
+        return res.status(400).json({ error: 'Você precisa estar vinculado a uma assessoria para cadastrar alunos' });
+      }
+
+      const bcrypt = require('bcryptjs');
+      const athleteId = uuidv4();
+      const tempPassword = password || '123456';
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      const targetDist = Number(distance_km) || 5;
+      const targetLevel = ['beginner', 'intermediate', 'advanced'].includes(level) ? level : 'beginner';
+
+      const createAthleteTransaction = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO users (id, email, password_hash, role, academy_id)
+          VALUES (?, ?, ?, 'athlete', ?)
+        `).run(athleteId, cleanEmail, passwordHash, req.user.academy_id);
+
+        db.prepare(`
+          INSERT INTO user_profiles (user_id, name, username, weight_kg, gender)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(athleteId, name.trim(), cleanUsername, weight_kg ? Number(weight_kg) : null, gender || null);
+
+        db.prepare(`
+          INSERT INTO user_objectives (user_id, distance_km, level)
+          VALUES (?, ?, ?)
+        `).run(athleteId, targetDist, targetLevel);
+
+        db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(athleteId);
+        db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(athleteId);
+      });
+
+      createAthleteTransaction();
+
+      res.status(201).json({
+        success: true,
+        athlete: {
+          id: athleteId,
+          email: cleanEmail,
+          name: name.trim(),
+          username: cleanUsername,
+          distance_km: targetDist,
+          level: targetLevel,
+          temporary_password: tempPassword,
+        },
+        message: 'Atleta cadastrado com sucesso na assessoria!',
+      });
+    } catch (err) {
+      console.error('Register athlete error:', err);
+      res.status(500).json({ error: 'Erro ao cadastrar atleta' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/academies/athlete/:id/prescribe — Prescrever treino para o atleta
+  // -------------------------------------------------------
+  router.post('/athlete/:id/prescribe', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+    try {
+      const athleteId = req.params.id;
+      const { title, type, distance_km, duration_min, target_pace, target_hr_zone, description, notes } = req.body;
+
+      if (!athleteId || !type) {
+        return res.status(400).json({ error: 'ID do atleta e tipo de treino são obrigatórios' });
+      }
+
+      // Check if athlete belongs to coach's academy
+      const athlete = db.prepare('SELECT id FROM users WHERE id = ? AND academy_id = ? AND deleted_at IS NULL').get(athleteId, req.user.academy_id);
+      if (!athlete) {
+        return res.status(404).json({ error: 'Atleta não encontrado na sua assessoria' });
+      }
+
+      // Notify athlete of coach's prescription
+      const coachProfile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      db.prepare(`
+        INSERT INTO notifications (id, user_id, type, source_user_id, message)
+        VALUES (?, ?, 'plan_assigned', ?, ?)
+      `).run(
+        uuidv4(), athleteId, req.user.id,
+        `Seu treinador ${coachProfile?.name || 'do RUSH'} prescreveu uma nova sessão: ${title || type} (${distance_km || 5} km)`
+      );
+
+      res.json({
+        success: true,
+        prescribed_session: {
+          athlete_id: athleteId,
+          title: title || 'Treino Prescrito pelo Coach',
+          type,
+          distance_km: Number(distance_km) || null,
+          duration_min: Number(duration_min) || null,
+          target_pace: target_pace || null,
+          target_hr_zone: target_hr_zone || null,
+          description: description || notes || 'Sessão personalizada pelo treinador.',
+        },
+        message: 'Treino prescrito e enviado com sucesso ao atleta!',
+      });
+    } catch (err) {
+      console.error('Prescribe workout error:', err);
+      res.status(500).json({ error: 'Erro ao prescrever treino' });
+    }
+  });
+
   return router;
 };

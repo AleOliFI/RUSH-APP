@@ -4,12 +4,13 @@
 // ============================================================
 
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Activity, Dumbbell, User } from 'lucide-react';
+import { Home, Activity, Dumbbell, User, Users } from 'lucide-react';
 
 const tabs = [
   { path: '/', icon: Home, label: 'Início', id: 'nav-home' },
   { path: '/feed', icon: Activity, label: 'Feed', id: 'nav-feed' },
   { path: '/training', icon: Dumbbell, label: 'Treino', id: 'nav-training' },
+  { path: '/coach', icon: Users, label: 'Assessoria', id: 'nav-coach' },
   { path: '/profile', icon: User, label: 'Perfil', id: 'nav-profile' },
 ];
 

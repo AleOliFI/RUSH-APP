@@ -210,4 +210,15 @@ export const notifications = {
   readAll: () => request('/notifications/read-all', { method: 'PUT' }),
 };
 
+// Academies (Coach / Assessoria)
+export const academies = {
+  my: () => request('/academies/my'),
+  dashboard: () => request('/academies/dashboard'),
+  invite: (email) => request('/academies/invite', { method: 'POST', body: JSON.stringify({ email }) }),
+  registerAthlete: (data) => request('/academies/register-athlete', { method: 'POST', body: JSON.stringify(data) }),
+  athleteDetails: (id) => request(`/academies/athlete/${id}`),
+  prescribe: (athleteId, data) => request(`/academies/athlete/${athleteId}/prescribe`, { method: 'POST', body: JSON.stringify(data) }),
+  create: (data) => request('/academies', { method: 'POST', body: JSON.stringify(data) }),
+};
+
 export { setAuth, clearAuth, getUser, getToken, getRefreshToken, tryRefresh, request };
