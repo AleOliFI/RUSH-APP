@@ -35,6 +35,7 @@ export default function Profile({ user, onLogout }) {
   const [instagram, setInstagram] = useState('');
   const [strava, setStrava] = useState('');
   const [pace5k, setPace5k] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
 
@@ -75,6 +76,7 @@ export default function Profile({ user, onLogout }) {
         setInstagram(p.instagram || '');
         setStrava(p.strava || '');
         setPace5k(p.pace_5k || '');
+        setAvatarUrl(p.avatar_url || '');
       }
 
       if (m?.profile) {
@@ -94,6 +96,40 @@ export default function Profile({ user, onLogout }) {
     loadData();
   }, []);
 
+  const handleAvatarFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('A imagem deve ter no máximo 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result;
+        setAvatarUrl(base64);
+        try {
+          await users.updateProfile({ avatar_url: base64 });
+          setProfile((prev) => ({ ...(prev || {}), avatar_url: base64 }));
+          setProfileSuccess(true);
+          setTimeout(() => setProfileSuccess(false), 2000);
+        } catch (err) {
+          console.error('Failed to auto-save avatar:', err);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setAvatarUrl('');
+    try {
+      await users.updateProfile({ avatar_url: null });
+      setProfile((prev) => ({ ...(prev || {}), avatar_url: null }));
+    } catch (err) {
+      console.error('Failed to remove avatar:', err);
+    }
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSavingProfile(true);
@@ -108,6 +144,7 @@ export default function Profile({ user, onLogout }) {
         instagram,
         strava,
         pace_5k: pace5k,
+        avatar_url: avatarUrl || null,
       });
       setProfileSuccess(true);
       setTimeout(() => setProfileSuccess(false), 2000);
@@ -205,12 +242,59 @@ export default function Profile({ user, onLogout }) {
 
       {/* Athlete Header Card */}
       <div className="card-surface" style={{ marginBottom: 20, textAlign: 'center', padding: '24px 20px' }}>
-        <div
-          className="avatar avatar-lg orange-glow"
-          style={{ margin: '0 auto 12px', fontSize: '1.4rem' }}
-        >
-          {initials}
+        <div style={{ position: 'relative', width: 90, height: 90, margin: '0 auto 14px' }}>
+          {profile?.avatar_url || avatarUrl ? (
+            <img
+              src={profile?.avatar_url || avatarUrl}
+              alt={athleteName}
+              style={{
+                width: 90,
+                height: 90,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '2px solid var(--accent-primary)',
+                boxShadow: '0 0 20px rgba(255, 56, 0, 0.35)',
+              }}
+            />
+          ) : (
+            <div
+              className="avatar avatar-lg orange-glow"
+              style={{ width: 90, height: 90, fontSize: '1.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {initials}
+            </div>
+          )}
+
+          <label
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              background: 'var(--accent-primary)',
+              color: '#FFFFFF',
+              borderRadius: '50%',
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+              border: '2px solid #141414',
+              transition: 'transform 0.2s',
+            }}
+            title="Alterar Foto de Perfil"
+          >
+            <Camera size={14} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarFileChange}
+              style={{ display: 'none' }}
+            />
+          </label>
         </div>
+
         <h2 className="heading-md" style={{ marginBottom: 4 }}>
           {athleteName}
         </h2>
@@ -401,6 +485,55 @@ export default function Profile({ user, onLogout }) {
         <div className="section">
           <div className="card-surface" style={{ padding: '20px' }}>
             <h3 className="heading-md" style={{ marginBottom: 14 }}>Informações do Atleta</h3>
+
+            {/* Avatar Photo Picker Block */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
+              <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Preview"
+                    style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent-primary)' }}
+                  />
+                ) : (
+                  <div className="avatar avatar-md" style={{ width: 56, height: 56, fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {initials}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: 4 }}>
+                  Foto do Perfil
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <label
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '0.72rem', padding: '5px 10px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Camera size={13} color="var(--accent-primary)" />
+                    <span>Escolher Foto</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarFileChange}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+
+                  {avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.72rem', padding: '5px 10px', opacity: 0.7 }}
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
