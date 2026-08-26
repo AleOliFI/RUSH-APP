@@ -283,42 +283,42 @@ export default function Profile({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs (Scrollable Badge Bar) */}
       <div className="tab-pill-group" style={{ marginBottom: 20 }}>
         <button
           type="button"
           className={`tab-pill ${tab === 'stats' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('stats')}
         >
-          Estatísticas (90d)
+          <Activity size={13} /> Estatísticas (90d)
         </button>
         <button
           type="button"
           className={`tab-pill ${tab === 'settings' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('settings')}
         >
-          Editar Dados
+          <Settings size={13} /> Editar Dados
         </button>
         <button
           type="button"
           className={`tab-pill ${tab === 'zones' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('zones')}
         >
-          Paces & Zonas
+          <Target size={13} /> Paces & Zonas
         </button>
         <button
           type="button"
           className={`tab-pill ${tab === 'menstrual' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('menstrual')}
         >
-          Ciclo Hormonal
+          <Heart size={13} /> Ciclo Hormonal
         </button>
         <button
           type="button"
           className={`tab-pill ${tab === 'achievements' ? 'tab-pill--active' : ''}`}
           onClick={() => setTab('achievements')}
         >
-          Conquistas ({earned.length})
+          <Trophy size={13} /> Conquistas ({earned.length})
         </button>
       </div>
 
