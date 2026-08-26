@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { subscriptions } from '../api';
+import { billing } from '../services/billing';
 import { 
   X, Check, Zap, Sparkles, Shield, Heart, Activity, 
   Flame, Lock, ArrowRight, Star, RefreshCw 
@@ -15,6 +16,7 @@ import {
 export default function UpgradeProModal({ isOpen, onClose, onUpgraded }) {
   const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' | 'yearly'
   const [submitting, setSubmitting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [success, setSuccess] = useState(false);
 
   if (!isOpen) return null;
@@ -23,9 +25,11 @@ export default function UpgradeProModal({ isOpen, onClose, onUpgraded }) {
     setSubmitting(true);
     try {
       if (isTrial) {
-        await subscriptions.startTrial();
+        await billing.startFreeTrial();
+      } else if (billingCycle === 'yearly') {
+        await billing.purchaseYearly();
       } else {
-        await subscriptions.activate(billingCycle, 'in_app');
+        await billing.purchaseMonthly();
       }
 
       setSuccess(true);
@@ -39,6 +43,24 @@ export default function UpgradeProModal({ isOpen, onClose, onUpgraded }) {
       alert(err.message || 'Erro ao processar assinatura. Tente novamente.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setRestoring(true);
+    try {
+      const res = await billing.restorePurchases();
+      if (res.restored) {
+        alert('Assinatura restaurada com sucesso!');
+        if (onUpgraded) onUpgraded();
+        onClose();
+      } else {
+        alert(res.message || 'Nenhuma assinatura anterior encontrada.');
+      }
+    } catch (e) {
+      alert('Erro ao restaurar compras: ' + e.message);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -261,6 +283,25 @@ export default function UpgradeProModal({ isOpen, onClose, onUpgraded }) {
 
           <div style={{ fontSize: '0.68rem', color: 'var(--text-tertiary)', lineHeight: 1.4 }}>
             Após os 7 dias grátis, apenas R$ 29,90/mês cobrados recorrentemente. Sem fidelidade.
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 8 }}>
+            <button
+              type="button"
+              disabled={restoring}
+              onClick={handleRestore}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                fontSize: '0.68rem',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: '4px 0',
+              }}
+            >
+              {restoring ? 'Restaurando...' : 'Restaurar Compras Anteriores'}
+            </button>
           </div>
         </div>
       </div>

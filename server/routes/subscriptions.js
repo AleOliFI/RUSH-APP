@@ -179,5 +179,95 @@ module.exports = function subscriptionsRoutes(db) {
     }
   });
 
+  // -------------------------------------------------------
+  // POST /api/subscriptions/webhook — Webhook Universal de Pagamentos
+  // Suporta: RevenueCat (Apple Store / Google Play), Stripe e Asaas (Pix)
+  // -------------------------------------------------------
+  router.post('/webhook', (req, res) => {
+    try {
+      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || 'rush_webhook_secret_2026';
+      const authHeader = req.headers.authorization || req.headers['x-webhook-token'];
+
+      // Optional secret validation in production
+      if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${webhookSecret}` && authHeader !== webhookSecret) {
+        return res.status(401).json({ error: 'Webhook signature/token inválido' });
+      }
+
+      const body = req.body || {};
+
+      // =======================================================
+      // CASE 1: RevenueCat Webhook Event (Apple & Google Play)
+      // =======================================================
+      if (body.event) {
+        const event = body.event;
+        const type = event.type; // INITIAL_PURCHASE | RENEWAL | CANCELLATION | EXPIRATION | PRODUCT_CHANGE
+        const appUserId = event.app_user_id;
+        const expirationMs = event.expiration_at_ms;
+        const priceInCents = Math.round((event.price || 29.90) * 100);
+        const store = event.store === 'APP_STORE' ? 'apple_in_app' : event.store === 'PLAY_STORE' ? 'google_play' : 'revenuecat';
+
+        const user = db.prepare('SELECT id FROM users WHERE id = ? OR email = ?').get(appUserId, appUserId);
+        if (user) {
+          const expiresAt = expirationMs ? new Date(expirationMs).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+          if (type === 'INITIAL_PURCHASE' || type === 'RENEWAL' || type === 'NON_RENEWING_PURCHASE') {
+            db.transaction(() => {
+              db.prepare(`
+                UPDATE users SET
+                  subscription_tier = 'pro',
+                  subscription_status = 'active',
+                  subscription_provider = ?,
+                  subscription_expires_at = ?,
+                  updated_at = datetime('now')
+                WHERE id = ?
+              `).run(store, expiresAt, user.id);
+
+              db.prepare(`
+                INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, current_period_end)
+                VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
+              `).run(uuidv4(), user.id, priceInCents, store, expiresAt);
+            })();
+          } else if (type === 'CANCELLATION') {
+            db.prepare("UPDATE users SET subscription_status = 'canceled', updated_at = datetime('now') WHERE id = ?").run(user.id);
+          } else if (type === 'EXPIRATION') {
+            db.prepare("UPDATE users SET subscription_tier = 'free', subscription_status = 'expired', updated_at = datetime('now') WHERE id = ?").run(user.id);
+          }
+        }
+
+        return res.json({ received: true, provider: 'revenuecat', type: type });
+      }
+
+      // =======================================================
+      // CASE 2: Asaas / Pix Webhook Event (Pix Recorrente Brasil)
+      // =======================================================
+      if (body.event === 'PAYMENT_RECEIVED' || body.event === 'PAYMENT_CONFIRMED') {
+        const payment = body.payment || {};
+        const customerEmail = payment.customer?.email || payment.email;
+        const user = db.prepare('SELECT id FROM users WHERE email = ?').get(customerEmail);
+
+        if (user) {
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          db.prepare(`
+            UPDATE users SET
+              subscription_tier = 'pro',
+              subscription_status = 'active',
+              subscription_provider = 'asaas_pix',
+              subscription_expires_at = ?,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(expiresAt, user.id);
+        }
+
+        return res.json({ received: true, provider: 'asaas_pix' });
+      }
+
+      // Default acknowledgment
+      res.json({ received: true, status: 'processed' });
+    } catch (err) {
+      console.error('Webhook processing error:', err);
+      res.status(500).json({ error: 'Erro ao processar webhook de pagamento' });
+    }
+  });
+
   return router;
 };
