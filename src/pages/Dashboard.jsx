@@ -5,12 +5,13 @@ import { hrv, training, activities, notifications, menstrual } from '../api';
 import { 
   Zap, Bell, ChevronRight, Clock, MapPin, Heart, Activity, 
   Flame, ShieldAlert, Sparkles, X, CheckCircle2, Sliders, Moon, Battery, 
-  AlertTriangle, Smile, Play, Award, Check, Target, Camera, Shield, Calendar, ArrowRight
+  AlertTriangle, Smile, Play, Award, Check, Target, Camera, Shield, Calendar, ArrowRight, Bluetooth 
 } from 'lucide-react';
 import RecoveryAlert from '../components/RecoveryAlert';
 import CyclePhaseCard from '../components/CyclePhaseCard';
 import HeartRateZonesModal from '../components/HeartRateZonesModal';
 import CameraHrvMonitor from '../components/CameraHrvMonitor';
+import BluetoothHrvMonitor from '../components/BluetoothHrvMonitor';
 import WarmupGuideModal from '../components/WarmupGuideModal';
 import FieldTestModal from '../components/FieldTestModal';
 import PostWorkoutModal from '../components/PostWorkoutModal';
@@ -64,6 +65,7 @@ export default function Dashboard({ user }) {
   const [cycleData, setCycleData] = useState(null);
   const [isZonesModalOpen, setIsZonesModalOpen] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isBluetoothModalOpen, setIsBluetoothModalOpen] = useState(false);
   const [isWarmupModalOpen, setIsWarmupModalOpen] = useState(false);
   const [isFieldTestModalOpen, setIsFieldTestModalOpen] = useState(false);
   const [isPostWorkoutModalOpen, setIsPostWorkoutModalOpen] = useState(false);
@@ -363,14 +365,23 @@ export default function Dashboard({ user }) {
             {s.explanation_text || statusInfo.desc}
           </p>
 
-          <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <button
               onClick={() => setIsCameraModalOpen(true)}
               className="btn btn-secondary btn-sm"
-              style={{ flex: 1, fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
             >
               <Camera size={13} color="var(--color-primary)" />
-              <span>Medir com Câmera (PPG)</span>
+              <span>Câmera (PPG)</span>
+            </button>
+
+            <button
+              onClick={() => setIsBluetoothModalOpen(true)}
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: 'rgba(0, 214, 143, 0.35)', color: 'var(--status-favorable)' }}
+            >
+              <Bluetooth size={13} color="var(--status-favorable)" />
+              <span>Cinta / Relógio BLE</span>
             </button>
           </div>
         </div>
@@ -379,16 +390,23 @@ export default function Dashboard({ user }) {
           <Heart size={32} color="var(--accent-primary)" style={{ margin: '0 auto 12px' }} />
           <p className="heading-md" style={{ marginBottom: 6 }}>REGISTRE SUA VFC HOJE</p>
           <p className="text-body" style={{ fontSize: '0.82rem', marginBottom: 16 }}>
-            Monitore seu sistema nervoso autônomo ao acordar para calibrar seus treinos.
+            Monitore seu sistema nervoso autônomo ao acordar com precisão para calibrar seus treinos.
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button onClick={() => setIsCameraModalOpen(true)} className="btn btn-primary btn-sm">
-              <Camera size={14} /> Medir com Câmera (60s)
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 360, margin: '0 auto 10px' }}>
+            <button onClick={() => setIsCameraModalOpen(true)} className="btn btn-primary btn-sm" style={{ fontSize: '0.75rem' }}>
+              <Camera size={14} /> Câmera (PPG 60s)
             </button>
-            <button onClick={() => setIsModalOpen(true)} className="btn btn-secondary btn-sm">
-              <Sparkles size={14} /> Digitar Dados
+            <button 
+              onClick={() => setIsBluetoothModalOpen(true)} 
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: '0.75rem', borderColor: 'var(--status-favorable)', color: 'var(--status-favorable)' }}
+            >
+              <Bluetooth size={14} /> Cinta / Relógio BLE
             </button>
           </div>
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '4px 12px', opacity: 0.8 }}>
+            <Sparkles size={12} /> Ou Digitar Manualmente
+          </button>
         </div>
       )}
 
@@ -1046,6 +1064,17 @@ export default function Dashboard({ user }) {
           } catch (e) {
             console.error('Auto save camera HRV error:', e);
           }
+        }}
+      />
+
+      {/* Bluetooth BLE Heart Rate & HRV Sensor Modal */}
+      <BluetoothHrvMonitor
+        isOpen={isBluetoothModalOpen}
+        onClose={() => setIsBluetoothModalOpen(false)}
+        onComplete={async (data) => {
+          setRmssd(String(data.rmssd_ms));
+          setHrRest(String(data.hr_rest_bpm));
+          await loadDashboardData();
         }}
       />
 

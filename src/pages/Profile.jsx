@@ -9,10 +9,11 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Activity, Clock, MapPin, Target, Trophy, Award, 
   CheckCircle2, Shield, Heart, Sparkles, Check, Info, 
-  ExternalLink, Settings, Edit3, Camera, User, Flame, Trash2, Zap 
+  ExternalLink, Settings, Edit3, Camera, User, Flame, Trash2, Zap, Bluetooth 
 } from 'lucide-react';
 import { InstagramIcon, StravaIcon } from '../components/SocialIcons';
 import FieldTestModal from '../components/FieldTestModal';
+import BluetoothHrvMonitor from '../components/BluetoothHrvMonitor';
 
 export default function Profile({ user, onLogout }) {
   const { isPro, openUpgradeModal } = useAuth();
@@ -45,8 +46,9 @@ export default function Profile({ user, onLogout }) {
   const [savingMenstrual, setSavingMenstrual] = useState(false);
   const [menstrualSuccess, setMenstrualSuccess] = useState(false);
 
-  // Field test modal state
+  // Field test & Bluetooth modal state
   const [isFieldTestOpen, setIsFieldTestOpen] = useState(false);
+  const [isBluetoothModalOpen, setIsBluetoothModalOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -559,6 +561,26 @@ export default function Profile({ user, onLogout }) {
               )}
             </div>
 
+            {/* Bluetooth Sensors & Wearables */}
+            <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border-secondary)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                <span className="label-mono" style={{ fontSize: '0.68rem', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--status-favorable)' }}>
+                  <Bluetooth size={14} color="var(--status-favorable)" /> SENSORES CARDÍACOS BLE
+                </span>
+              </div>
+              <p className="text-body" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+                Conecte sua cinta peitoral (Polar H10/H9, Garmin HRM, Wahoo) ou smartwatch para medição de VFC com precisão eletrocardiográfica.
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsBluetoothModalOpen(true)}
+                className="btn btn-secondary btn-sm"
+                style={{ width: '100%', fontSize: '0.78rem', padding: '10px', borderColor: 'rgba(0, 214, 143, 0.35)', color: 'var(--status-favorable)' }}
+              >
+                <Bluetooth size={14} /> Conectar Cinta Peitoral ou Relógio BLE
+              </button>
+            </div>
+
             {/* Apple Guideline 5.1.1: Account Deletion */}
             <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid var(--border-secondary)' }}>
               <span className="label-mono" style={{ fontSize: '0.68rem', color: 'var(--status-recovery)', display: 'block', marginBottom: 6 }}>
@@ -842,6 +864,15 @@ export default function Profile({ user, onLogout }) {
         isOpen={isFieldTestOpen}
         onClose={() => setIsFieldTestOpen(false)}
         onTestCompleted={async () => {
+          await loadData();
+        }}
+      />
+
+      {/* Bluetooth BLE Sensor Modal */}
+      <BluetoothHrvMonitor
+        isOpen={isBluetoothModalOpen}
+        onClose={() => setIsBluetoothModalOpen(false)}
+        onComplete={async () => {
           await loadData();
         }}
       />
