@@ -283,42 +283,51 @@ export default function Profile({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Navigation Tabs (Scrollable Badge Bar) */}
-      <div className="tab-pill-group" style={{ marginBottom: 20 }}>
+      {/* Navigation Tabs (5-Column Segmented Grid — 100% Onscreen Fit) */}
+      <div className="profile-tab-grid">
         <button
           type="button"
-          className={`tab-pill ${tab === 'stats' ? 'tab-pill--active' : ''}`}
+          className={`profile-tab-btn ${tab === 'stats' ? 'active' : ''}`}
           onClick={() => setTab('stats')}
         >
-          <Activity size={13} /> Estatísticas (90d)
+          <Activity size={16} />
+          <span>Stats</span>
         </button>
+
         <button
           type="button"
-          className={`tab-pill ${tab === 'settings' ? 'tab-pill--active' : ''}`}
+          className={`profile-tab-btn ${tab === 'settings' ? 'active' : ''}`}
           onClick={() => setTab('settings')}
         >
-          <Settings size={13} /> Editar Dados
+          <Settings size={16} />
+          <span>Dados</span>
         </button>
+
         <button
           type="button"
-          className={`tab-pill ${tab === 'zones' ? 'tab-pill--active' : ''}`}
+          className={`profile-tab-btn ${tab === 'zones' ? 'active' : ''}`}
           onClick={() => setTab('zones')}
         >
-          <Target size={13} /> Paces & Zonas
+          <Target size={16} />
+          <span>Zonas</span>
         </button>
+
         <button
           type="button"
-          className={`tab-pill ${tab === 'menstrual' ? 'tab-pill--active' : ''}`}
+          className={`profile-tab-btn ${tab === 'menstrual' ? 'active' : ''}`}
           onClick={() => setTab('menstrual')}
         >
-          <Heart size={13} /> Ciclo Hormonal
+          <Heart size={16} />
+          <span>Ciclo</span>
         </button>
+
         <button
           type="button"
-          className={`tab-pill ${tab === 'achievements' ? 'tab-pill--active' : ''}`}
+          className={`profile-tab-btn ${tab === 'achievements' ? 'active' : ''}`}
           onClick={() => setTab('achievements')}
         >
-          <Trophy size={13} /> Conquistas ({earned.length})
+          <Trophy size={16} />
+          <span>Troféus</span>
         </button>
       </div>
 
