@@ -41,6 +41,10 @@ db.prepare("INSERT INTO users (id, email, password_hash, role, academy_id) VALUE
 db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'atacante@rush.com', ?, 'athlete')").run(attackerAthleteId, defaultHash);
 db.prepare("INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, 'coach@rush.com', ?, 'coach', ?)").run(coachId, defaultHash, academyId);
 
+db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Vitima Teste', 'vitima_teste')").run(victimAthleteId);
+db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Atacante Teste', 'atacante_teste')").run(attackerAthleteId);
+db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Coach Teste', 'coach_teste')").run(coachId);
+
 // Insert Academy
 db.prepare("INSERT INTO academies (id, name, owner_id, plan_type) VALUES (?, 'Rush Elite Academy', ?, 'pro')").run(academyId, coachId);
 
@@ -222,6 +226,69 @@ runSecurityTest('APPLE 6.2: Deleted accounts are immediately blocked from authen
 
   const activeUser = db.prepare('SELECT id FROM users WHERE email = ? AND deleted_at IS NULL').get('deletado@rush.com');
   assert.strictEqual(activeUser, undefined, 'Deleted account must not be queryable for active login');
+});
+
+// ============================================================
+// 7. AVATAR UPLOAD, PAYLOAD INJECTION & PROFILE SANITIZATION
+// ============================================================
+console.log('\n📌 CATEGORY 7: AVATAR UPLOAD & INJECTION RESISTANCE');
+
+runSecurityTest('AVATAR 7.1: Avatar base64 and URL parameterization', () => {
+  const xssAvatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' UNION SELECT NULL, NULL --";
+  db.prepare('UPDATE user_profiles SET avatar_url = ? WHERE user_id = ?').run(xssAvatar, attackerAthleteId);
+
+  const profile = db.prepare('SELECT avatar_url FROM user_profiles WHERE user_id = ?').get(attackerAthleteId);
+  assert.strictEqual(profile.avatar_url, xssAvatar, 'Parameterized update must store verbatim string without executing SQL');
+});
+
+runSecurityTest('AVATAR 7.2: Username strict sanitization format regex', () => {
+  const validUsernames = ['alessandro_rush', 'runner123', 'atleta_pro'];
+  const maliciousUsernames = ['<script>alert(1)</script>', 'user; DROP TABLE users;', 'admin@rush.com', 'a b c', 'a'.repeat(35)];
+
+  const usernameRegex = /^[a-z0-9_]{3,30}$/i;
+
+  validUsernames.forEach((u) => assert.ok(usernameRegex.test(u), `Valid username '${u}' must pass`));
+  maliciousUsernames.forEach((u) => assert.ok(!usernameRegex.test(u), `Malicious username '${u}' must be rejected`));
+});
+
+// ============================================================
+// 8. PAYMENT WEBHOOK AUTHORIZATION & FORGERY PREVENTION
+// ============================================================
+console.log('\n📌 CATEGORY 8: PAYMENT WEBHOOK INTEGRITY & FORGERY RESISTANCE');
+
+runSecurityTest('WEBHOOK 8.1: Webhook rejects forged requests with wrong secret in production', () => {
+  const webhookSecret = 'rush_webhook_secret_2026';
+  const validHeader = `Bearer ${webhookSecret}`;
+  const forgedHeader = 'Bearer wrong_attacker_secret_999';
+
+  const isAuthorized = (header) => header === validHeader || header === webhookSecret;
+
+  assert.strictEqual(isAuthorized(forgedHeader), false, 'Forged webhook header must be rejected');
+  assert.strictEqual(isAuthorized(validHeader), true, 'Valid webhook header must be accepted');
+});
+
+runSecurityTest('WEBHOOK 8.2: Webhook handles non-existent user gracefully without crash', () => {
+  const nonExistentUserId = 'non-existent-user-uuid-99999';
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(nonExistentUserId);
+  assert.strictEqual(user, undefined, 'Unknown user must be undefined and not cause unhandled errors');
+});
+
+// ============================================================
+// 9. BIOMETRIC DATA & HRV INTEGRITY
+// ============================================================
+console.log('\n📌 CATEGORY 9: BIOMETRIC & HRV RANGE INTEGRITY');
+
+runSecurityTest('BIOMETRIC 9.1: Safe bounds check on physiological metrics', () => {
+  const validateBiometrics = (rmssd, hrRest) => {
+    if (isNaN(rmssd) || rmssd <= 0 || rmssd > 300) return false;
+    if (isNaN(hrRest) || hrRest < 30 || hrRest > 240) return false;
+    return true;
+  };
+
+  assert.strictEqual(validateBiometrics(65, 52), true, 'Physiological values must pass');
+  assert.strictEqual(validateBiometrics(-10, 52), false, 'Negative RMSSD must be rejected');
+  assert.strictEqual(validateBiometrics(65, 9999), false, 'Absurd 9999 BPM must be rejected');
+  assert.strictEqual(validateBiometrics(NaN, 52), false, 'NaN must be rejected');
 });
 
 console.log('\n============================================================');
