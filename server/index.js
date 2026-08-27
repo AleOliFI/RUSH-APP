@@ -15,17 +15,32 @@ const initializeDatabase = require('./database/schema');
 // Initialize Database
 // ============================================================
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'rush_performance.db');
+const seedDatabase = require('./database/seedData');
+
+const DB_PATH = process.env.VERCEL
+  ? path.join('/tmp', 'rush_performance.db')
+  : path.join(__dirname, '..', 'data', 'rush_performance.db');
 
 // Ensure data directory exists
 const fs = require('fs');
-const dataDir = path.join(__dirname, '..', 'data');
+const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const db = new Database(DB_PATH);
 initializeDatabase(db);
+
+// Auto-seed if running on Vercel or database is newly initialized
+try {
+  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (!userCount || userCount.count === 0) {
+    console.log('⚡ Initializing database with seed data...');
+    seedDatabase(db);
+  }
+} catch (e) {
+  console.warn('Auto-seed check warning:', e.message);
+}
 
 // ============================================================
 // Initialize Express
@@ -212,25 +227,27 @@ app.use((req, res) => {
 });
 
 // ============================================================
-// Start Server
+// Start Server (Standalone / Local Development)
 // ============================================================
 
-app.listen(PORT, () => {
-  console.log('');
-  console.log('🏃 ═══════════════════════════════════════════');
-  console.log('   RUSH PERFORMANCE — API Server');
-  console.log('   ─────────────────────────────────────────');
-  console.log(`   🌐 Server:    http://localhost:${PORT}`);
-  console.log(`   📚 API Docs:  http://localhost:${PORT}/api`);
-  console.log(`   💚 Health:    http://localhost:${PORT}/api/health`);
-  console.log(`   🗄️  Database:  ${DB_PATH}`);
-  console.log('   ─────────────────────────────────────────');
-  console.log('   Endpoints: auth, users, hrv, training,');
-  console.log('   activities, social, challenges, academies,');
-  console.log('   notifications');
-  console.log('🏃 ═══════════════════════════════════════════');
-  console.log('');
-});
+if (require.main === module && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log('');
+    console.log('🏃 ═══════════════════════════════════════════');
+    console.log('   RUSH PERFORMANCE — API Server');
+    console.log('   ─────────────────────────────────────────');
+    console.log(`   🌐 Server:    http://localhost:${PORT}`);
+    console.log(`   📚 API Docs:  http://localhost:${PORT}/api`);
+    console.log(`   💚 Health:    http://localhost:${PORT}/api/health`);
+    console.log(`   🗄️  Database:  ${DB_PATH}`);
+    console.log('   ─────────────────────────────────────────');
+    console.log('   Endpoints: auth, users, hrv, training,');
+    console.log('   activities, social, challenges, academies,');
+    console.log('   notifications');
+    console.log('🏃 ═══════════════════════════════════════════');
+    console.log('');
+  });
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {
