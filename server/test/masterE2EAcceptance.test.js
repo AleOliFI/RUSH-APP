@@ -316,17 +316,37 @@ async function runMasterSuite() {
   const legacyCssPath = path.join(rootDir, 'src', 'styles', 'rush-legacy.css');
   const rushCssPath = path.join(rootDir, 'src', 'styles', 'rush-running.css');
 
-  await it('R2.1: index.html loads typography for both design systems and the dark theme-color', () => {
+  await it('R2.1: a tipografia dos dois design systems é servida pelo próprio app, sem CDN', () => {
     assert.ok(fs.existsSync(indexHtmlPath), 'index.html must exist');
     const htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
-    // Fontes do design system novo (RUSH RUNNING)
-    assert.ok(htmlContent.includes('Anton'), 'index.html must link Anton font');
-    assert.ok(htmlContent.includes('Manrope'), 'index.html must link Manrope font');
-    assert.ok(htmlContent.includes('Material+Symbols') || htmlContent.includes('Material Symbols'), 'index.html must link Material Symbols icon font');
-    // Fontes do legado, ainda usadas pelo painel da assessoria
-    assert.ok(htmlContent.includes('Inter'), 'index.html must link Inter font');
-    assert.ok(htmlContent.includes('Big+Shoulders+Display') || htmlContent.includes('Big Shoulders'), 'index.html must link Big Shoulders Display font');
-    assert.ok(htmlContent.includes('JetBrains+Mono') || htmlContent.includes('JetBrains Mono'), 'index.html must link JetBrains Mono font');
+
+    // As fontes deixaram de vir do Google Fonts: sem rede, os nomes das
+    // ligaduras do Material Symbols apareceriam como texto cru na tela.
+    assert.ok(
+      !htmlContent.includes('fonts.googleapis.com') && !htmlContent.includes('fonts.gstatic.com'),
+      'index.html must not depend on the Google Fonts CDN',
+    );
+    assert.ok(htmlContent.includes('/fonts/fonts.css'), 'index.html must link the locally hosted stylesheet');
+
+    const fontsCssPath = path.join(rootDir, 'public', 'fonts', 'fonts.css');
+    assert.ok(fs.existsSync(fontsCssPath), 'public/fonts/fonts.css must exist');
+    const fontsCss = fs.readFileSync(fontsCssPath, 'utf8');
+
+    // Design system novo (RUSH RUNNING) e legado (painel da assessoria).
+    for (const family of ['Anton', 'Manrope', 'JetBrains Mono', 'Material Symbols Outlined', 'Inter', 'Big Shoulders Display']) {
+      assert.ok(fontsCss.includes(`font-family: '${family}'`), `fonts.css must declare ${family}`);
+    }
+
+    // Cada @font-face precisa apontar para um arquivo que realmente existe.
+    const referenced = [...fontsCss.matchAll(/url\(\/fonts\/([^)]+)\)/g)].map((m) => m[1]);
+    assert.ok(referenced.length > 0, 'fonts.css must reference local font files');
+    for (const file of referenced) {
+      assert.ok(
+        fs.existsSync(path.join(rootDir, 'public', 'fonts', file)),
+        `fonts.css references missing file ${file}`,
+      );
+    }
+
     assert.ok(htmlContent.includes('theme-color') && htmlContent.includes('#0D0D0D'), 'index.html must specify dark theme-color #0D0D0D');
   });
 

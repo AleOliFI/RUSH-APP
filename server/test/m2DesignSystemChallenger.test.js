@@ -22,10 +22,12 @@ const REQUIRED_HEX_COLORS = [
   '#FF3B5C', // Status Recovery (red)
 ];
 
+// Famílias do design system legado, hoje servidas por public/fonts/fonts.css
+// em vez do CDN do Google.
 const REQUIRED_FONTS = [
   'Inter',
-  'Big+Shoulders+Display',
-  'JetBrains+Mono',
+  'Big Shoulders Display',
+  'JetBrains Mono',
 ];
 
 const REQUIRED_DESIGN_CLASSES = [
@@ -89,9 +91,17 @@ const indexHtmlPath = path.join(ROOT_DIR, 'index.html');
 assert(fs.existsSync(indexHtmlPath), 'index.html exists');
 const indexHtmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
 
+assert(indexHtmlContent.includes('/fonts/fonts.css'), 'index.html links the locally hosted font stylesheet');
+assert(
+  !indexHtmlContent.includes('fonts.googleapis.com'),
+  'index.html does not depend on the Google Fonts CDN',
+);
+
+const fontsCssPath = path.join(ROOT_DIR, 'public/fonts/fonts.css');
+assert(fs.existsSync(fontsCssPath), 'public/fonts/fonts.css exists');
+const fontsCssContent = fs.readFileSync(fontsCssPath, 'utf8');
 REQUIRED_FONTS.forEach((font) => {
-  const fontRegex = new RegExp(font.replace(/\+/g, '[ +]'), 'i');
-  assert(fontRegex.test(indexHtmlContent), `index.html contains font link for ${font}`);
+  assert(fontsCssContent.includes(`font-family: '${font}'`), `fonts.css declares ${font}`);
 });
 
 assert(indexHtmlContent.includes('name="viewport"'), 'index.html contains responsive viewport meta tag');
