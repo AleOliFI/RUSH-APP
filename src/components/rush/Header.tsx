@@ -1,5 +1,6 @@
 import React from 'react';
 import { APP_IMAGES } from '../../data/appAssets';
+import { Avatar } from './Avatar';
 import { AthleteProfile, PhysiologicalReadiness } from '../../types';
 
 interface HeaderProps {
@@ -73,10 +74,11 @@ export const Header: React.FC<HeaderProps> = ({
             className="relative flex items-center justify-center p-0.5 rounded-full bg-[#1C1C1C] ring-2 ring-[#FF5500] shadow-[0_0_12px_rgba(255,85,0,0.35)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
             aria-label="Abrir perfil do atleta"
           >
-            <img
-              alt={athlete.name}
-              className="w-8 h-8 rounded-full object-cover"
+            <Avatar
+              name={athlete.name}
               src={athlete.avatarUrl}
+              className="w-8 h-8 rounded-full object-cover"
+              initialsClassName="text-[11px]"
             />
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#22C55E] ring-2 ring-[#0D0D0D]"></span>
           </button>

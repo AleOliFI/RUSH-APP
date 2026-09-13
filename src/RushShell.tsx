@@ -160,6 +160,12 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
       .join(' • ');
   }, [meRaw]);
 
+  /** Atividades com foto, usadas pela galeria da tela inicial. */
+  const photoActivities = useMemo(
+    () => recentActivitiesRaw.filter((activity: any) => !!activity.image_url),
+    [recentActivitiesRaw],
+  );
+
   const viewImage = useCallback((item: ImageViewerItem) => setActiveViewingImage(item), []);
 
   return (
@@ -179,6 +185,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             todayWorkout={todayWorkout}
             weeklySchedule={weeklySchedule}
             weeklySummary={weeklySummary}
+            photoActivities={photoActivities}
             onStartMeasure={() => goToTab('medicao')}
             onViewWorkoutDetails={() => setIsWorkoutDetailOpen(true)}
             onOpenProfile={() => setIsAthleteModalOpen(true)}

@@ -9,6 +9,7 @@ import { ActivityComment } from '../../types';
 import { activities as activitiesApi, social } from '../../api';
 import { timeAgo } from '../../data/adapters';
 import { APP_IMAGES } from '../../data/appAssets';
+import { Avatar } from './Avatar';
 
 interface ActivityCommentsModalProps {
   isOpen: boolean;
@@ -257,10 +258,11 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <img
+                      <Avatar
+                        name={comm.authorName}
                         src={comm.authorAvatar}
-                        alt={comm.authorName}
                         className="w-9 h-9 rounded-full object-cover border border-[#353534]"
+                        initialsClassName="text-[11px]"
                       />
                       <div>
                         <div className="flex items-center gap-1.5">

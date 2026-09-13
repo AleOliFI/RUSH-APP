@@ -12,6 +12,7 @@ import { AthleteProfile } from '../../types';
 import { activities as activitiesApi } from '../../api';
 import { formatDuration, paceFromActivity, timeAgo } from '../../data/adapters';
 import { prepareImageForUpload } from '../../utils/imageUpload';
+import { Avatar } from './Avatar';
 
 interface NewPostModalProps {
   isOpen: boolean;
@@ -175,9 +176,9 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, athlete, onC
           {/* Autor e privacidade */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <img
+              <Avatar
+                name={athlete.name}
                 src={athlete.avatarUrl}
-                alt={athlete.name}
                 className="w-10 h-10 rounded-full object-cover border border-[#353534] shrink-0"
               />
               <div className="min-w-0">

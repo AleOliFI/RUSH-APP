@@ -10,6 +10,8 @@ interface HomeScreenProps {
   todayWorkout: WorkoutPrescription;
   weeklySchedule: DailyMileage[];
   weeklySummary: WeeklySummary;
+  /** Atividades do atleta que têm foto anexada. */
+  photoActivities: any[];
   onStartMeasure: () => void;
   onViewWorkoutDetails: () => void;
   onOpenProfile: () => void;
@@ -27,6 +29,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   todayWorkout,
   weeklySchedule,
   weeklySummary,
+  photoActivities,
   onStartMeasure,
   onViewWorkoutDetails,
   onOpenProfile,
@@ -542,272 +545,83 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </div>
 
-      {/* 6. Central de Mídia & Download de Imagens */}
+      {/* 6. Minhas fotos de treino */}
       <div className="rounded-xl bg-[#141414] p-5 border border-[#262626] space-y-3">
-        <div className="flex items-center justify-between border-b border-[#262626] pb-2.5">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-between border-b border-[#262626] pb-2.5 gap-2">
+          <div className="flex items-center space-x-2 min-w-0">
             <span className="material-symbols-outlined text-[#FF5500] text-[18px]">download_for_offline</span>
-            <div>
+            <div className="min-w-0">
               <span className="font-label-caps text-[9px] text-[#FF5500] uppercase font-black tracking-widest block">
                 ARMAZENAMENTO LOCAL
               </span>
               <h3 className="font-headline-sm text-xs text-[#F7F5F3] uppercase tracking-tight">
-                CENTRAL DE IMAGENS & DOWNLOAD
+                MINHAS FOTOS DE TREINO
               </h3>
             </div>
           </div>
-          <span className="font-telemetry text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/30 px-2 py-0.5 rounded font-bold">
-            4 ATIVOS DISPONÍVEIS
+          <span className="font-telemetry text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/30 px-2 py-0.5 rounded font-bold shrink-0">
+            {photoActivities.length} {photoActivities.length === 1 ? 'FOTO' : 'FOTOS'}
           </span>
         </div>
 
-        <p className="font-body text-xs text-[#737373]">
-          Visualize qualquer imagem em alta resolução e salve os arquivos diretamente no armazenamento local do seu dispositivo:
-        </p>
+        {photoActivities.length === 0 ? (
+          <p className="font-body text-xs text-[#737373] leading-relaxed">
+            Nenhuma foto ainda. Anexe uma imagem ao publicar um treino no feed e ela aparece aqui para
+            visualizar em alta resolução ou salvar no dispositivo.
+          </p>
+        ) : (
+          <>
+            <p className="font-body text-xs text-[#737373]">
+              Visualize em alta resolução ou salve os arquivos no armazenamento local do seu dispositivo:
+            </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-          {/* Asset 1: Workout track */}
-          <div className="bg-[#1C1C1C] rounded-lg border border-[#262626] p-3 flex items-center justify-between space-x-3 hover:border-[#FF5500]/40 transition-colors">
-            <div 
-              className="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer"
-              onClick={handleOpenWorkoutViewer}
-            >
-              <img
-                src={todayWorkout.imageUrl}
-                alt={todayWorkout.title}
-                className="w-12 h-12 rounded object-cover border border-[#333]"
-              />
-              <div className="min-w-0 flex-1">
-                <span className="font-label-caps text-[9px] text-[#FF5500] font-bold uppercase block">
-                  TREINO ZONA 4
-                </span>
-                <span className="font-body text-xs font-bold text-[#F7F5F3] truncate block">
-                  Tartã Noturno 8x400m
-                </span>
-                <span className="font-telemetry text-[10px] text-[#737373]">
-                  PNG • Alta Resolução
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1.5 flex-shrink-0">
-              <button
-                onClick={handleOpenWorkoutViewer}
-                title="Visualizar em tamanho grande"
-                className="w-8 h-8 rounded bg-[#101010] hover:bg-[#262626] text-[#737373] hover:text-[#F7F5F3] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">visibility</span>
-              </button>
-              <button
-                onClick={handleDownloadWorkoutImage}
-                title="Salvar no dispositivo"
-                className="h-8 px-2.5 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                <span>Baixar</span>
-              </button>
-            </div>
-          </div>
+            <div className="space-y-2.5">
+              {photoActivities.slice(0, 6).map((activity) => {
+                const filename = `rush-treino-${activity.id}.jpg`;
+                return (
+                  <div
+                    key={activity.id}
+                    className="bg-[#1C1C1C] rounded-lg border border-[#262626] p-2.5 flex items-center gap-3"
+                  >
+                    <button
+                      onClick={() =>
+                        onViewImage?.({
+                          url: activity.image_url,
+                          title: activity.title || 'Treino',
+                          subtitle: `${(activity.distance_km || 0).toFixed(2)} km`,
+                          category: 'MINHAS FOTOS DE TREINO',
+                          filename,
+                        })
+                      }
+                      className="w-14 h-14 rounded-lg overflow-hidden border border-[#262626] bg-[#101010] shrink-0 cursor-pointer"
+                      aria-label={`Ver foto de ${activity.title || 'treino'}`}
+                    >
+                      <img src={activity.image_url} alt="" className="w-full h-full object-cover" />
+                    </button>
 
-          {/* Asset 2: Rodolfo */}
-          <div className="bg-[#1C1C1C] rounded-lg border border-[#262626] p-3 flex items-center justify-between space-x-3 hover:border-[#FF5500]/40 transition-colors">
-            <div 
-              className="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer"
-              onClick={() => {
-                if (onViewImage) {
-                  onViewImage({
-                    url: APP_IMAGES.rodolfoProfile,
-                    title: 'RODOLFO SILVA (PRO)',
-                    subtitle: 'Passaporte Biométrico RUSH RUNNING',
-                    category: 'FOTO DE ATLETA',
-                    filename: 'rush-running-rodolfo-silva.png',
-                    description: 'Foto oficial do atleta profissional Rodolfo Silva. VO2 Máx 64.2 mL/kg/min, RHR 46 BPM.',
-                  });
-                }
-              }}
-            >
-              <img
-                src={APP_IMAGES.rodolfoProfile}
-                alt="Rodolfo Silva"
-                className="w-12 h-12 rounded object-cover border border-[#333]"
-              />
-              <div className="min-w-0 flex-1">
-                <span className="font-label-caps text-[9px] text-[#FF5500] font-bold uppercase block">
-                  PASSAPORTE PRO
-                </span>
-                <span className="font-body text-xs font-bold text-[#F7F5F3] truncate block">
-                  Rodolfo Silva
-                </span>
-                <span className="font-telemetry text-[10px] text-[#737373]">
-                  PNG • Biometria
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1.5 flex-shrink-0">
-              <button
-                onClick={() => {
-                  if (onViewImage) {
-                    onViewImage({
-                      url: APP_IMAGES.rodolfoProfile,
-                      title: 'RODOLFO SILVA (PRO)',
-                      subtitle: 'Passaporte Biométrico RUSH RUNNING',
-                      category: 'FOTO DE ATLETA',
-                      filename: 'rush-running-rodolfo-silva.png',
-                      description: 'Foto oficial do atleta profissional Rodolfo Silva. VO2 Máx 64.2 mL/kg/min, RHR 46 BPM.',
-                    });
-                  }
-                }}
-                title="Visualizar em tamanho grande"
-                className="w-8 h-8 rounded bg-[#101010] hover:bg-[#262626] text-[#737373] hover:text-[#F7F5F3] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">visibility</span>
-              </button>
-              <button
-                onClick={async () => {
-                  await downloadImageToDevice(APP_IMAGES.rodolfoProfile, 'rush-running-rodolfo-silva.png');
-                }}
-                title="Salvar no dispositivo"
-                className="h-8 px-2.5 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                <span>Baixar</span>
-              </button>
-            </div>
-          </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-headline-sm text-xs text-[#F7F5F3] uppercase truncate block">
+                        {activity.title || 'Treino'}
+                      </span>
+                      <span className="font-telemetry text-[10px] text-[#737373]">
+                        {(activity.distance_km || 0).toFixed(2)} km • JPG
+                      </span>
+                    </div>
 
-          {/* Asset 3: Camila */}
-          <div className="bg-[#1C1C1C] rounded-lg border border-[#262626] p-3 flex items-center justify-between space-x-3 hover:border-[#FF5500]/40 transition-colors">
-            <div 
-              className="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer"
-              onClick={() => {
-                if (onViewImage) {
-                  onViewImage({
-                    url: APP_IMAGES.headerAvatar,
-                    title: 'CAMILA ROCHA (PRO)',
-                    subtitle: 'Passaporte Biométrico RUSH RUNNING',
-                    category: 'FOTO DE ATLETA',
-                    filename: 'rush-running-camila-rocha.png',
-                    description: 'Foto oficial da atleta profissional Camila Rocha. VO2 Máx 61.8 mL/kg/min, RHR 44 BPM.',
-                  });
-                }
-              }}
-            >
-              <img
-                src={APP_IMAGES.headerAvatar}
-                alt="Camila Rocha"
-                className="w-12 h-12 rounded object-cover border border-[#333]"
-              />
-              <div className="min-w-0 flex-1">
-                <span className="font-label-caps text-[9px] text-[#FF5500] font-bold uppercase block">
-                  PASSAPORTE PRO
-                </span>
-                <span className="font-body text-xs font-bold text-[#F7F5F3] truncate block">
-                  Camila Rocha
-                </span>
-                <span className="font-telemetry text-[10px] text-[#737373]">
-                  PNG • Biometria
-                </span>
-              </div>
+                    <button
+                      onClick={() => downloadImageToDevice(activity.image_url, filename, activity.title)}
+                      title="Salvar no dispositivo"
+                      className="h-8 px-2.5 shrink-0 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">download</span>
+                      <span>Baixar</span>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center space-x-1.5 flex-shrink-0">
-              <button
-                onClick={() => {
-                  if (onViewImage) {
-                    onViewImage({
-                      url: APP_IMAGES.headerAvatar,
-                      title: 'CAMILA ROCHA (PRO)',
-                      subtitle: 'Passaporte Biométrico RUSH RUNNING',
-                      category: 'FOTO DE ATLETA',
-                      filename: 'rush-running-camila-rocha.png',
-                      description: 'Foto oficial da atleta profissional Camila Rocha. VO2 Máx 61.8 mL/kg/min, RHR 44 BPM.',
-                    });
-                  }
-                }}
-                title="Visualizar em tamanho grande"
-                className="w-8 h-8 rounded bg-[#101010] hover:bg-[#262626] text-[#737373] hover:text-[#F7F5F3] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">visibility</span>
-              </button>
-              <button
-                onClick={async () => {
-                  await downloadImageToDevice(APP_IMAGES.headerAvatar, 'rush-running-camila-rocha.png');
-                }}
-                title="Salvar no dispositivo"
-                className="h-8 px-2.5 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                <span>Baixar</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Asset 4: Logo */}
-          <div className="bg-[#1C1C1C] rounded-lg border border-[#262626] p-3 flex items-center justify-between space-x-3 hover:border-[#FF5500]/40 transition-colors">
-            <div 
-              className="flex items-center space-x-2.5 min-w-0 flex-1 cursor-pointer"
-              onClick={() => {
-                if (onViewImage) {
-                  onViewImage({
-                    url: APP_IMAGES.logo,
-                    title: 'RUSH RUNNING PRO LOGO',
-                    subtitle: 'Identidade Visual Oficial',
-                    category: 'BRAND IDENTITY',
-                    filename: 'rush-running-logo.png',
-                    description: 'Logotipo oficial de alta fidelidade RUSH RUNNING PRO em estética Kinetic Telemetry.',
-                  });
-                }
-              }}
-            >
-              <div className="w-12 h-12 rounded bg-[#0D0D0D] border border-[#333] flex items-center justify-center p-1.5">
-                <img
-                  src={APP_IMAGES.logo}
-                  alt="Logo RUSH RUNNING"
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="font-label-caps text-[9px] text-[#FF5500] font-bold uppercase block">
-                  BRAND ASSET
-                </span>
-                <span className="font-body text-xs font-bold text-[#F7F5F3] truncate block">
-                  Logo Oficial RUSH PRO
-                </span>
-                <span className="font-telemetry text-[10px] text-[#737373]">
-                  PNG / Vetorial
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1.5 flex-shrink-0">
-              <button
-                onClick={() => {
-                  if (onViewImage) {
-                    onViewImage({
-                      url: APP_IMAGES.logo,
-                      title: 'RUSH RUNNING PRO LOGO',
-                      subtitle: 'Identidade Visual Oficial',
-                      category: 'BRAND IDENTITY',
-                      filename: 'rush-running-logo.png',
-                      description: 'Logotipo oficial de alta fidelidade RUSH RUNNING PRO em estética Kinetic Telemetry.',
-                    });
-                  }
-                }}
-                title="Visualizar em tamanho grande"
-                className="w-8 h-8 rounded bg-[#101010] hover:bg-[#262626] text-[#737373] hover:text-[#F7F5F3] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">visibility</span>
-              </button>
-              <button
-                onClick={async () => {
-                  await downloadImageToDevice(APP_IMAGES.logo, 'rush-running-logo.png');
-                }}
-                title="Salvar no dispositivo"
-                className="h-8 px-2.5 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
-              >
-                <span className="material-symbols-outlined text-[14px]">download</span>
-                <span>Baixar</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

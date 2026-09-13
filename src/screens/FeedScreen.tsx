@@ -1,6 +1,7 @@
 import React from 'react';
 import { FeedPost, ImageViewerItem } from '../types';
 import { downloadImageToDevice } from '../utils/imageDownload';
+import { Avatar } from '../components/rush/Avatar';
 import type { FeedChannel } from '../hooks/useRushData';
 
 interface FeedScreenProps {
@@ -135,10 +136,11 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             {/* Post Header */}
             <div className="p-4 pb-0 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <img
+                <Avatar
+                  name={post.authorName}
                   src={post.authorAvatar}
-                  alt={post.authorName}
                   className="w-11 h-11 rounded-full object-cover border border-[#353534]"
+                  initialsClassName="text-sm"
                 />
                 <div>
                   <div className="flex items-center gap-1.5">
