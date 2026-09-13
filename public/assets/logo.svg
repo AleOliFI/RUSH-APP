@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56" width="200" height="56" role="img" aria-label="RUSH">
+  <rect width="200" height="56" fill="none"/>
+  <path d="M6 46 L20 10 h10 l-14 36 z" fill="#FF5500"/>
+  <path d="M24 46 L38 10 h10 L34 46 z" fill="#FF5500" opacity="0.55"/>
+  <text x="58" y="42" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="34" font-weight="900"
+        letter-spacing="2" fill="#F7F5F3">RUSH</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" width="400" height="240" role="img" aria-label="Calçado de corrida">
+  <rect width="400" height="240" fill="#101010"/>
+  <path d="M40 170 C60 120 110 120 150 128 C190 136 210 110 250 104 C300 96 350 120 360 160 L360 176 C360 184 352 190 344 190 L56 190 C46 190 38 182 40 170 Z" fill="#38BDF8" opacity="0.9"/>
+  <path d="M40 176 L360 176 L360 190 C360 196 354 200 348 200 L52 200 C45 200 40 195 40 188 Z" fill="#F7F5F3" opacity="0.35"/>
+  <path d="M120 146 C160 154 200 130 240 120" stroke="#0D0D0D" stroke-width="6" fill="none" opacity="0.4"/>
+</svg>

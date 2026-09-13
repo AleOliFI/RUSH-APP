@@ -1,33 +1,29 @@
 // ============================================================
 // RUSH RUNNING — Assets estáticos do app
 // ------------------------------------------------------------
-// ATENÇÃO: estas URLs vieram do protótipo e apontam para o CDN
-// temporário do Google AI Studio (lh3.googleusercontent.com/aida/...).
-// São endereços efêmeros: vão parar de responder. Antes de publicar,
-// estes arquivos precisam ser hospedados junto do app (ex.: /public).
+// As URLs originais vinham do CDN temporário do protótipo
+// (lh3.googleusercontent.com/aida/...), que é efêmero. Elas foram
+// trocadas por arquivos servidos pelo próprio app, em /public/assets.
+//
+// Os arquivos atuais são gráficos vetoriais neutros (marca, avatar
+// genérico, ilustração por tipo de sessão e silhueta de calçado):
+// NÃO são as fotos do protótipo — o ambiente de desenvolvimento não
+// conseguiu baixá-las antes de o CDN parar de responder. Para usar
+// fotos reais, basta substituir os arquivos em /public/assets
+// mantendo os mesmos nomes; nenhum código precisa mudar.
 //
 // Os dados mockados do protótipo (atletas, feed, tênis, comentários,
 // treinos) foram removidos: todas as telas agora leem da API.
 // ============================================================
 
 export const APP_IMAGES = {
-  logo: 'https://lh3.googleusercontent.com/aida/AEtjO1USUAcLlwAZxx3caxw0x0BZ_fA8aeROFIpq-Or3ORIp9-7QdpamdF_qhBSVddCtyszW57SQ5wxDjXTaFNN6ZIV_ng2u0k8wNKFIQ6gLeP_9OuEe9YpjeycG4WBeX8H2J91k3Irz5BHUTBnoViNm3P08ET3ZJ1LKyJvi_17J0U_60K9CmGXOyxUCzyQFUgu-vFqw4wUyrFDJ-TutKqkQpmN-Nw4Nu4l_XcymH1M1aERP03X2r97ImZKpJ04',
-  headerAvatar: 'https://lh3.googleusercontent.com/aida/AEtjO1XvPhuypywyEQ-BrcL4kOil_ogDeBTC7pBDUl6sF-u0oU6VvOXP7c2AxkfgB9S3WRxs-GfGu83DTMq-BTGSnatAyGhKqFXYAbczKQ8uqwBbcysq5W64Gt0EdwOSVkthPJoTLg-2IzFznXTC4YoI5E9Mxm7OK7UmaGbIuPWBQGTd9ed8Ss28WaSvvdla7n68xmmKHLkfdH6zKF22K8VQbUtCAPzmD7oBYMO1S1OCMYeHoGsweLFBd6oO7NM',
-  rodolfoProfile: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD7-p8h9SAaz5_9D6xzR126EmrW3OEbHDvReYegzvHo2_-_dmCzSxePrH7zxP18kcVGo7a04prz_CY1v6vBFFx-dG0zZBVV1B4_2qEiGfH_INxgMON2wryNbAuw_DmAroy3YmVve5J454Mq7TQ6qbJ4DN5xgMpU3rRbl8D1uetgjBHTNjWm670DFDiu9WMeH-YO-YbyWecbAlvTOqoQdpMmG2j8hUTKfDFYSp6WDHbCl1d1rGZAvS35',
-  workoutSprintTrack: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDsHIa6AcwHUz-Cktq2pjqHF699SXIABKWwa73vz7KMjYE8KpFzKSK3bASGHhmWetiyKuEOTIYNs_oWxcJtZu6J_ONELq6wh-wpJax7utIpGU0zGs-yOAUTFEzwKbMGOmYTesw_fDY3g4Q6aZMO5VUPos3YGYmj21rN4JaPVJhSVt5nIi4Me6CQmVyMdeDZmTeU4kfxfQZ_Ht98ENoPby1Skal_dDZfdAStSP2ysWf54lRs-S6VvxwI',
-  marianaPortrait: 'https://lh3.googleusercontent.com/aida/AEtjO1XvPhuypywyEQ-BrcL4kOil_ogDeBTC7pBDUl6sF-u0oU6VvOXP7c2AxkfgB9S3WRxs-GfGu83DTMq-BTGSnatAyGhKqFXYAbczKQ8uqwBbcysq5W64Gt0EdwOSVkthPJoTLg-2IzFznXTC4YoI5E9Mxm7OK7UmaGbIuPWBQGTd9ed8Ss28WaSvvdla7n68xmmKHLkfdH6zKF22K8VQbUtCAPzmD7oBYMO1S1OCMYeHoGsweLFBd6oO7NM',
-  marianaActionRunning: 'https://lh3.googleusercontent.com/aida/AEtjO1Ul3FQeZI5UFWbWHR3h96HB1fhTP9ljJZZWoZIO_KfnZRsXEw2nbaCsgyt4RPQHYkHlPWduN5ZiC-8sLzFl9GK9x7Ox9-MU882fMaarGneToq5BbYzGiYjXH2MljBxBpaxDnXbQM3KA9nf7FXxEXhkQpDfGgowG2Uo19B_2HbeDN3Xo2moUaVT34SJG7ZW3AVt1k6E0KPojFWZ42kanhTgVcgqU2-BQzaMM-oQ5atb3rrJqYP1Fd11RhJM',
-  marianaSunlight: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBRYQwBSlNwpXgA7Eu1QrWY__8oUeSOFLIzzx18pydKzBPexwt96RBb6tP4R0Kq3bbRRf-z0ktr1mdlhYrptunHZW0AFhXJnDD5EQ4YBsQP-d9Zfy14sr0p0OTYuIxlxg1CfQk2TUPM1WbE1zjxRFKSd3xy5JZd46BTwMObCRF4wpwntFDUtJaQ3I0d0m-5_IE2ZYwdy_qXFscpOprWsZe9xrx6nmOF8SnSCpmLM8UXBF74lgjiZG58',
-  marcosSilvaActivity: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCgoUiwT0RrhmC3rQOYNIUsL-UXqnRCUWCT_LjzxpLOQzQQwIPXNrlS5g8E-NBCUPv2M1uQBHdLGfXgItiSsijPq5-2bnTsKW_-g_2ibfWroVhm-AUETtWDiH2DGcDLFkD75k8rDQutk0bybzZsWMXRxH_xG4_qp2U1Fm6BjeKZLep5rS9UM6owvZ5sdVsmy7q6-aGSRRdHNHiKdrIWHFD6lHBjI_Rch7-N6FOnyNH_ovusmrwYxlBT',
-  marcosSilvaAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAfGIVXU-qy-H7-h5UpVdfmvzxyV77o3OU-0b-mHzk8ycaCYOLbaGRFBgrTd12N4bgYw8UHdHCV5I_FGAfuCABiQ8f8pgINDkY_gZlPRBFFDNhH0P93iHFsKQjVGDY_TCqObXA4eBtCQLgjMsHBWB4QzU6mt5znKX3_JsU_mA_KtNq2_11ydpUV6N6e26hB1tsiBjG_BhJL1Q2ldr9UxRNnj43sCUkVE8iGwPR5dDES2Rqe49H4qh0c',
-  camilaTrackPhoto: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCbn2h6nmF-Ul_ftghQ5juyflYIlITvs_53ruHQM_zf1i90OHU7D0wgBY9rl3-BCPoNT0hhelPYnC43kAst7DdGKVF7R-Jnu9FLtwy6bim2IHtwCJUojgm9ndRHZJO9FUFsMXApO-B4iskfdUkptDycyh8UfRVOoC9G4Ae0JSF66yYpz_3CDgK-K8dS6ztEj0Fj8D9zEzHiRcmEBq3nglq0UiP9UxbOL_CM53Ax5nUY3IPiYyaOUdax',
-  camilaAvatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCtB8nIpkpZ787-ob_tMltsz0ri7LBYvAi-rosQo3JpzDqgkBp17LVs4rZ50_chnxmd225hvm5mhmOIe0uU7-aW_mj-mNONK1Z3Jd2tBVvV84r3nUW1AwxTZk1Y1o47OVe0o27t9G6-S5o59ezRu6Gt7W50SHyw-w6rfBtUDkD153MBWYPuYKpwe_ltWbiKsiDFMd3ZZHq8zcBddIHyw5nQzZCtP5imdfRpXdE9NVOlziuWPfbK-mye',
-  wornShoeAsics: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB09Ns-iSxEhmQv9DMe2FcLAZT5oqDV1ZXvFWUbl0HGiFJMqR8J55U2dQfIHyYWt04cwSwy8XomoGYqO6A33XcGHHX2Hwai4zNUH4ETgLhJ265Pwz_CEaxJmglqF2ViKOalFrUCOPxaZ2ALgsa9157wzEtg7-S24pEcqpa0aFfe0B46DZ2U76-gUdr2odOqJs9TVgwGTHmtuFunQzY_OsXY1fZRCXVbqDK2wwPw_6WPvYV7BnYKP5cy',
-  replacementVoltXenon: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB9ZIycKY791msba3v5y_zqLxEXyeiaEV8AfW_gRtL8W_KRVNqMbszsG2LaMNklMGGR-TzEoZaLsieYUuByk7d8c79YWZAgSzLkWt0j_eeupiLuhYdICn-3eg4ae53AOB9csEbHel9AS9G0kcWYul1vcxsDFe93fHW61x83tJrrv-nS_0YqbvZyDAvGySVgabTiGyqYY2wOyq1wXQTvnLUhz82YpOPMkK8YlbwsL9LlJFom4sNCV-cD',
-  replacementAuroraElite: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDqiusTB4L7OnzuXHXTtRiZFA91wJWd8kLl5wsK10vHC3rWCb_QiHZ6-dL8XwX2QayoxRFEWczTgc25NCZQZ8wlrLz4IuVDP4cQXDy-kk4MGgY0Kl3APv4gWg5kv03RPWHrX6JIVbA37VV2zqqWadUrnnm32hxU953F_ZJ3Fa80rQygny5x3bB4yzcM17RnyHDCaDS648AW6NEqjSo-L8HBfi0DNaQ66htqBArG0SAwGmCDdEq-CSRW',
-  shoeAlphafly: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDnAK1kawNlFV3LV06FOZgp9Fc2vZBq4sAg3FhxaVw4zKqldntK6nQHs05bu2Oa50jv1tN58QlVRkFTQMf3YtOukdQBVu2yJPj2dkWxvSKPapFvpmM6JtEDeX97FaoVeaMVaayv9yZMxdxCHwtJFGfo5co0b68yvQtdl8nLWY0RFUJ57eafDxDMF4sblwgqhCTuVoelNufwL4ZRROq2K1lh2YcQx87Koq_bAuZ78a4oFED1y1Z09Dmm',
-  shoeSuperblast: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDRjeRZcDYummdSbqQGGX4v29IEYWsxXd-pkhQ0dPrkoTg_zZWdOmxROBEWplyoM73h6tRXbkufyI-luSlc0-tKWjbHWUM9EF38iYJXPgLMVbUQNHAKnu8Dhc0_M0DmiOQm9IJ55dvb2Jld74qvSSm_GVome7CXm9-UG4nFyg1qjgFmqo4kbTNt5gke1hwEQKBELZKwiEMQknlw_pdTWWr7c7G10mvx3hKTHRotrfsPpW2lXGLE-pT-',
-  shoeEndorphin: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCJnU7NFK1apcdOikM35MfJQqiEpvwH_NLyXq3aIgFy31oSeGGxeeY5e_1-ZGABKt9QntVqJuWQSmRkCxC2fM49_s1Q1yjFIVAqxGeeNjH6Q056X688g9GYSFlG55PZZ2nPdB5IpQFsLIIMkT3heJ2FBf9s1sueQBbmyHnV_7Xzc8juNXRpWImYu9MVSSg_lWTArO-UE4_XOUXtsj8inxLwCvTVFpphgtDxKojwfn44Kone-BanhXdv',
-  coachPhoto: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBFd4nU1hvogEXmWRm_dHVe7olYMpkvoCrEScP9D7PzEjpd5rkbrqKMZRPf65Jpi4aIlat31UvkJZtSB_wjTGPbDM1m4Ig0_dU2awcOAlAo-noGm5z2iESooHIfMH1WnbGgGWFWjcT3aDmS_Q0M9iAhBMQByavx1a-UHZq2ynMib0V4mXi5k8W8B_vVAdl10Omkihmz82hPwV3sEwvwZqEQnYiOfyDueDYPTjXpKLqd8yhjTrUx4sMK',
-  proHeroBanner: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBnGhVQBlqcSpeeEExkX4kjaZu-5cYY-WYqkuO9caVRqite-RIDVqeuQn58JJOgA6RvX1tf8j8WcDgMeuUSIwoG1RLILvSSoL7dABC56O0oyQ4FNJhz1H-Kh4GB1RmfTaidRXv4WuomQETx_X4sz4n1ER64UPKdqixxDazCPPDCrHcX7gxDw85KX16q3Y0oDnJq7qSqHSx9g0avlUjPm3twDvb1PhtjZcgHdmOYmcRm3S8BlHrMV6tx',
+  logo: '/assets/logo.svg',
+  headerAvatar: '/assets/avatar-placeholder.svg',
+  workoutSprintTrack: '/assets/session-interval.svg',
+  marianaActionRunning: '/assets/session-tempo.svg',
+  marianaSunlight: '/assets/session-long.svg',
+  shoeAlphafly: '/assets/shoe-1.svg',
+  shoeSuperblast: '/assets/shoe-2.svg',
+  shoeEndorphin: '/assets/shoe-3.svg',
+  wornShoeAsics: '/assets/shoe-worn.svg',
 };
