@@ -50,16 +50,15 @@ const REQUIRED_DESIGN_CLASSES = [
   'orange-glow',
 ];
 
+// As páginas .jsx legadas (Login, Onboarding, Dashboard, Feed, Training,
+// Profile) foram substituídas pelas telas em src/screens, montadas pelo
+// RushShell. Restam aqui o shell da aplicação e a barra inferior legada,
+// que ainda serve o painel da assessoria (/coach).
 const PAGES_AND_COMPONENTS = [
   { name: 'App.jsx', file: 'src/App.jsx', requiredClasses: ['app-shell'] },
   { name: 'BottomNav.jsx', file: 'src/components/BottomNav.jsx', requiredClasses: ['bottom-nav', 'nav-item'] },
-  { name: 'Login.jsx', file: 'src/pages/Login.jsx', requiredClasses: ['onboarding', 'live-dot', 'label-mono', 'display-massive', 'text-gradient', 'tabs', 'tab', 'input', 'btn', 'btn-primary'] },
-  { name: 'Onboarding.jsx', file: 'src/pages/Onboarding.jsx', requiredClasses: ['onboarding', 'live-dot', 'label-mono', 'heading-xl', 'text-gradient', 'progress-bar', 'progress-fill', 'distance-grid', 'distance-card', 'btn'] },
-  { name: 'Dashboard.jsx', file: 'src/pages/Dashboard.jsx', requiredClasses: ['page', 'top-bar', 'logo', 'live-dot', 'label-mono', 'display-title', 'text-gradient', 'status-hero', 'status-badge', 'scoreboard', 'card-surface', 'workout-card'] },
-  { name: 'Feed.jsx', file: 'src/pages/Feed.jsx', requiredClasses: ['page', 'top-bar', 'live-dot', 'label-mono', 'heading-lg', 'tabs', 'tab', 'feed-card', 'avatar', 'feed-stats-row', 'feed-stat', 'scoreboard', 'feed-actions', 'feed-action'] },
-  { name: 'Training.jsx', file: 'src/pages/Training.jsx', requiredClasses: ['page', 'top-bar', 'live-dot', 'label-mono', 'heading-lg', 'tabs', 'tab', 'card-surface', 'display-massive', 'text-gradient', 'progress-bar', 'progress-fill', 'scoreboard', 'card'] },
-  { name: 'Profile.jsx', file: 'src/pages/Profile.jsx', requiredClasses: ['page', 'top-bar', 'live-dot', 'label-mono', 'heading-lg', 'card-surface', 'avatar', 'avatar-lg', 'orange-glow', 'text-gradient', 'profile-stats', 'profile-stat', 'scoreboard', 'tabs', 'tab', 'display-massive', 'card'] },
 ];
+
 
 let totalTests = 0;
 let passedTests = 0;
@@ -96,15 +95,24 @@ REQUIRED_FONTS.forEach((font) => {
 });
 
 assert(indexHtmlContent.includes('name="viewport"'), 'index.html contains responsive viewport meta tag');
-assert(indexHtmlContent.includes('theme-color') && indexHtmlContent.includes('#0f0f0f'), 'index.html has dark theme-color #0f0f0f');
+assert(
+  indexHtmlContent.includes('theme-color') && /#0[dDfF]0[dDfF]0[dDfF]/.test(indexHtmlContent),
+  'index.html has a dark theme-color (#0D0D0D no design system novo, #0f0f0f no legado)',
+);
 
 // ------------------------------------------------------------
 // 2. Verify src/index.css Design System Tokens & Classes
 // ------------------------------------------------------------
-console.log('\n--- Step 2: src/index.css Verification ---');
+console.log('\n--- Step 2: legacy design system stylesheet Verification ---');
+// src/index.css virou apenas o orquestrador das camadas; o design system
+// legado (usado por /coach) vive em src/styles/rush-legacy.css.
 const indexCssPath = path.join(ROOT_DIR, 'src/index.css');
+const legacyCssPath = path.join(ROOT_DIR, 'src/styles/rush-legacy.css');
 assert(fs.existsSync(indexCssPath), 'src/index.css exists');
-const indexCssContent = fs.readFileSync(indexCssPath, 'utf8');
+assert(fs.existsSync(legacyCssPath), 'src/styles/rush-legacy.css exists');
+const orchestratorCss = fs.readFileSync(indexCssPath, 'utf8');
+assert(orchestratorCss.includes('rush-legacy'), 'src/index.css imports the legacy stylesheet');
+const indexCssContent = fs.readFileSync(legacyCssPath, 'utf8');
 
 console.log('Checking required Hex Colors in index.css:');
 REQUIRED_HEX_COLORS.forEach((hex) => {

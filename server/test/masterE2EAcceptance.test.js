@@ -370,24 +370,42 @@ async function runMasterSuite() {
     assert.ok(mainJs.includes('measureText'), 'main.jsx must detect the icon font by measuring text, not document.fonts.check');
   });
 
-  await it('R2.4: All 6 Page views (Login, Onboarding, Dashboard, Feed, Training, Profile) and BottomNav exist and use design system classes', () => {
-    const pages = [
-      { file: 'src/pages/Login.jsx', required: ['display-massive', 'text-gradient', 'btn-primary'] },
-      { file: 'src/pages/Onboarding.jsx', required: ['heading-xl', 'distance-grid', 'btn'] },
-      { file: 'src/pages/Dashboard.jsx', required: ['status-hero', 'scoreboard', 'card-surface'] },
-      { file: 'src/pages/Feed.jsx', required: ['feed-card', 'scoreboard', 'feed-actions'] },
-      { file: 'src/pages/Training.jsx', required: ['card-surface', 'display-massive', 'scoreboard'] },
-      { file: 'src/pages/Profile.jsx', required: ['profile-stats', 'scoreboard', 'orange-glow'] },
-      { file: 'src/components/BottomNav.jsx', required: ['bottom-nav', 'nav-item'] },
+  await it('R2.4: as 8 telas do design system novo existem, são montadas pelo shell e a nav legada segue no painel da assessoria', () => {
+    // As páginas .jsx antigas (src/pages/Login, Onboarding, Dashboard, Feed,
+    // Training, Profile) foram removidas: o app autenticado é montado pelo
+    // RushShell a partir das telas em src/screens. O painel /coach continua
+    // no design system legado e por isso mantém BottomNav.jsx.
+    const screens = [
+      'LoginScreen', 'OnboardingScreen', 'HomeScreen', 'MeasurementScreen',
+      'WorkoutsScreen', 'FeedScreen', 'ProScreen', 'ProfileScreen',
     ];
 
-    for (const page of pages) {
-      const pagePath = path.join(rootDir, page.file);
-      assert.ok(fs.existsSync(pagePath), `${page.file} must exist`);
-      const content = fs.readFileSync(pagePath, 'utf8');
-      for (const reqClass of page.required) {
-        assert.ok(content.includes(reqClass), `${page.file} must contain design class "${reqClass}"`);
-      }
+    for (const screen of screens) {
+      const screenPath = path.join(rootDir, 'src', 'screens', `${screen}.tsx`);
+      assert.ok(fs.existsSync(screenPath), `src/screens/${screen}.tsx must exist`);
+    }
+
+    const shell = fs.readFileSync(path.join(rootDir, 'src', 'RushShell.tsx'), 'utf8');
+    for (const screen of ['HomeScreen', 'MeasurementScreen', 'WorkoutsScreen', 'FeedScreen', 'ProScreen', 'ProfileScreen']) {
+      assert.ok(shell.includes(`<${screen}`), `RushShell must render ${screen}`);
+    }
+
+    const appJsx = fs.readFileSync(path.join(rootDir, 'src', 'App.jsx'), 'utf8');
+    assert.ok(appJsx.includes('RushShell'), 'App.jsx must route the authenticated area through RushShell');
+    assert.ok(appJsx.includes('LoginScreen'), 'App.jsx must route /login through LoginScreen');
+    assert.ok(appJsx.includes('OnboardingScreen'), 'App.jsx must route /onboarding through OnboardingScreen');
+
+    for (const orphan of ['Login', 'Onboarding', 'Dashboard', 'Feed', 'Training', 'Profile']) {
+      assert.ok(
+        !fs.existsSync(path.join(rootDir, 'src', 'pages', `${orphan}.jsx`)),
+        `src/pages/${orphan}.jsx was replaced by src/screens and must not come back`,
+      );
+    }
+
+    // A barra inferior legada ainda serve o painel da assessoria.
+    const legacyNav = fs.readFileSync(path.join(rootDir, 'src', 'components', 'BottomNav.jsx'), 'utf8');
+    for (const cls of ['bottom-nav', 'nav-item']) {
+      assert.ok(legacyNav.includes(cls), `BottomNav.jsx must contain design class "${cls}"`);
     }
   });
 
