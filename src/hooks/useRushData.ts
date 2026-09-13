@@ -5,7 +5,15 @@
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { activities as activitiesApi, challenges as challengesApi, hrv, social, training, users } from '../api';
+import {
+  activities as activitiesApi,
+  challenges as challengesApi,
+  hrv,
+  social,
+  subscriptions as subscriptionsApi,
+  training,
+  users,
+} from '../api';
 import {
   AthleteProfile,
   DailyMileage,
@@ -91,6 +99,13 @@ export interface RushData {
   toggleKudo: (postId: string) => Promise<void>;
   activeChallenge: any | null;
   joinChallenge: (id: string) => Promise<void>;
+  trainingLoad: any | null;
+  hrvHistory: any[];
+  vo2maxRaw: any;
+  devices: any[];
+  subscription: any | null;
+  recentActivitiesRaw: any[];
+  reloadDevices: () => Promise<void>;
   hrvStatusRaw: any;
   planRaw: any;
   profileRaw: any;
@@ -149,6 +164,12 @@ export function useRushData(): RushData {
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
   const [activeChallenge, setActiveChallenge] = useState<any | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [trainingLoad, setTrainingLoad] = useState<any | null>(null);
+  const [hrvHistory, setHrvHistory] = useState<any[]>([]);
+  const [vo2maxRaw, setVo2maxRaw] = useState<any>(null);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [subscription, setSubscription] = useState<any | null>(null);
+  const [recentActivitiesRaw, setRecentActivitiesRaw] = useState<any[]>([]);
   const [hrvStatusRaw, setHrvStatusRaw] = useState<any>(null);
   const [planRaw, setPlanRaw] = useState<any>(null);
   const [profileRaw, setProfileRaw] = useState<any>(null);
@@ -181,6 +202,13 @@ export function useRushData(): RushData {
           safe(social.feed(CHANNEL_SCOPE[feedChannel], 1)),
         ]);
 
+      const [load, history, deviceList, subStatus] = await Promise.all([
+        safe(activitiesApi.trainingLoad()),
+        safe(hrv.history(28)),
+        safe(users.devices()),
+        safe(subscriptionsApi.status()),
+      ]);
+
       if (!mounted.current) return;
 
       if (!me) {
@@ -198,6 +226,12 @@ export function useRushData(): RushData {
       setPlanRaw(plan);
       setProfileRaw(profile);
       setRecordsRaw(records);
+      setTrainingLoad(load);
+      setHrvHistory(history?.measurements || []);
+      setVo2maxRaw(vo2max);
+      setDevices(deviceList?.devices || []);
+      setSubscription(subStatus);
+      setRecentActivitiesRaw(recentActivities?.activities || []);
       setReadiness(hrvStatus?.measurement ? toReadiness(hrvStatus) : EMPTY_READINESS);
       setTodayWorkout(toWorkout(plan, hrvStatus, profile));
       setAthlete(
@@ -246,6 +280,12 @@ export function useRushData(): RushData {
         p.id === postId ? { ...p, isKudoed: !!result.liked, kudosCount: result.likes_count ?? p.kudosCount } : p,
       ),
     );
+  }, []);
+
+  /** Recarrega apenas a lista de sensores pareados. */
+  const reloadDevices = useCallback(async () => {
+    const deviceList = await safe(users.devices());
+    if (mounted.current) setDevices(deviceList?.devices || []);
   }, []);
 
   /** Entra em um desafio e atualiza o card em destaque. */
@@ -309,6 +349,13 @@ export function useRushData(): RushData {
     toggleKudo,
     activeChallenge,
     joinChallenge,
+    trainingLoad,
+    hrvHistory,
+    vo2maxRaw,
+    devices,
+    subscription,
+    recentActivitiesRaw,
+    reloadDevices,
     hrvStatusRaw,
     planRaw,
     profileRaw,

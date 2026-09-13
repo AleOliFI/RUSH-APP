@@ -146,6 +146,9 @@ export const users = {
   getUser: (username) => request(`/users/${username}`),
   fieldTest: (data) => request('/users/field-test', { method: 'POST', body: JSON.stringify(data) }),
   deleteAccount: () => request('/users/me', { method: 'DELETE' }),
+  devices: () => request('/users/devices'),
+  registerDevice: (data) => request('/users/devices', { method: 'POST', body: JSON.stringify(data) }),
+  removeDevice: (id) => request(`/users/devices/${id}`, { method: 'DELETE' }),
 };
 
 // HRV
@@ -193,6 +196,7 @@ export const activities = {
   delete: (id) => request(`/activities/${id}`, { method: 'DELETE' }),
   stats: (days = 30) => request(`/activities/stats/summary?days=${days}`),
   records: () => request('/activities/records'),
+  trainingLoad: () => request('/activities/training-load'),
 };
 
 // Social

@@ -171,6 +171,91 @@ module.exports = function usersRoutes(db) {
   });
 
   // -------------------------------------------------------
+  // GET /api/users/devices — Sensores BLE pareados
+  // -------------------------------------------------------
+  router.get('/devices', authenticate, (req, res) => {
+    try {
+      const devices = db.prepare(`
+        SELECT id, brand, device_id, device_type, is_active, created_at, updated_at
+        FROM wearable_devices
+        WHERE user_id = ?
+        ORDER BY is_active DESC, updated_at DESC
+      `).all(req.user.id);
+
+      res.json({ devices });
+    } catch (err) {
+      console.error('List devices error:', err);
+      res.status(500).json({ error: 'Erro ao listar sensores' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/users/devices — Registrar sensor pareado
+  // -------------------------------------------------------
+  const VALID_DEVICE_TYPES = ['heart_rate', 'footpod', 'power', 'watch', 'other'];
+
+  router.post('/devices', authenticate, (req, res) => {
+    try {
+      const { brand, device_id, device_type = 'heart_rate' } = req.body;
+
+      if (!brand || !String(brand).trim()) {
+        return res.status(400).json({ error: 'brand é obrigatório' });
+      }
+      if (!device_id || !String(device_id).trim()) {
+        return res.status(400).json({ error: 'device_id é obrigatório' });
+      }
+      if (!VALID_DEVICE_TYPES.includes(device_type)) {
+        return res.status(400).json({ error: `device_type inválido. Valores aceitos: ${VALID_DEVICE_TYPES.join(', ')}` });
+      }
+
+      const cleanDeviceId = String(device_id).trim().slice(0, 120);
+      const existing = db.prepare('SELECT id FROM wearable_devices WHERE user_id = ? AND device_id = ?')
+        .get(req.user.id, cleanDeviceId);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE wearable_devices
+          SET brand = ?, device_type = ?, is_active = 1, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(String(brand).trim().slice(0, 80), device_type, existing.id);
+        const updated = db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(existing.id);
+        return res.json(updated);
+      }
+
+      const id = uuidv4();
+      db.prepare(`
+        INSERT INTO wearable_devices (id, user_id, brand, device_id, device_type, is_active)
+        VALUES (?, ?, ?, ?, ?, 1)
+      `).run(id, req.user.id, String(brand).trim().slice(0, 80), cleanDeviceId, device_type);
+
+      const created = db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(id);
+      res.status(201).json(created);
+    } catch (err) {
+      console.error('Register device error:', err);
+      res.status(500).json({ error: 'Erro ao registrar sensor' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // DELETE /api/users/devices/:id — Desparear sensor
+  // -------------------------------------------------------
+  router.delete('/devices/:id', authenticate, (req, res) => {
+    try {
+      const device = db.prepare('SELECT id FROM wearable_devices WHERE id = ? AND user_id = ?')
+        .get(req.params.id, req.user.id);
+      if (!device) {
+        return res.status(404).json({ error: 'Sensor não encontrado' });
+      }
+
+      db.prepare('DELETE FROM wearable_devices WHERE id = ?').run(req.params.id);
+      res.json({ success: true, id: req.params.id });
+    } catch (err) {
+      console.error('Delete device error:', err);
+      res.status(500).json({ error: 'Erro ao remover sensor' });
+    }
+  });
+
+  // -------------------------------------------------------
   // POST /api/users/field-test — Processar teste de campo para iniciantes/avançados
   // -------------------------------------------------------
   router.post('/field-test', authenticate, (req, res) => {

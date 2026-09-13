@@ -33,6 +33,8 @@ import { ProCheckoutModal } from './components/rush/ProCheckoutModal';
 import { ProSuccessModal } from './components/rush/ProSuccessModal';
 import { useRushData } from './hooks/useRushData';
 import type { RunSummary } from './hooks/useRunTracker';
+import { parseCustomZonePaces } from './data/adapters';
+import { activitiesToCsv, downloadCsv } from './utils/exportCsv';
 
 /** Mapeamento bidirecional entre as abas do design e as rotas do app. */
 const TAB_TO_PATH: Record<TabType, string> = {
@@ -77,6 +79,13 @@ export default function RushShell() {
     toggleKudo,
     activeChallenge,
     joinChallenge,
+    trainingLoad,
+    hrvHistory,
+    vo2maxRaw,
+    devices,
+    subscription,
+    recentActivitiesRaw,
+    reloadDevices,
     hrvStatusRaw,
     profileRaw,
     recordsRaw,
@@ -124,6 +133,12 @@ export default function RushShell() {
     },
     [finishRun],
   );
+
+  /** Exporta o histórico de atividades já carregado como CSV. */
+  const handleExportCsv = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    downloadCsv(`rush-atividades-${today}.csv`, activitiesToCsv(recentActivitiesRaw));
+  }, [recentActivitiesRaw]);
 
   const viewImage = useCallback((item: ImageViewerItem) => setActiveViewingImage(item), []);
 
@@ -195,11 +210,19 @@ export default function RushShell() {
           <ProScreen
             athlete={athlete}
             readiness={readiness}
+            trainingLoad={trainingLoad}
+            hrvHistory={hrvHistory}
+            vo2maxTrendPercent={vo2maxRaw?.trend_percent ?? null}
+            hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}
+            zonePaces={parseCustomZonePaces(profileRaw)}
+            devices={devices}
+            subscription={subscription}
             onOpenCheckout={() => setIsCheckoutOpen(true)}
             onOpenFieldProtocol={() => setIsFieldProtocolOpen(true)}
             onOpenBleHardware={() => setIsBleModalOpen(true)}
             onOpenGearGarage={() => setIsGearGarageOpen(true)}
             onOpenStoryExporter={() => setIsStoryExporterOpen(true)}
+            onExportCsv={handleExportCsv}
           />
         )}
 
@@ -298,14 +321,21 @@ export default function RushShell() {
 
       <ProCheckoutModal
         isOpen={isCheckoutOpen}
+        userId={athlete.id}
+        subscription={subscription}
         onClose={() => setIsCheckoutOpen(false)}
-        onSuccess={() => {
+        onSuccess={async () => {
           setIsCheckoutOpen(false);
+          await reload();
           setIsProSuccessOpen(true);
         }}
       />
 
-      <ProSuccessModal isOpen={isProSuccessOpen} onClose={() => setIsProSuccessOpen(false)} />
+      <ProSuccessModal
+        isOpen={isProSuccessOpen}
+        subscription={subscription}
+        onClose={() => setIsProSuccessOpen(false)}
+      />
 
       <ImageViewerModal
         item={activeViewingImage}

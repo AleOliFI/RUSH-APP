@@ -243,6 +243,71 @@ module.exports = function activitiesRoutes(db) {
   });
 
   // -------------------------------------------------------
+  // GET /api/activities/training-load — Carga aguda x crônica (ACWR)
+  // -------------------------------------------------------
+  // Razão entre carga aguda (7 dias) e carga crônica (média semanal das
+  // últimas 4 semanas), conforme Gabbett (2016). A carga de cada sessão é
+  // a sRPE de Foster (1998): duração em minutos x RPE. Quando o atleta não
+  // registrou RPE, a sessão entra apenas pela duração (equivalente a RPE 1),
+  // e a resposta sinaliza quantas sessões estão nessa condição para que a
+  // interface não apresente o número como se fosse completo.
+  router.get('/training-load', authenticate, (req, res) => {
+    try {
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const acuteStart = new Date(now - 7 * dayMs).toISOString();
+      const chronicStart = new Date(now - 28 * dayMs).toISOString();
+
+      const rows = db.prepare(`
+        SELECT date, duration_seconds, rpe_score, rpe
+        FROM activities
+        WHERE user_id = ? AND date >= ?
+        ORDER BY date ASC
+      `).all(req.user.id, chronicStart);
+
+      let acuteLoad = 0;
+      let chronicLoad = 0;
+      let sessionsWithoutRpe = 0;
+
+      for (const row of rows) {
+        const minutes = (row.duration_seconds || 0) / 60;
+        const rpe = row.rpe_score ?? row.rpe;
+        if (rpe == null) sessionsWithoutRpe++;
+        const load = minutes * (rpe != null ? rpe : 1);
+
+        chronicLoad += load;
+        if (row.date >= acuteStart) acuteLoad += load;
+      }
+
+      // Carga crônica é a MÉDIA semanal das 4 semanas.
+      const chronicWeekly = chronicLoad / 4;
+      const ratio = chronicWeekly > 0 ? +(acuteLoad / chronicWeekly).toFixed(2) : null;
+
+      let zone = null;
+      if (ratio != null) {
+        if (ratio < 0.8) zone = 'destreinamento';
+        else if (ratio <= 1.3) zone = 'ideal';
+        else if (ratio <= 1.5) zone = 'atencao';
+        else zone = 'sobrecarga';
+      }
+
+      res.json({
+        acute_load: Math.round(acuteLoad),
+        chronic_weekly_load: Math.round(chronicWeekly),
+        acwr: ratio,
+        zone,
+        sessions_28d: rows.length,
+        sessions_without_rpe: sessionsWithoutRpe,
+        // Sem 28 dias de histórico a razão não é interpretável.
+        has_enough_history: rows.length >= 4 && chronicWeekly > 0,
+      });
+    } catch (err) {
+      console.error('Training load error:', err);
+      res.status(500).json({ error: 'Erro ao calcular carga de treino' });
+    }
+  });
+
+  // -------------------------------------------------------
   // GET /api/activities/records — Recordes pessoais (5/10/21/42 km)
   // -------------------------------------------------------
   // Uma atividade conta para uma distância oficial quando percorre pelo
