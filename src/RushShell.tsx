@@ -293,7 +293,12 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         onViewImage={viewImage}
       />
 
-      <BleHardwareModal isOpen={isBleModalOpen} onClose={() => setIsBleModalOpen(false)} />
+      <BleHardwareModal
+        isOpen={isBleModalOpen}
+        devices={devices}
+        onClose={() => setIsBleModalOpen(false)}
+        onReloadDevices={reloadDevices}
+      />
 
       <ShoeRetirementModal
         isOpen={!!retirementShoeId}
@@ -340,8 +345,11 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
 
       <FieldProtocolModal
         isOpen={isFieldProtocolOpen}
+        hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}
+        devices={devices}
         onClose={() => setIsFieldProtocolOpen(false)}
         onStartProtocol={() => setIsActiveRunOpen(true)}
+        onCalibrated={reload}
       />
 
       <ActivityCommentsModal
