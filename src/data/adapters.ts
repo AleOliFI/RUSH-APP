@@ -16,6 +16,8 @@ import {
   FeedPost,
   RunningShoe,
   WeeklySummary,
+  UpcomingSession,
+  WorkoutCategory,
 } from '../types';
 import { APP_IMAGES } from './appAssets';
 
@@ -367,7 +369,17 @@ export function toWorkout(plan: any, hrvStatus: any, profile?: any): WorkoutPres
   const mainZone = session?.target_hr_zone || 'Z2';
   const zoneMeta = zones?.[mainZone];
 
-  const adapted = !!suggestion && suggestion.action !== 'maintain';
+  // "(ADAPTADO)" só quando a sessão realmente mudou frente ao planejado.
+  // O agente pode devolver action != 'maintain' e ainda assim manter a
+  // sessão (um dia de descanso, por exemplo, continua sendo descanso).
+  const planned = plan?.today_session || null;
+  const adapted =
+    !!suggestion &&
+    !!planned &&
+    (planned.type !== session?.type ||
+      planned.distance_km !== session?.distance_km ||
+      planned.duration_min !== session?.duration_min ||
+      planned.target_hr_zone !== session?.target_hr_zone);
 
   return {
     id: plan?.today_session?.id || `session-${type}`,
@@ -381,6 +393,7 @@ export function toWorkout(plan: any, hrvStatus: any, profile?: any): WorkoutPres
     hrRange: zoneMeta ? `${zoneMeta.minBpm}–${zoneMeta.maxBpm} BPM` : '—',
     intensityLabel: meta.intensity,
     steps: buildSteps(session, zones, zonePaces),
+    isRestDay: type === 'rest',
     coachingNotes:
       suggestion?.explanation_text ||
       session?.description ||
@@ -470,6 +483,75 @@ export function toWeeklySummary(plan: any, stats7: any, weekActivities: any[]): 
     caloriesKcal: caloriesKcal > 0 ? caloriesKcal : null,
     activityCount: stats7?.stats?.total_activities ?? 0,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Próximas sessões da semana                                          */
+/* ------------------------------------------------------------------ */
+
+const SESSION_CATEGORY: Record<string, WorkoutCategory> = {
+  interval: 'VO2 MÁX',
+  test: 'VO2 MÁX',
+  tempo: 'LIMIAR',
+  long_run: 'ENDURANCE',
+  easy_run: 'ENDURANCE',
+  recovery: 'REGENERATIVO',
+  rest: 'REGENERATIVO',
+  strength: 'OUTRO',
+  other: 'OUTRO',
+};
+
+const SESSION_BADGE: Record<string, string> = {
+  interval: 'VELOCIDADE',
+  test: 'TESTE',
+  tempo: 'RESISTÊNCIA',
+  long_run: 'ENDURANCE',
+  easy_run: 'BASE',
+  recovery: 'BIO-RECOVERY',
+  rest: 'DESCANSO',
+  strength: 'FORÇA',
+  other: 'LIVRE',
+};
+
+const WEEKDAY_NAMES = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
+function dayLabelFor(dayOfWeek: number, todayDow: number): string {
+  if (dayOfWeek === todayDow) return 'Hoje';
+  if (dayOfWeek === todayDow + 1) return 'Amanhã';
+  return WEEKDAY_NAMES[dayOfWeek - 1] || '—';
+}
+
+/**
+ * Sessões restantes da semana corrente do plano ativo, já formatadas.
+ * Só entram os dias ainda por vir — o treino de hoje aparece no card
+ * principal da tela, não nesta lista.
+ */
+export function toUpcomingSessions(plan: any, profile?: any): UpcomingSession[] {
+  const todayDow = new Date().getDay() || 7;
+  const zonePaces = parseCustomZonePaces(profile);
+
+  return (plan?.week_sessions || [])
+    .filter((sess: any) => sess.day_of_week > todayDow)
+    .sort((a: any, b: any) => a.day_of_week - b.day_of_week)
+    .map((sess: any) => {
+      const type = sess.type || 'other';
+      const meta = SESSION_TYPE_LABEL[type] || SESSION_TYPE_LABEL.other;
+      const zone = sess.target_hr_zone || 'Z2';
+
+      return {
+        id: sess.id,
+        title: sess.description ? String(sess.description).toUpperCase() : meta.title,
+        category: SESSION_CATEGORY[type] || 'OUTRO',
+        badge: SESSION_BADGE[type] || 'LIVRE',
+        dayLabel: dayLabelFor(sess.day_of_week, todayDow),
+        dayOfWeek: sess.day_of_week,
+        distance: sess.distance_km ? `${sess.distance_km} km` : '—',
+        duration: sess.duration_min ? `${sess.duration_min} min` : '—',
+        targetPace: sess.target_pace || zonePaces?.[zone] || '—',
+        zone: `Zona ${zone.replace(/^Z/i, '')}`,
+        isRest: type === 'rest',
+      };
+    });
 }
 
 /* ------------------------------------------------------------------ */

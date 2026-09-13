@@ -11,6 +11,7 @@ import {
   DailyMileage,
   FeedPost,
   PhysiologicalReadiness,
+  UpcomingSession,
   WeeklySummary,
   WorkoutPrescription,
 } from '../types';
@@ -19,6 +20,7 @@ import {
   toAthlete,
   toFeedPosts,
   toReadiness,
+  toUpcomingSessions,
   toWeeklySchedule,
   toWeeklySummary,
   toWorkout,
@@ -80,10 +82,14 @@ export interface RushData {
   todayWorkout: WorkoutPrescription;
   weeklySchedule: DailyMileage[];
   weeklySummary: WeeklySummary;
+  upcomingSessions: UpcomingSession[];
+  currentWeek: number | null;
   feedPosts: FeedPost[];
   userPosts: FeedPost[];
   hrvStatusRaw: any;
   planRaw: any;
+  profileRaw: any;
+  recordsRaw: any;
   isLoading: boolean;
   error: string | null;
   reload: () => Promise<void>;
@@ -128,8 +134,11 @@ export function useRushData(): RushData {
     activityCount: 0,
   });
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [hrvStatusRaw, setHrvStatusRaw] = useState<any>(null);
   const [planRaw, setPlanRaw] = useState<any>(null);
+  const [profileRaw, setProfileRaw] = useState<any>(null);
+  const [recordsRaw, setRecordsRaw] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,6 +182,8 @@ export function useRushData(): RushData {
 
       setHrvStatusRaw(hrvStatus);
       setPlanRaw(plan);
+      setProfileRaw(profile);
+      setRecordsRaw(records);
       setReadiness(hrvStatus?.measurement ? toReadiness(hrvStatus) : EMPTY_READINESS);
       setTodayWorkout(toWorkout(plan, hrvStatus, profile));
       setAthlete(
@@ -180,6 +191,7 @@ export function useRushData(): RushData {
       );
       setWeeklySchedule(toWeeklySchedule(plan, recentActivities?.activities || []));
       setWeeklySummary(toWeeklySummary(plan, stats7, recentActivities?.activities || []));
+      setUpcomingSessions(toUpcomingSessions(plan, profile));
       setFeedPosts(toFeedPosts(feed?.feed || [], me.id));
     } catch (err: any) {
       if (mounted.current) setError(err?.message || 'Erro ao carregar dados');
@@ -263,10 +275,14 @@ export function useRushData(): RushData {
     todayWorkout,
     weeklySchedule,
     weeklySummary,
+    upcomingSessions,
+    currentWeek: planRaw?.plan?.current_week ?? null,
     feedPosts,
     userPosts: feedPosts,
     hrvStatusRaw,
     planRaw,
+    profileRaw,
+    recordsRaw,
     isLoading,
     error,
     reload,

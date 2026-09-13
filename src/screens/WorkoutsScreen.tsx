@@ -1,69 +1,99 @@
-import React, { useState, useEffect } from 'react';
-import { WorkoutPrescription, ImageViewerItem } from '../types';
-import { TODAY_WORKOUT, OTHER_WORKOUTS } from '../data/appAssets';
+import React, { useState, useEffect, useMemo } from 'react';
+import { WorkoutPrescription, ImageViewerItem, UpcomingSession, WorkoutCategory } from '../types';
 import { downloadImageToDevice } from '../utils/imageDownload';
+import { formatClock, useRunTracker, RunSummary } from '../hooks/useRunTracker';
 
 interface WorkoutsScreenProps {
   workout: WorkoutPrescription;
+  upcomingSessions: UpcomingSession[];
+  currentWeek: number | null;
   onOpenDetailModal: () => void;
   onViewImage?: (item: ImageViewerItem) => void;
+  onFinishWorkout: (summary: RunSummary, sessionId?: string | null) => Promise<void>;
+}
+
+/** Extrai os minutos de rótulos como "8 min" ou "25 min • 6.8 km". */
+function parseStepMinutes(label: string): number {
+  const match = /(\d+)\s*min/i.exec(label || '');
+  return match ? Number(match[1]) : 5;
 }
 
 export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
   workout,
+  upcomingSessions,
+  currentWeek,
   onOpenDetailModal,
   onViewImage,
+  onFinishWorkout,
 }) => {
-  // Live workout running mode
-  const [isRunningWorkout, setIsRunningWorkout] = useState(false);
+  // Execução guiada: cronômetro e distância vêm do GNSS real.
+  const tracker = useRunTracker();
+  const isRunningWorkout = tracker.stage === 'running' || tracker.stage === 'paused' || tracker.stage === 'acquiring';
+  const isPaused = tracker.stage === 'paused';
+
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [stepSeconds, setStepSeconds] = useState(180);
-  const [distanceKm, setDistanceKm] = useState(0.0);
-  const [isPaused, setIsPaused] = useState(false);
-  const [simulatedHr, setSimulatedHr] = useState(174);
-  const [simulatedCadence, setSimulatedCadence] = useState(182);
-  const [activeFilter, setActiveFilter] = useState<'TODOS' | 'VO2 MÁX' | 'LIMIAR' | 'ENDURANCE'>('TODOS');
+  const [stepStartedAt, setStepStartedAt] = useState(0);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'TODOS' | WorkoutCategory>('TODOS');
   const [isDownloadingImg, setIsDownloadingImg] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
-  useEffect(() => {
-    if (!isRunningWorkout || isPaused) return;
-
-    const interval = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-      setStepSeconds((prev) => Math.max(0, prev - 1));
-      setDistanceKm((prev) => +(prev + 0.0042).toFixed(3)); // ~ 3:58/km speed
-
-      // Minor variation in HR and cadence
-      setSimulatedHr((h) => Math.min(185, Math.max(168, h + (Math.random() > 0.5 ? 1 : -1))));
-      setSimulatedCadence((c) => Math.min(186, Math.max(178, c + (Math.random() > 0.6 ? 1 : -1))));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isRunningWorkout, isPaused]);
-
-  const formatTime = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleStartWorkout = () => {
-    setIsRunningWorkout(true);
-    setCurrentStepIndex(0);
-    setElapsedSeconds(0);
-    setStepSeconds(180);
-    setDistanceKm(0.0);
-    setIsPaused(false);
-  };
-
-  const handleStopWorkout = () => {
-    setIsRunningWorkout(false);
-    setIsPaused(false);
-  };
+  const formatTime = formatClock;
 
   const currentStep = workout.steps[currentStepIndex] || workout.steps[0];
+
+  // Tempo restante do bloco atual, derivado do cronômetro real.
+  const stepSeconds = useMemo(() => {
+    if (!currentStep) return 0;
+    const totalStepSeconds = parseStepMinutes(currentStep.durationOrDistance) * 60;
+    return Math.max(0, totalStepSeconds - (tracker.elapsedSeconds - stepStartedAt));
+  }, [currentStep, tracker.elapsedSeconds, stepStartedAt]);
+
+  // Avança sozinho para o próximo bloco quando o tempo do atual acaba.
+  useEffect(() => {
+    if (tracker.stage !== 'running') return;
+    if (stepSeconds > 0) return;
+    if (currentStepIndex >= workout.steps.length - 1) return;
+    setCurrentStepIndex((prev) => prev + 1);
+    setStepStartedAt(tracker.elapsedSeconds);
+  }, [stepSeconds, tracker.stage, tracker.elapsedSeconds, currentStepIndex, workout.steps.length]);
+
+  const handleStartWorkout = (sessionId?: string | null) => {
+    setSaveError(null);
+    setActiveSessionId(sessionId ?? null);
+    setCurrentStepIndex(0);
+    setStepStartedAt(0);
+    tracker.start();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStopWorkout = async () => {
+    const summary = tracker.finish();
+
+    if (summary.distanceKm <= 0) {
+      // Sem distância registrada não há atividade para gravar.
+      tracker.reset();
+      setSaveError('Nenhuma distância foi registrada pelo GPS — a sessão não foi salva.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onFinishWorkout(summary, activeSessionId);
+      tracker.reset();
+    } catch (err: any) {
+      setSaveError(err?.message || 'Não foi possível salvar a sessão.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const filteredSessions = useMemo(
+    () => (activeFilter === 'TODOS' ? upcomingSessions : upcomingSessions.filter((s) => s.category === activeFilter)),
+    [activeFilter, upcomingSessions],
+  );
 
   return (
     <div className="flex flex-col w-full max-w-2xl mx-auto px-4 sm:px-5 space-y-5 pt-2 pb-8">
@@ -80,7 +110,7 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
 
         {!isRunningWorkout && (
           <button
-            onClick={handleStartWorkout}
+            onClick={() => handleStartWorkout(null)}
             className="px-3.5 py-1.5 rounded-lg bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-headline-sm text-xs uppercase flex items-center space-x-1.5 shadow-[0_0_12px_rgba(255,85,0,0.4)] cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px]">play_arrow</span>
@@ -100,7 +130,7 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
               </span>
             </div>
             <div className="px-2 py-0.5 rounded bg-[#FF5500]/20 text-[#FF5500] font-telemetry text-xs font-bold">
-              ZONA 4 ATIVA
+              {currentStep ? `${currentStep.targetZone} ATIVA` : 'EM CURSO'}
             </div>
           </div>
 
@@ -108,26 +138,43 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
           <div className="grid grid-cols-2 gap-3 bg-[#101010] p-4 rounded-lg border border-[#202020]">
             <div>
               <span className="font-label-caps text-[10px] text-[#737373] uppercase font-bold">TEMPO DECORRIDO</span>
-              <div className="font-metric-hero-mobile text-[#F7F5F3]">{formatTime(elapsedSeconds)}</div>
+              <div className="font-metric-hero-mobile text-[#F7F5F3]">{formatTime(tracker.elapsedSeconds)}</div>
             </div>
             <div>
               <span className="font-label-caps text-[10px] text-[#737373] uppercase font-bold">DISTÂNCIA TOTAL</span>
-              <div className="font-metric-hero-mobile text-[#FF5500]">{distanceKm.toFixed(2)} <span className="text-xs font-telemetry text-[#737373]">KM</span></div>
+              <div className="font-metric-hero-mobile text-[#FF5500]">{tracker.distanceKm.toFixed(2)} <span className="text-xs font-telemetry text-[#737373]">KM</span></div>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-center bg-[#101010] p-3 rounded-lg border border-[#202020]">
             <div>
               <span className="font-label-caps text-[9px] text-[#737373] uppercase font-bold">PACE INSTANTÂNEO</span>
-              <div className="font-headline-sm text-[#F7F5F3] mt-0.5">3:56 <span className="text-[10px] text-[#FF5500]">/KM</span></div>
+              <div className="font-headline-sm text-[#F7F5F3] mt-0.5">
+                {tracker.instantPace} <span className="text-[10px] text-[#FF5500]">/KM</span>
+              </div>
             </div>
             <div>
               <span className="font-label-caps text-[9px] text-[#737373] uppercase font-bold">FREQ. CARDÍACA</span>
-              <div className="font-headline-sm text-[#FF5500] mt-0.5">{simulatedHr} <span className="text-[10px] text-[#737373]">BPM</span></div>
+              {tracker.heartRate !== null ? (
+                <div className="font-headline-sm text-[#FF5500] mt-0.5">
+                  {tracker.heartRate} <span className="text-[10px] text-[#737373]">BPM</span>
+                </div>
+              ) : (
+                <button
+                  onClick={tracker.connectHeartRate}
+                  disabled={!tracker.isBleSupported}
+                  className="mt-0.5 text-[10px] text-[#FF5500] font-bold uppercase disabled:text-[#737373] disabled:cursor-not-allowed cursor-pointer hover:underline"
+                >
+                  {tracker.isBleSupported ? 'Conectar cinta' : 'BLE indisp.'}
+                </button>
+              )}
             </div>
             <div>
-              <span className="font-label-caps text-[9px] text-[#737373] uppercase font-bold">CADÊNCIA</span>
-              <div className="font-headline-sm text-[#22C55E] mt-0.5">{simulatedCadence} <span className="text-[10px] text-[#737373]">SPM</span></div>
+              <span className="font-label-caps text-[9px] text-[#737373] uppercase font-bold">PRECISÃO GNSS</span>
+              <div className="font-headline-sm text-[#22C55E] mt-0.5">
+                {tracker.gpsAccuracyM !== null ? tracker.gpsAccuracyM : '—'}{' '}
+                <span className="text-[10px] text-[#737373]">M</span>
+              </div>
             </div>
           </div>
 
@@ -150,24 +197,36 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
           </div>
 
           {/* Controls: Next Lap, Pause, Stop */}
+          {(tracker.errorMessage || saveError) && (
+            <p className="text-xs text-[#EF4444] font-bold leading-relaxed" role="alert">
+              {saveError || tracker.errorMessage}
+            </p>
+          )}
+
           <div className="grid grid-cols-3 gap-2">
             <button
-              onClick={() => setCurrentStepIndex((prev) => (prev + 1) % workout.steps.length)}
-              className="h-11 rounded bg-[#2a2a2a] hover:bg-[#333] text-[#F7F5F3] font-body text-xs font-bold uppercase transition-colors cursor-pointer"
+              onClick={() => {
+                setCurrentStepIndex((prev) => Math.min(prev + 1, workout.steps.length - 1));
+                setStepStartedAt(tracker.elapsedSeconds);
+                tracker.lap();
+              }}
+              disabled={currentStepIndex >= workout.steps.length - 1}
+              className="h-11 rounded bg-[#2a2a2a] hover:bg-[#333] disabled:opacity-40 disabled:cursor-not-allowed text-[#F7F5F3] font-body text-xs font-bold uppercase transition-colors cursor-pointer"
             >
               PRÓXIMO BLOCO
             </button>
             <button
-              onClick={() => setIsPaused(!isPaused)}
+              onClick={() => (isPaused ? tracker.resume() : tracker.pause())}
               className="h-11 rounded bg-[#101010] border border-[#333] text-[#FF5500] font-body text-xs font-bold uppercase hover:bg-[#202020] transition-colors cursor-pointer"
             >
               {isPaused ? 'RETOMAR' : 'PAUSAR'}
             </button>
             <button
               onClick={handleStopWorkout}
-              className="h-11 rounded bg-[#EF4444] text-[#0D0D0D] font-body text-xs font-bold uppercase hover:bg-[#ff5a5a] transition-colors cursor-pointer"
+              disabled={isSaving}
+              className="h-11 rounded bg-[#EF4444] disabled:opacity-60 disabled:cursor-wait text-[#0D0D0D] font-body text-xs font-bold uppercase hover:bg-[#ff5a5a] transition-colors cursor-pointer"
             >
-              CONCLUIR
+              {isSaving ? 'SALVANDO…' : 'CONCLUIR'}
             </button>
           </div>
         </div>
@@ -306,11 +365,15 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
 
           <div className="pt-2 flex gap-3">
             <button
-              onClick={handleStartWorkout}
-              className="flex-1 h-12 bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-headline-sm uppercase tracking-wider rounded-lg flex items-center justify-center space-x-2 shadow-[0_0_16px_rgba(255,85,0,0.35)] cursor-pointer"
+              onClick={() => handleStartWorkout(workout.id)}
+              disabled={workout.isRestDay}
+              title={workout.isRestDay ? 'Hoje é dia de descanso prescrito' : undefined}
+              className="flex-1 h-12 bg-[#FF5500] hover:bg-[#FF6B00] disabled:bg-[#262626] disabled:text-[#737373] disabled:shadow-none disabled:cursor-not-allowed text-[#0D0D0D] font-headline-sm uppercase tracking-wider rounded-lg flex items-center justify-center space-x-2 shadow-[0_0_16px_rgba(255,85,0,0.35)] cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[20px]">play_arrow</span>
-              <span>EXECUTAR AGORA</span>
+              <span className="material-symbols-outlined text-[20px]">
+                {workout.isRestDay ? 'bedtime' : 'play_arrow'}
+              </span>
+              <span>{workout.isRestDay ? 'DIA DE DESCANSO' : 'EXECUTAR AGORA'}</span>
             </button>
             <button
               onClick={onOpenDetailModal}
@@ -329,12 +392,14 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
           <span className="font-label-caps text-xs text-[#F7F5F3] uppercase tracking-wider font-extrabold">
             PRÓXIMAS SESSÕES DA SEMANA
           </span>
-          <span className="font-telemetry text-xs text-[#737373]">MICRO-CICLO 3</span>
+          <span className="font-telemetry text-xs text-[#737373]">
+            {currentWeek ? `MICRO-CICLO ${currentWeek}` : 'SEM PLANO ATIVO'}
+          </span>
         </div>
 
         {/* Filter chips */}
         <div className="flex space-x-2 overflow-x-auto pb-1">
-          {['TODOS', 'VO2 MÁX', 'LIMIAR', 'ENDURANCE'].map((filter) => (
+          {(['TODOS', 'VO2 MÁX', 'LIMIAR', 'ENDURANCE', 'REGENERATIVO'] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter as any)}
@@ -350,17 +415,28 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
         </div>
 
         <div className="space-y-2.5">
-          {OTHER_WORKOUTS.map((item) => (
+          {filteredSessions.length === 0 && (
+            <div className="bg-[#141414] p-5 rounded-xl border border-dashed border-[#262626] text-center">
+              <span className="material-symbols-outlined text-[28px] text-[#404040]">event_busy</span>
+              <p className="text-xs text-[#737373] mt-1.5 leading-relaxed">
+                {upcomingSessions.length === 0
+                  ? 'Nenhuma sessão restante nesta semana do seu plano.'
+                  : 'Nenhuma sessão desta categoria no restante da semana.'}
+              </p>
+            </div>
+          )}
+
+          {filteredSessions.map((item) => (
             <div
               key={item.id}
               className="bg-[#1C1C1C] p-4 rounded-xl border border-[#262626] flex items-center justify-between hover:border-[#FF5500]/50 transition-colors"
             >
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <div className="flex items-center space-x-2">
                   <span className="font-label-caps text-[9px] bg-[#FF5500]/15 text-[#FF5500] px-1.5 py-0.2 rounded font-bold uppercase">
                     {item.badge}
                   </span>
-                  <span className="font-telemetry text-[11px] text-[#737373]">{item.date}</span>
+                  <span className="font-telemetry text-[11px] text-[#737373]">{item.dayLabel}</span>
                 </div>
                 <h3 className="font-headline-sm text-sm text-[#F7F5F3] uppercase">{item.title}</h3>
                 <div className="flex items-center space-x-3 font-telemetry text-xs text-[#737373]">
@@ -372,12 +448,15 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
                 </div>
               </div>
 
-              <button
-                onClick={handleStartWorkout}
-                className="w-10 h-10 rounded-lg bg-[#201f1f] text-[#F7F5F3] hover:text-[#0D0D0D] hover:bg-[#FF5500] transition-colors flex items-center justify-center cursor-pointer border border-[#262626]"
-              >
-                <span className="material-symbols-outlined text-[20px]">play_arrow</span>
-              </button>
+              {!item.isRest && (
+                <button
+                  onClick={() => handleStartWorkout(item.id)}
+                  aria-label={`Iniciar ${item.title}`}
+                  className="w-10 h-10 shrink-0 rounded-lg bg-[#201f1f] text-[#F7F5F3] hover:text-[#0D0D0D] hover:bg-[#FF5500] transition-colors flex items-center justify-center cursor-pointer border border-[#262626]"
+                >
+                  <span className="material-symbols-outlined text-[20px]">play_arrow</span>
+                </button>
+              )}
             </div>
           ))}
         </div>

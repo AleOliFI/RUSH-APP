@@ -32,6 +32,7 @@ import { NewPostModal } from './components/rush/NewPostModal';
 import { ProCheckoutModal } from './components/rush/ProCheckoutModal';
 import { ProSuccessModal } from './components/rush/ProSuccessModal';
 import { useRushData } from './hooks/useRushData';
+import type { RunSummary } from './hooks/useRunTracker';
 
 /** Mapeamento bidirecional entre as abas do design e as rotas do app. */
 const TAB_TO_PATH: Record<TabType, string> = {
@@ -67,8 +68,12 @@ export default function RushShell() {
     todayWorkout,
     weeklySchedule,
     weeklySummary,
+    upcomingSessions,
+    currentWeek,
     userPosts,
     hrvStatusRaw,
+    profileRaw,
+    recordsRaw,
     isLoading,
     error,
     submitMeasurement,
@@ -92,6 +97,7 @@ export default function RushShell() {
   const [isNewPostOpen, setIsNewPostOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isProSuccessOpen, setIsProSuccessOpen] = useState(false);
+  const [lastRunSummary, setLastRunSummary] = useState<RunSummary | null>(null);
 
   const handlePostCreated = useCallback(
     async (caption: string) => {
@@ -99,6 +105,21 @@ export default function RushShell() {
       goToTab('feed');
     },
     [publishPost, goToTab],
+  );
+
+  /** Grava a corrida concluída (HUD ou execução guiada) como atividade. */
+  const handleFinishRun = useCallback(
+    async (summary: RunSummary, sessionId?: string | null) => {
+      await finishRun({
+        distance_km: summary.distanceKm,
+        duration_seconds: summary.durationSeconds,
+        avg_hr: summary.avgHr,
+        max_hr: summary.maxHr,
+        avg_pace: summary.avgPace !== '—' ? `${summary.avgPace}/km` : null,
+        session_id: sessionId ?? null,
+      });
+    },
+    [finishRun],
   );
 
   const viewImage = useCallback((item: ImageViewerItem) => setActiveViewingImage(item), []);
@@ -144,8 +165,11 @@ export default function RushShell() {
         {currentTab === 'treinos' && (
           <WorkoutsScreen
             workout={todayWorkout}
+            upcomingSessions={upcomingSessions}
+            currentWeek={currentWeek}
             onOpenDetailModal={() => setIsWorkoutDetailOpen(true)}
             onViewImage={viewImage}
+            onFinishWorkout={handleFinishRun}
           />
         )}
 
@@ -221,6 +245,10 @@ export default function RushShell() {
 
       <WorkoutSummaryModal
         isOpen={isWorkoutSummaryOpen}
+        summary={lastRunSummary}
+        hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}
+        personalRecords={recordsRaw?.records || null}
+        weightKg={profileRaw?.weight_kg ?? null}
         onClose={() => setIsWorkoutSummaryOpen(false)}
         onOpenStoryExporter={() => setIsStoryExporterOpen(true)}
         onPublishToFeed={() => setIsNewPostOpen(true)}
@@ -229,8 +257,13 @@ export default function RushShell() {
 
       <ActiveRunModal
         isOpen={isActiveRunOpen}
+        workout={todayWorkout}
         onClose={() => setIsActiveRunOpen(false)}
-        onFinishWorkout={() => setIsWorkoutSummaryOpen(true)}
+        onFinishWorkout={async (summary) => {
+          await handleFinishRun(summary, todayWorkout.id);
+          setLastRunSummary(summary);
+          setIsWorkoutSummaryOpen(true);
+        }}
       />
 
       <FieldProtocolModal

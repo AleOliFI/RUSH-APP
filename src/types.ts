@@ -116,6 +116,8 @@ export interface WorkoutPrescription {
   intensityLabel: string;
   steps: WorkoutStep[];
   coachingNotes: string;
+  /** Dia sem sessão prescrita: nada a executar. */
+  isRestDay?: boolean;
 }
 
 export interface DailyMileage {
@@ -132,6 +134,23 @@ export interface SubjectiveFeedback {
   muscleSoreness: number; // 1-5 (maior = mais dor)
   stressLevel: number; // 1-5 (maior = mais estresse)
   energyLevel: number; // 1-5 (maior = melhor disposicao)
+}
+
+export type WorkoutCategory = 'VO2 MÁX' | 'LIMIAR' | 'ENDURANCE' | 'REGENERATIVO' | 'OUTRO';
+
+export interface UpcomingSession {
+  id: string;
+  title: string;
+  category: WorkoutCategory;
+  badge: string;
+  /** Rótulo de dia já humanizado: "Hoje", "Amanhã", "Domingo"... */
+  dayLabel: string;
+  dayOfWeek: number;
+  distance: string;
+  duration: string;
+  targetPace: string;
+  zone: string;
+  isRest: boolean;
 }
 
 export interface WeeklySummary {
