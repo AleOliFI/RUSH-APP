@@ -243,6 +243,7 @@ export const social = {
   followers: () => request('/social/followers'),
   following: () => request('/social/following'),
   userProfile: (userId) => request(`/social/user/${userId}/profile`),
+  deleteComment: (commentId) => request(`/social/comment/${commentId}`, { method: 'DELETE' }),
 };
 
 // Challenges
@@ -255,8 +256,9 @@ export const challenges = {
 
 // Notifications
 export const notifications = {
-  list: () => request('/notifications'),
+  list: (page = 1, limit = 30) => request(`/notifications?page=${page}&limit=${limit}`),
   unreadCount: () => request('/notifications/unread-count'),
+  markRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
   readAll: () => request('/notifications/read-all', { method: 'PUT' }),
 };
 

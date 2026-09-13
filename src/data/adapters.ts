@@ -631,3 +631,78 @@ export function toShoe(raw: any, index = 0): RunningShoe {
     sessionsCount: raw.sessionsCount || 0,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Alerta de fadiga acumulada                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Traduz os campos de recuperação que o backend já calcula e que nenhuma
+ * tela lia. Não diagnostica nada: o app sabe apenas que a VFC está abaixo
+ * da baseline há N dias, não o motivo.
+ *
+ * Limiares vindos de server/agent/recoveryProtocol.js — o banner aparece
+ * a partir de 2 dias e vira alerta de overreaching a partir de 5.
+ */
+export interface FatigueAlert {
+  /** Dias consecutivos com VFC abaixo da baseline. */
+  consecutiveLowDays: number;
+  severity: 'none' | 'attention' | 'critical';
+  /** Null quando não há alerta a mostrar. */
+  label: string | null;
+  headline: string | null;
+  explanation: string | null;
+  /** Protocolo do dia, já montado pelo backend. Exibir como veio. */
+  recoveryActivities: string[];
+  recoveryLevel: number | null;
+  suggestIceBath: boolean;
+}
+
+const FATIGUE_MIN_DAYS = 2;
+const OVERREACHING_DAYS = 5;
+
+export const NO_FATIGUE_ALERT: FatigueAlert = {
+  consecutiveLowDays: 0,
+  severity: 'none',
+  label: null,
+  headline: null,
+  explanation: null,
+  recoveryActivities: [],
+  recoveryLevel: null,
+  suggestIceBath: false,
+};
+
+export function toFatigueAlert(hrvStatus: any): FatigueAlert {
+  const suggestion = hrvStatus?.suggestion || null;
+
+  // O backend expõe a contagem em dois lugares (a medição do dia e as
+  // métricas da sugestão); o objeto de status do dia NÃO a carrega.
+  const measurement = hrvStatus?.measurement || null;
+  const days = Number(
+    suggestion?.metrics?.consecutive_low_days ??
+      measurement?.consecutive_low_days ??
+      hrvStatus?.consecutive_low_days ??
+      0,
+  );
+
+  if (!isFinite(days) || days < FATIGUE_MIN_DAYS) return NO_FATIGUE_ALERT;
+
+  const isCritical = days >= OVERREACHING_DAYS;
+  const recovery = suggestion?.recovery_level || null;
+
+  return {
+    consecutiveLowDays: days,
+    severity: isCritical ? 'critical' : 'attention',
+    label: isCritical ? 'ALERTA DE OVERREACHING' : 'FADIGA ACUMULADA',
+    headline: isCritical
+      ? `${days} dias consecutivos com VFC deprimida`
+      : `${days} dias seguidos abaixo da baseline`,
+    explanation: isCritical
+      ? 'Seu sistema parassimpático apresenta supressão severa contínua. Para evitar sobretreino crônico (NFOR), treinos de alta intensidade foram temporariamente bloqueados.'
+      : 'O sistema nervoso autônomo está demandando recuperação. O treino de hoje foi adaptado para Z1/Z2 com foco regenerativo.',
+    recoveryActivities:
+      suggestion?.adjusted_session?.recovery_activities || recovery?.recovery_activities || [],
+    recoveryLevel: recovery?.level ?? null,
+    suggestIceBath: !!suggestion?.suggest_ice_bath,
+  };
+}

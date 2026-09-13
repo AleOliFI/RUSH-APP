@@ -33,7 +33,10 @@ import {
   toWeeklySchedule,
   toWeeklySummary,
   toWorkout,
+  toFatigueAlert,
+  NO_FATIGUE_ALERT,
 } from '../data/adapters';
+import type { FatigueAlert } from '../data/adapters';
 import { APP_IMAGES } from '../data/appAssets';
 
 /** Perfil exibido enquanto o primeiro carregamento não termina. */
@@ -112,6 +115,8 @@ export interface RushData {
   reloadGear: () => Promise<void>;
   reloadDevices: () => Promise<void>;
   hrvStatusRaw: any;
+  /** Alerta de fadiga acumulada, derivado do status já carregado (sem requisição extra). */
+  fatigueAlert: FatigueAlert;
   planRaw: any;
   profileRaw: any;
   recordsRaw: any;
@@ -409,6 +414,7 @@ export function useRushData(): RushData {
     reloadGear,
     reloadDevices,
     hrvStatusRaw,
+    fatigueAlert: hrvStatusRaw ? toFatigueAlert(hrvStatusRaw) : NO_FATIGUE_ALERT,
     planRaw,
     profileRaw,
     recordsRaw,
