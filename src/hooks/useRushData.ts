@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   activities as activitiesApi,
   challenges as challengesApi,
+  gear as gearApi,
   hrv,
   social,
   subscriptions as subscriptionsApi,
@@ -105,11 +106,16 @@ export interface RushData {
   devices: any[];
   subscription: any | null;
   recentActivitiesRaw: any[];
+  achievements: { earned: any[]; all: any[] };
+  shoes: any[];
+  shoesSummary: any | null;
+  reloadGear: () => Promise<void>;
   reloadDevices: () => Promise<void>;
   hrvStatusRaw: any;
   planRaw: any;
   profileRaw: any;
   recordsRaw: any;
+  meRaw: any;
   isLoading: boolean;
   error: string | null;
   reload: () => Promise<void>;
@@ -170,9 +176,13 @@ export function useRushData(): RushData {
   const [devices, setDevices] = useState<any[]>([]);
   const [subscription, setSubscription] = useState<any | null>(null);
   const [recentActivitiesRaw, setRecentActivitiesRaw] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<{ earned: any[]; all: any[] }>({ earned: [], all: [] });
+  const [shoes, setShoes] = useState<any[]>([]);
+  const [shoesSummary, setShoesSummary] = useState<any | null>(null);
   const [hrvStatusRaw, setHrvStatusRaw] = useState<any>(null);
   const [planRaw, setPlanRaw] = useState<any>(null);
   const [profileRaw, setProfileRaw] = useState<any>(null);
+  const [meRaw, setMeRaw] = useState<any>(null);
   const [recordsRaw, setRecordsRaw] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -202,11 +212,13 @@ export function useRushData(): RushData {
           safe(social.feed(CHANNEL_SCOPE[feedChannel], 1)),
         ]);
 
-      const [load, history, deviceList, subStatus] = await Promise.all([
+      const [load, history, deviceList, subStatus, achievementData, gearData] = await Promise.all([
         safe(activitiesApi.trainingLoad()),
         safe(hrv.history(28)),
         safe(users.devices()),
         safe(subscriptionsApi.status()),
+        safe(challengesApi.achievements()),
+        safe(gearApi.shoes()),
       ]);
 
       if (!mounted.current) return;
@@ -225,6 +237,7 @@ export function useRushData(): RushData {
       setHrvStatusRaw(hrvStatus);
       setPlanRaw(plan);
       setProfileRaw(profile);
+      setMeRaw(me);
       setRecordsRaw(records);
       setTrainingLoad(load);
       setHrvHistory(history?.measurements || []);
@@ -232,6 +245,9 @@ export function useRushData(): RushData {
       setDevices(deviceList?.devices || []);
       setSubscription(subStatus);
       setRecentActivitiesRaw(recentActivities?.activities || []);
+      setAchievements({ earned: achievementData?.earned || [], all: achievementData?.all || [] });
+      setShoes(gearData?.shoes || []);
+      setShoesSummary(gearData?.summary || null);
       setReadiness(hrvStatus?.measurement ? toReadiness(hrvStatus) : EMPTY_READINESS);
       setTodayWorkout(toWorkout(plan, hrvStatus, profile));
       setAthlete(
@@ -280,6 +296,15 @@ export function useRushData(): RushData {
         p.id === postId ? { ...p, isKudoed: !!result.liked, kudosCount: result.likes_count ?? p.kudosCount } : p,
       ),
     );
+  }, []);
+
+  /** Recarrega apenas a frota de calçados. */
+  const reloadGear = useCallback(async () => {
+    const gearData = await safe(gearApi.shoes());
+    if (mounted.current) {
+      setShoes(gearData?.shoes || []);
+      setShoesSummary(gearData?.summary || null);
+    }
   }, []);
 
   /** Recarrega apenas a lista de sensores pareados. */
@@ -355,11 +380,16 @@ export function useRushData(): RushData {
     devices,
     subscription,
     recentActivitiesRaw,
+    achievements,
+    shoes,
+    shoesSummary,
+    reloadGear,
     reloadDevices,
     hrvStatusRaw,
     planRaw,
     profileRaw,
     recordsRaw,
+    meRaw,
     isLoading,
     error,
     reload,

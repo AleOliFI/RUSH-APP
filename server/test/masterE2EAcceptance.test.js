@@ -311,30 +311,63 @@ async function runMasterSuite() {
   const rootDir = path.join(__dirname, '..', '..');
   const indexHtmlPath = path.join(rootDir, 'index.html');
   const indexCssPath = path.join(rootDir, 'src', 'index.css');
+  // O design system foi dividido: o legado (páginas .jsx remanescentes)
+  // ficou em src/styles/rush-legacy.css e o novo em rush-running.css.
+  const legacyCssPath = path.join(rootDir, 'src', 'styles', 'rush-legacy.css');
+  const rushCssPath = path.join(rootDir, 'src', 'styles', 'rush-running.css');
 
-  await it('R2.1: index.html loads required typography fonts (Inter, Big Shoulders Display, JetBrains Mono)', () => {
+  await it('R2.1: index.html loads typography for both design systems and the dark theme-color', () => {
     assert.ok(fs.existsSync(indexHtmlPath), 'index.html must exist');
     const htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
+    // Fontes do design system novo (RUSH RUNNING)
+    assert.ok(htmlContent.includes('Anton'), 'index.html must link Anton font');
+    assert.ok(htmlContent.includes('Manrope'), 'index.html must link Manrope font');
+    assert.ok(htmlContent.includes('Material+Symbols') || htmlContent.includes('Material Symbols'), 'index.html must link Material Symbols icon font');
+    // Fontes do legado, ainda usadas pelo painel da assessoria
     assert.ok(htmlContent.includes('Inter'), 'index.html must link Inter font');
     assert.ok(htmlContent.includes('Big+Shoulders+Display') || htmlContent.includes('Big Shoulders'), 'index.html must link Big Shoulders Display font');
     assert.ok(htmlContent.includes('JetBrains+Mono') || htmlContent.includes('JetBrains Mono'), 'index.html must link JetBrains Mono font');
-    assert.ok(htmlContent.includes('theme-color') && htmlContent.includes('#0f0f0f'), 'index.html must specify dark theme-color #0f0f0f');
+    assert.ok(htmlContent.includes('theme-color') && htmlContent.includes('#0D0D0D'), 'index.html must specify dark theme-color #0D0D0D');
   });
 
-  await it('R2.2: src/index.css defines dark palette (#0f0f0f, #1a1a1a) and Rush Orange (#FF3800)', () => {
+  await it('R2.2: as duas folhas de design definem suas paletas escuras e a ordem de cascata é explícita', () => {
     assert.ok(fs.existsSync(indexCssPath), 'src/index.css must exist');
-    const cssContent = fs.readFileSync(indexCssPath, 'utf8');
-    assert.ok(cssContent.includes('#0f0f0f'), 'CSS must define background token #0f0f0f');
-    assert.ok(cssContent.includes('#1a1a1a'), 'CSS must define card background token #1a1a1a');
-    assert.ok(cssContent.includes('#FF3800'), 'CSS must define primary brand token #FF3800');
-    assert.ok(cssContent.includes('Big Shoulders Display') || cssContent.includes('Big Shoulders'), 'CSS must use Big Shoulders Display for headlines');
+    assert.ok(fs.existsSync(legacyCssPath), 'src/styles/rush-legacy.css must exist');
+    assert.ok(fs.existsSync(rushCssPath), 'src/styles/rush-running.css must exist');
+
+    const rootCss = fs.readFileSync(indexCssPath, 'utf8');
+    // A ordem das camadas precisa ser declarada antes dos imports, senão os
+    // utilitários do Tailwind perdem para o design system legado.
+    assert.ok(rootCss.includes('@layer theme, base, rush-legacy, components, utilities'), 'index.css must declare the cascade layer order');
+    assert.ok(rootCss.includes('@import "tailwindcss"'), 'index.css must import tailwindcss');
+    assert.ok(rootCss.includes('layer(rush-legacy)'), 'index.css must import the legacy sheet into the rush-legacy layer');
+
+    const legacyCss = fs.readFileSync(legacyCssPath, 'utf8');
+    assert.ok(legacyCss.includes('#0f0f0f'), 'legacy CSS must define background token #0f0f0f');
+    assert.ok(legacyCss.includes('#1a1a1a'), 'legacy CSS must define card background token #1a1a1a');
+    assert.ok(legacyCss.includes('#FF3800'), 'legacy CSS must define primary brand token #FF3800');
+    assert.ok(legacyCss.includes('Big Shoulders Display') || legacyCss.includes('Big Shoulders'), 'legacy CSS must use Big Shoulders Display for headlines');
+
+    const rushCss = fs.readFileSync(rushCssPath, 'utf8');
+    assert.ok(rushCss.includes('#0D0D0D'), 'rush-running CSS must define background token #0D0D0D');
+    assert.ok(rushCss.includes('Anton'), 'rush-running CSS must use Anton for headlines');
+    assert.ok(rushCss.includes('255, 85, 0'), 'rush-running CSS must define the kinetic orange glow');
   });
 
-  await it('R2.3: Mobile-first shell and BottomNav enforce max-width 430px constraint', () => {
-    const cssContent = fs.readFileSync(indexCssPath, 'utf8');
-    assert.ok(cssContent.includes('.app-shell'), 'CSS must define .app-shell');
-    assert.ok(cssContent.includes('max-width: 430px') || cssContent.includes('max-width:430px'), 'CSS must restrict mobile shell to 430px');
-    assert.ok(cssContent.includes('.bottom-nav'), 'CSS must define .bottom-nav');
+  await it('R2.3: shell legado mantém o limite de 430px e o ícone-fonte é protegido contra falha de carregamento', () => {
+    const legacyCss = fs.readFileSync(legacyCssPath, 'utf8');
+    assert.ok(legacyCss.includes('.app-shell'), 'legacy CSS must define .app-shell');
+    assert.ok(legacyCss.includes('max-width: 430px') || legacyCss.includes('max-width:430px'), 'legacy CSS must restrict mobile shell to 430px');
+    assert.ok(legacyCss.includes('.bottom-nav'), 'legacy CSS must define .bottom-nav');
+
+    // Sem a fonte Material Symbols o navegador renderiza o nome da ligadura
+    // como texto e destrói o layout: os glifos ficam ocultos até ela chegar.
+    const rushCss = fs.readFileSync(rushCssPath, 'utf8');
+    assert.ok(rushCss.includes('icons-ready'), 'rush-running CSS must guard icons until the icon font loads');
+
+    const mainJs = fs.readFileSync(path.join(rootDir, 'src', 'main.jsx'), 'utf8');
+    assert.ok(mainJs.includes('icons-ready'), 'main.jsx must set the icons-ready flag');
+    assert.ok(mainJs.includes('measureText'), 'main.jsx must detect the icon font by measuring text, not document.fonts.check');
   });
 
   await it('R2.4: All 6 Page views (Login, Onboarding, Dashboard, Feed, Training, Profile) and BottomNav exist and use design system classes', () => {

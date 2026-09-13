@@ -5,7 +5,7 @@
 // e os links profundos continuam funcionando.
 // ============================================================
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TabType, ImageViewerItem } from './types';
 import { Header } from './components/rush/Header';
@@ -50,7 +50,7 @@ const PATH_TO_TAB: Record<string, TabType> = Object.fromEntries(
   (Object.entries(TAB_TO_PATH) as [TabType, string][]).map(([tab, path]) => [path, tab]),
 ) as Record<string, TabType>;
 
-export default function RushShell() {
+export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -85,10 +85,15 @@ export default function RushShell() {
     devices,
     subscription,
     recentActivitiesRaw,
+    achievements,
+    shoes,
+    shoesSummary,
+    reloadGear,
     reloadDevices,
     hrvStatusRaw,
     profileRaw,
     recordsRaw,
+    meRaw,
     isLoading,
     error,
     submitMeasurement,
@@ -139,6 +144,21 @@ export default function RushShell() {
     const today = new Date().toISOString().split('T')[0];
     downloadCsv(`rush-atividades-${today}.csv`, activitiesToCsv(recentActivitiesRaw));
   }, [recentActivitiesRaw]);
+
+  /** Linha "Maratona • Avançado" montada a partir do objetivo cadastrado. */
+  const objectiveLabel = useMemo(() => {
+    const objectives = meRaw?.objectives;
+    if (!objectives?.distance_km) return null;
+    const distanceName: Record<number, string> = { 5: '5 KM', 10: '10 KM', 21: 'Meia Maratona', 42: 'Maratona' };
+    const levelName: Record<string, string> = {
+      beginner: 'Iniciante',
+      intermediate: 'Intermediário',
+      advanced: 'Avançado',
+    };
+    return [distanceName[objectives.distance_km] || `${objectives.distance_km} km`, levelName[objectives.level]]
+      .filter(Boolean)
+      .join(' • ');
+  }, [meRaw]);
 
   const viewImage = useCallback((item: ImageViewerItem) => setActiveViewingImage(item), []);
 
@@ -229,6 +249,19 @@ export default function RushShell() {
         {currentTab === 'perfil' && (
           <ProfileScreen
             athlete={athlete}
+            readiness={readiness}
+            weeklySummary={weeklySummary}
+            objectiveLabel={objectiveLabel}
+            location={profileRaw?.location || null}
+            vo2maxTrendPercent={vo2maxRaw?.trend_percent ?? null}
+            hrvStatusLabel={readiness.hrvStatus}
+            recentActivities={recentActivitiesRaw}
+            achievementsEarned={achievements.earned}
+            achievementsAll={achievements.all}
+            trainingLoad={trainingLoad}
+            personalRecords={recordsRaw?.records || null}
+            shoesSummary={shoesSummary}
+            devices={devices}
             onOpenGearGarage={() => setIsGearGarageOpen(true)}
             onOpenBleHardware={() => setIsBleModalOpen(true)}
             onOpenEditProfile={() => setIsAthleteModalOpen(true)}
@@ -253,8 +286,10 @@ export default function RushShell() {
       <AthleteModal
         currentAthlete={athlete}
         isOpen={isAthleteModalOpen}
+        profile={profileRaw}
         onClose={() => setIsAthleteModalOpen(false)}
-        onSelectAthlete={() => setIsAthleteModalOpen(false)}
+        onSaved={reload}
+        onLogout={onLogout}
         onViewImage={viewImage}
       />
 

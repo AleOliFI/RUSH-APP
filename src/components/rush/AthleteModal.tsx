@@ -1,24 +1,69 @@
-import React, { useState } from 'react';
+// ============================================================
+// RUSH RUNNING — Passaporte biométrico e edição de perfil
+// ------------------------------------------------------------
+// Substitui o seletor de contas do protótipo: existe um único
+// atleta autenticado, então aqui ele edita os próprios dados
+// (nome, usuário, bio, local, peso, altura e foto) e sai da conta.
+// ============================================================
+
+import React, { useEffect, useRef, useState } from 'react';
 import { AthleteProfile, ImageViewerItem } from '../../types';
-import { ATHLETES } from '../../data/appAssets';
 import { downloadImageToDevice } from '../../utils/imageDownload';
+import { prepareImageForUpload } from '../../utils/imageUpload';
+import { users } from '../../api';
 
 interface AthleteModalProps {
   currentAthlete: AthleteProfile;
   isOpen: boolean;
+  /** Perfil cru vindo de GET /api/users/profile, com peso e altura. */
+  profile: any;
   onClose: () => void;
-  onSelectAthlete: (athlete: AthleteProfile) => void;
+  onSaved: () => Promise<void> | void;
+  onLogout: () => void;
   onViewImage?: (item: ImageViewerItem) => void;
 }
 
 export const AthleteModal: React.FC<AthleteModalProps> = ({
   currentAthlete,
   isOpen,
+  profile,
   onClose,
-  onSelectAthlete,
+  onSaved,
+  onLogout,
   onViewImage,
 }) => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: '',
+    username: '',
+    bio: '',
+    location: '',
+    weight_kg: '',
+    height_cm: '',
+    avatar_url: '' as string | null,
+  });
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsEditing(false);
+      setError(null);
+      return;
+    }
+    setForm({
+      name: profile?.name || currentAthlete.name || '',
+      username: profile?.username || currentAthlete.handle.replace('@', ''),
+      bio: profile?.bio || '',
+      location: profile?.location || '',
+      weight_kg: profile?.weight_kg != null ? String(profile.weight_kg) : '',
+      height_cm: profile?.height_cm != null ? String(profile.height_cm) : '',
+      avatar_url: profile?.avatar_url || currentAthlete.avatarUrl || null,
+    });
+  }, [isOpen, profile, currentAthlete]);
 
   if (!isOpen) return null;
 
@@ -40,8 +85,64 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
         subtitle: athlete.quote,
         category: 'PASSAPORTE BIOMÉTRICO DO ATLETA',
         filename: `rush-running-atleta-${athlete.name.toLowerCase().replace(/[^a-z0-9]/gi, '-')}.png`,
-        description: `Foto de passaporte atlético oficial de ${athlete.name}. VO2 Máx: ${athlete.vo2Max} mL/kg/min, Frequência de Repouso: ${athlete.restingHR} BPM, Limiar: ${athlete.thresholdPace}.`,
+        description: `VO2 Máx: ${athlete.vo2Max} mL/kg/min, Frequência de Repouso: ${athlete.restingHR} BPM, Limiar: ${athlete.thresholdPace}.`,
       });
+    }
+  };
+
+  const handlePickAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError(null);
+    try {
+      const prepared = await prepareImageForUpload(file);
+      setForm((prev) => ({ ...prev, avatar_url: prepared.dataUrl }));
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível preparar a imagem.');
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!form.name.trim()) {
+      setError('O nome não pode ficar vazio.');
+      return;
+    }
+    if (!/^[a-z0-9_]{3,30}$/i.test(form.username.trim())) {
+      setError('O usuário deve ter de 3 a 30 caracteres, apenas letras, números ou _.');
+      return;
+    }
+    const weight = form.weight_kg ? Number(form.weight_kg) : null;
+    const height = form.height_cm ? Number(form.height_cm) : null;
+    if (weight != null && (!isFinite(weight) || weight < 30 || weight > 250)) {
+      setError('O peso deve ficar entre 30 e 250 kg.');
+      return;
+    }
+    if (height != null && (!isFinite(height) || height < 100 || height > 250)) {
+      setError('A altura deve ficar entre 100 e 250 cm.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await users.updateProfile({
+        name: form.name.trim(),
+        username: form.username.trim().toLowerCase(),
+        bio: form.bio.trim() || null,
+        location: form.location.trim() || null,
+        weight_kg: weight,
+        height_cm: height,
+        avatar_url: form.avatar_url,
+      });
+      await onSaved();
+      setIsEditing(false);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível salvar o perfil.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -146,79 +247,160 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
           </div>
         </div>
 
-        {/* Switch Athlete Profile */}
-        <div className="space-y-2 pt-1">
-          <span className="font-label-caps text-[10px] text-[#737373] uppercase font-bold tracking-wider block">
-            SELECIONAR CONTA / ATLETA ATIVO
-          </span>
-          <div className="space-y-2">
-            {ATHLETES.map((ath) => {
-              const isSelected = ath.id === currentAthlete.id;
-              return (
-                <div
-                  key={ath.id}
-                  className={`w-full p-3 rounded-lg border flex items-center justify-between transition-all text-left ${
-                    isSelected
-                      ? 'bg-[#201f1f] border-[#FF5500]'
-                      : 'bg-[#101010] border-[#262626] hover:border-[#444]'
-                  }`}
-                >
-                  <button
-                    onClick={() => onSelectAthlete(ath)}
-                    className="flex items-center space-x-3 flex-1 min-w-0 cursor-pointer text-left"
-                  >
-                    <div 
-                      className="relative"
-                      onClick={(e) => handleViewPhoto(e, ath)}
-                      title="Visualizar foto"
-                    >
-                      <img
-                        alt={ath.name}
-                        className="w-10 h-10 rounded-lg object-cover hover:ring-1 hover:ring-[#FF5500]"
-                        src={ath.avatarUrl}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-body text-xs font-bold text-[#F7F5F3]">{ath.name}</span>
-                        <span className="text-[9px] bg-[#FF5500]/15 text-[#FF5500] px-1 py-0.2 rounded font-telemetry font-extrabold">
-                          {ath.category}
-                        </span>
-                      </div>
-                      <span className="font-telemetry text-[10px] text-[#737373]">
-                        VO2: {ath.vo2Max} • RHR: {ath.restingHR} BPM
-                      </span>
-                    </div>
-                  </button>
+        {/* Edição do perfil */}
+        {!isEditing ? (
+          <div className="space-y-2 pt-1">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-full h-11 rounded-lg bg-[#101010] hover:bg-[#1C1C1C] border border-[#333] text-[#F7F5F3] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px] text-[#FF5500]">edit</span>
+              <span>Editar meus dados</span>
+            </button>
 
-                  <div className="flex items-center space-x-2 ml-2">
-                    {/* Direct Download Icon */}
-                    <button
-                      onClick={(e) => handleDownloadPhoto(e, ath)}
-                      title={`Baixar foto de ${ath.name}`}
-                      className="w-8 h-8 rounded bg-[#1C1C1C] hover:bg-[#FF5500] hover:text-[#0D0D0D] text-[#737373] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">download</span>
-                    </button>
-
-                    {isSelected && (
-                      <span className="material-symbols-outlined text-[#FF5500] text-[20px]">
-                        check_circle
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            <button
+              onClick={onLogout}
+              className="w-full h-11 rounded-lg bg-transparent hover:bg-[#EF4444]/10 border border-[#EF4444]/40 text-[#EF4444] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+              <span>Sair da conta</span>
+            </button>
           </div>
-        </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-3 pt-1">
+            <span className="font-label-caps text-[10px] text-[#737373] uppercase font-bold tracking-wider block">
+              EDITAR PERFIL
+            </span>
+
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePickAvatar} className="hidden" />
+
+            <div className="flex items-center gap-3">
+              <img
+                src={form.avatar_url || currentAthlete.avatarUrl}
+                alt="Foto do perfil"
+                className="w-14 h-14 rounded-xl object-cover border border-[#333]"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 h-10 rounded-lg bg-[#101010] hover:bg-[#1C1C1C] border border-[#333] text-[#F7F5F3] text-[11px] font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Trocar foto
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="profile-name" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                Nome
+              </label>
+              <input
+                id="profile-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] focus:outline-none focus:border-[#FF5500]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="profile-username" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                Usuário
+              </label>
+              <input
+                id="profile-username"
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] font-telemetry focus:outline-none focus:border-[#FF5500]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="profile-bio" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                Bio
+              </label>
+              <textarea
+                id="profile-bio"
+                rows={2}
+                maxLength={280}
+                value={form.bio}
+                onChange={(e) => setForm({ ...form, bio: e.target.value })}
+                className="w-full rounded-lg bg-[#101010] border border-[#262626] p-3 text-xs text-[#F7F5F3] resize-none focus:outline-none focus:border-[#FF5500]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="profile-location" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                Local
+              </label>
+              <input
+                id="profile-location"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="Cidade, UF"
+                className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] focus:outline-none focus:border-[#FF5500]"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label htmlFor="profile-weight" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                  Peso (kg)
+                </label>
+                <input
+                  id="profile-weight"
+                  type="number"
+                  step="0.1"
+                  inputMode="decimal"
+                  value={form.weight_kg}
+                  onChange={(e) => setForm({ ...form, weight_kg: e.target.value })}
+                  className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] font-telemetry focus:outline-none focus:border-[#FF5500]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="profile-height" className="font-label-sm text-[10px] text-[#737373] uppercase block">
+                  Altura (cm)
+                </label>
+                <input
+                  id="profile-height"
+                  type="number"
+                  inputMode="numeric"
+                  value={form.height_cm}
+                  onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
+                  className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] font-telemetry focus:outline-none focus:border-[#FF5500]"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-xs text-[#EF4444] font-bold" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="h-11 px-4 rounded-lg bg-[#101010] border border-[#262626] text-[#A1A1AA] hover:text-[#F7F5F3] text-xs font-bold uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 h-11 rounded-lg bg-[#FF5500] hover:bg-[#FF6B00] disabled:opacity-60 disabled:cursor-wait text-[#0D0D0D] text-xs font-black uppercase tracking-wider cursor-pointer"
+              >
+                {isSaving ? 'Salvando…' : 'Salvar alterações'}
+              </button>
+            </div>
+          </form>
+        )}
 
         {/* Close Button */}
         <button
           onClick={onClose}
           className="w-full h-12 bg-[#262626] hover:bg-[#333] text-[#F7F5F3] font-headline-sm text-xs uppercase rounded-lg transition-colors cursor-pointer"
         >
-          CONFIRMAR & FECHAR
+          FECHAR
         </button>
       </div>
     </div>

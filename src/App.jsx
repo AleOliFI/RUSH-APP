@@ -107,7 +107,7 @@ function AppRoutes() {
             path={path}
             element={
               <ProtectedRoute>
-                <RushShell />
+                <RushShell onLogout={logout} />
               </ProtectedRoute>
             }
           />
