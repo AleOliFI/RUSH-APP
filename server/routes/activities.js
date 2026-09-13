@@ -12,6 +12,64 @@ module.exports = function activitiesRoutes(db) {
   const VALID_ACTIVITY_TYPES = ['run', 'trail_run', 'treadmill', 'walk', 'cycling', 'swimming', 'strength', 'other'];
   const VALID_PRIVACY_LEVELS = ['public', 'followers', 'private'];
 
+  // Limite de pontos por atividade. A 1 Hz isso cobre ~5h30 de corrida;
+  // acima disso o traçado é reamostrado para não estourar a linha do banco.
+  const MAX_TRACK_POINTS = 20000;
+
+  /**
+   * Valida e normaliza a polilinha recebida do rastreador.
+   * Descarta pontos sem coordenadas válidas em vez de gravar lixo.
+   * Retorna null quando não sobra nenhum ponto aproveitável.
+   */
+  function sanitizeTrack(track) {
+    if (!Array.isArray(track) || track.length === 0) return null;
+
+    const points = [];
+    for (const raw of track) {
+      if (!raw || typeof raw !== 'object') continue;
+      const lat = Number(raw.lat);
+      const lon = Number(raw.lon ?? raw.lng);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+
+      const t = Number(raw.t ?? raw.timestamp);
+      const acc = Number(raw.acc ?? raw.accuracy);
+      const alt = Number(raw.alt ?? raw.altitude);
+
+      points.push({
+        lat: +lat.toFixed(6),
+        lon: +lon.toFixed(6),
+        t: isFinite(t) && t > 0 ? Math.round(t) : null,
+        acc: isFinite(acc) && acc >= 0 ? +acc.toFixed(1) : null,
+        alt: isFinite(alt) ? +alt.toFixed(1) : null,
+      });
+    }
+
+    if (points.length === 0) return null;
+
+    if (points.length <= MAX_TRACK_POINTS) return points;
+
+    // Reamostragem uniforme preservando o primeiro e o último ponto.
+    const step = points.length / MAX_TRACK_POINTS;
+    const reduced = [];
+    for (let i = 0; i < MAX_TRACK_POINTS; i++) reduced.push(points[Math.floor(i * step)]);
+    reduced[reduced.length - 1] = points[points.length - 1];
+    return reduced;
+  }
+
+  /** Lê o traçado gravado; devolve null quando a atividade não tem percurso. */
+  function readTrack(activityId) {
+    const row = db.prepare('SELECT points_json, point_count, started_at FROM activity_tracks WHERE activity_id = ?').get(activityId);
+    if (!row) return null;
+    try {
+      const points = JSON.parse(row.points_json);
+      if (!Array.isArray(points) || points.length === 0) return null;
+      return { points, point_count: row.point_count, started_at: row.started_at };
+    } catch {
+      return null;
+    }
+  }
+
   // -------------------------------------------------------
   // POST /api/activities — Criar atividade
   // -------------------------------------------------------
@@ -21,7 +79,7 @@ module.exports = function activitiesRoutes(db) {
         type, title, date, distance_km, duration_seconds,
         avg_pace, avg_hr, max_hr, calories, elevation_gain,
         rpe, rpe_score, feeling_notes, workout_rating, image_url, description,
-        privacy = 'public', session_id, splits, shoe_id
+        privacy = 'public', session_id, splits, shoe_id, track
       } = req.body;
 
       if (!type || distance_km == null || duration_seconds == null) {
@@ -121,6 +179,21 @@ module.exports = function activitiesRoutes(db) {
           }
         }
 
+        // Traçado GPS (opcional) — gravado como polilinha única
+        const trackPoints = sanitizeTrack(track);
+        if (trackPoints) {
+          const firstTimestamp = trackPoints.find((p) => p.t != null)?.t ?? null;
+          db.prepare(`
+            INSERT INTO activity_tracks (activity_id, points_json, point_count, started_at)
+            VALUES (?, ?, ?, ?)
+          `).run(
+            id,
+            JSON.stringify(trackPoints),
+            trackPoints.length,
+            firstTimestamp != null ? new Date(firstTimestamp).toISOString() : activityDate
+          );
+        }
+
         // Check achievements
         checkAndAwardAchievements(db, req.user.id, numDist, type);
       });
@@ -129,8 +202,13 @@ module.exports = function activitiesRoutes(db) {
 
       const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(id);
       const activitySplits = db.prepare('SELECT * FROM activity_splits WHERE activity_id = ? ORDER BY split_number').all(id);
+      const savedTrack = readTrack(id);
 
-      res.status(201).json({ activity, splits: activitySplits });
+      res.status(201).json({
+        activity,
+        splits: activitySplits,
+        track_point_count: savedTrack ? savedTrack.point_count : 0,
+      });
     } catch (err) {
       console.error('Create activity error:', err);
       res.status(500).json({ error: 'Erro ao criar atividade' });
@@ -165,7 +243,14 @@ module.exports = function activitiesRoutes(db) {
       const enriched = activities.map(a => {
         const likes = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
         const comments = db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
-        return { ...a, likes_count: likes.count, comments_count: comments.count };
+        const trackRow = db.prepare('SELECT point_count FROM activity_tracks WHERE activity_id = ?').get(a.id);
+        return {
+          ...a,
+          likes_count: likes.count,
+          comments_count: comments.count,
+          has_track: !!trackRow,
+          track_point_count: trackRow ? trackRow.point_count : 0,
+        };
       });
 
       res.json({
@@ -403,15 +488,80 @@ module.exports = function activitiesRoutes(db) {
 
       const hasLiked = db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(activity.id, req.user.id);
 
+      const track = readTrack(activity.id);
+
       res.json({
         activity,
         splits,
+        track: track ? track.points : null,
         likes: { count: likes.length, users: likes.slice(0, 10), has_liked: !!hasLiked },
         comments: { count: comments.length, items: comments },
       });
     } catch (err) {
       console.error('Get activity details error:', err);
       res.status(500).json({ error: 'Erro ao buscar detalhes da atividade' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // GET /api/activities/:id/gpx — Exportação do percurso em GPX 1.1
+  // -------------------------------------------------------
+  // Só exporta o que foi realmente medido: pontos sem altitude saem sem
+  // <ele>, e pontos sem horário saem sem <time>. Nada é interpolado.
+  router.get('/:id/gpx', authenticate, (req, res) => {
+    try {
+      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      if (!activity) {
+        return res.status(404).json({ error: 'Atividade não encontrada' });
+      }
+      if (activity.user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Sem permissão para exportar esta atividade' });
+      }
+
+      const track = readTrack(activity.id);
+      if (!track) {
+        return res.status(404).json({ error: 'Esta atividade não tem traçado GPS gravado' });
+      }
+
+      const esc = (value) => String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+      const segments = track.points.map((p) => {
+        const parts = [`      <trkpt lat="${p.lat}" lon="${p.lon}">`];
+        if (p.alt != null) parts.push(`        <ele>${p.alt}</ele>`);
+        if (p.t != null) parts.push(`        <time>${new Date(p.t).toISOString()}</time>`);
+        parts.push('      </trkpt>');
+        return parts.join('\n');
+      }).join('\n');
+
+      const gpx = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<gpx version="1.1" creator="RUSH Running" xmlns="http://www.topografix.com/GPX/1/1">',
+        '  <metadata>',
+        `    <name>${esc(activity.title || 'Atividade RUSH')}</name>`,
+        `    <time>${esc(new Date(track.started_at || activity.date).toISOString())}</time>`,
+        '  </metadata>',
+        '  <trk>',
+        `    <name>${esc(activity.title || 'Atividade RUSH')}</name>`,
+        '    <trkseg>',
+        segments,
+        '    </trkseg>',
+        '  </trk>',
+        '</gpx>',
+        ''
+      ].join('\n');
+
+      const safeName = String(activity.title || 'atividade')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'atividade';
+
+      res.setHeader('Content-Type', 'application/gpx+xml; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="rush-${safeName}.gpx"`);
+      res.send(gpx);
+    } catch (err) {
+      console.error('Export GPX error:', err);
+      res.status(500).json({ error: 'Erro ao exportar o percurso' });
     }
   });
 

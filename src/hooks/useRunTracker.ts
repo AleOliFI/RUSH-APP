@@ -26,6 +26,8 @@ export interface RunTrackPoint {
   lon: number;
   timestamp: number;
   accuracy: number;
+  /** Altitude do GNSS em metros. Null quando o aparelho não a reporta. */
+  altitude: number | null;
 }
 
 /** Precisão pior que isto (metros) é descartada. */
@@ -144,6 +146,7 @@ export function useRunTracker(): RunTrackerState {
       lon: position.coords.longitude,
       timestamp: position.timestamp,
       accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude ?? null,
     };
 
     setGpsAccuracyM(Math.round(point.accuracy));

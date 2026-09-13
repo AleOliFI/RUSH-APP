@@ -573,6 +573,26 @@ module.exports = function initializeDatabase(db) {
   `);
 
   // ============================================================
+  // TRAÇADO GPS — polilinha bruta de cada atividade
+  // ------------------------------------------------------------
+  // Guardamos o percurso como UMA linha por atividade (points_json),
+  // e não uma linha por ponto: uma corrida de 1h a 1 Hz gera ~3.600
+  // pontos, o que inflaria a tabela sem nenhum ganho de consulta —
+  // o traçado só é lido inteiro (mapa e exportação .GPX).
+  // Cada ponto: { lat, lon, t (epoch ms), acc (m), alt (m|null) }.
+  // ============================================================
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_tracks (
+      activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+      points_json TEXT NOT NULL,
+      point_count INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // ============================================================
   // GEAR — Frota de calçados (Gear Garage / Aposentadoria)
   // ============================================================
 

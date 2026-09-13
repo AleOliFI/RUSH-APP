@@ -38,6 +38,8 @@ interface ProfileScreenProps {
   onOpenBleHardware: () => void;
   onOpenEditProfile: () => void;
   onViewImage: (item: ImageViewerItem) => void;
+  /** Abre o percurso GPS da atividade (só existe quando ela foi rastreada). */
+  onViewRoute: (activity: { id: string; title?: string | null }) => void;
 }
 
 const ACWR_ZONE_TEXT: Record<string, string> = {
@@ -66,6 +68,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenBleHardware,
   onOpenEditProfile,
   onViewImage,
+  onViewRoute,
 }) => {
   const [activeTab, setActiveTab] = useState<'posts' | 'stats' | 'badges'>('posts');
 
@@ -375,6 +378,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   <p className="text-xs text-[#A1A1AA] leading-relaxed">
                     {activity.feeling_notes || activity.description}
                   </p>
+                )}
+                {activity.has_track && (
+                  <button
+                    type="button"
+                    onClick={() => onViewRoute({ id: activity.id, title: activity.title })}
+                    className="min-h-[40px] w-full bg-[#101010] hover:bg-[#262626] border border-[#262626] rounded-xl flex items-center justify-center gap-2 text-[#F7F5F3] cursor-pointer transition-all"
+                  >
+                    <span className="material-symbols-outlined text-[#FF5500] text-[18px]">route</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider">
+                      Ver percurso ({activity.track_point_count} pontos)
+                    </span>
+                  </button>
                 )}
               </div>
             ))}

@@ -19,6 +19,7 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { WorkoutDetailModal } from './components/rush/WorkoutDetailModal';
 import { AthleteModal } from './components/rush/AthleteModal';
 import { ImageViewerModal } from './components/rush/ImageViewerModal';
+import { RouteMapModal } from './components/rush/RouteMapModal';
 import { DownloadToast } from './components/rush/DownloadToast';
 import { BleHardwareModal } from './components/rush/BleHardwareModal';
 import { ShoeRetirementModal } from './components/rush/ShoeRetirementModal';
@@ -117,6 +118,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isProSuccessOpen, setIsProSuccessOpen] = useState(false);
   const [lastRunSummary, setLastRunSummary] = useState<RunSummary | null>(null);
+  const [activeRoute, setActiveRoute] = useState<{ id: string; title?: string | null } | null>(null);
 
   /** Depois de publicar, volta para o feed já atualizado. */
   const handlePosted = useCallback(async () => {
@@ -134,6 +136,13 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         max_hr: summary.maxHr,
         avg_pace: summary.avgPace !== '—' ? `${summary.avgPace}/km` : null,
         session_id: sessionId ?? null,
+        track: summary.track.map((point) => ({
+          lat: point.lat,
+          lon: point.lon,
+          t: point.timestamp,
+          acc: point.accuracy,
+          alt: point.altitude,
+        })),
       });
     },
     [finishRun],
@@ -273,6 +282,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onOpenBleHardware={() => setIsBleModalOpen(true)}
             onOpenEditProfile={() => setIsAthleteModalOpen(true)}
             onViewImage={viewImage}
+            onViewRoute={setActiveRoute}
           />
         )}
       </main>
@@ -395,6 +405,13 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         isOpen={isProSuccessOpen}
         subscription={subscription}
         onClose={() => setIsProSuccessOpen(false)}
+      />
+
+      <RouteMapModal
+        activityId={activeRoute?.id ?? null}
+        title={activeRoute?.title ?? null}
+        isOpen={!!activeRoute}
+        onClose={() => setActiveRoute(null)}
       />
 
       <ImageViewerModal

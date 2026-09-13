@@ -122,6 +122,38 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+/**
+ * Igual a `request`, mas devolve o corpo como texto — usado pela exportação
+ * .GPX, que responde XML e não JSON.
+ */
+async function requestText(path, options = {}) {
+  const token = getToken();
+  const headers = { ...options.headers };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (!refreshed) {
+      clearAuth();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+      }
+      throw new Error('Sessão expirada');
+    }
+    headers['Authorization'] = `Bearer ${getToken()}`;
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erro na requisição');
+  }
+
+  return res.text();
+}
+
 // Auth API
 export const auth = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -196,6 +228,7 @@ export const activities = {
   delete: (id) => request(`/activities/${id}`, { method: 'DELETE' }),
   stats: (days = 30) => request(`/activities/stats/summary?days=${days}`),
   records: () => request('/activities/records'),
+  gpx: (id) => requestText(`/activities/${id}/gpx`),
   trainingLoad: () => request('/activities/training-load'),
 };
 
