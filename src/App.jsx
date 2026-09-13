@@ -8,8 +8,8 @@
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Login from './pages/Login';
-import Onboarding from './pages/Onboarding';
+import { LoginScreen } from './screens/LoginScreen';
+import { OnboardingScreen } from './screens/OnboardingScreen';
 import CoachDashboard from './pages/CoachDashboard';
 import BottomNav from './components/BottomNav';
 import RushShell from './RushShell';
@@ -58,7 +58,7 @@ function PublicRoute({ children }) {
 }
 
 function AppRoutes() {
-  const { user, logout } = useAuth();
+  const { user, logout, login, register, updateUser, refreshUser } = useAuth();
   const location = useLocation();
 
   // O shell novo traz a própria navegação inferior; a barra antiga fica
@@ -72,7 +72,7 @@ function AppRoutes() {
           path="/login"
           element={
             <PublicRoute>
-              <Login mode="login" />
+              <LoginScreen mode="login" onLogin={login} onRegister={register} />
             </PublicRoute>
           }
         />
@@ -80,7 +80,7 @@ function AppRoutes() {
           path="/register"
           element={
             <PublicRoute>
-              <Login mode="register" />
+              <LoginScreen mode="register" onLogin={login} onRegister={register} />
             </PublicRoute>
           }
         />
@@ -88,7 +88,7 @@ function AppRoutes() {
           path="/onboarding"
           element={
             <ProtectedRoute requireOnboarding={false}>
-              <Onboarding user={user} />
+              <OnboardingScreen user={user} onUpdateUser={updateUser} onRefreshUser={refreshUser} />
             </ProtectedRoute>
           }
         />

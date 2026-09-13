@@ -182,6 +182,7 @@ const ATHLETE_STATUS_TEXT: Record<AthleteProfile['status'], string> = {
   READY: 'STATUS: READY',
   FATIGUED: 'STATUS: FATIGUED',
   RECOVERING: 'STATUS: RECOVERING',
+  UNKNOWN: 'SEM MEDIÇÃO HOJE',
 };
 
 export interface AthleteSources {
@@ -198,8 +199,13 @@ export interface AthleteSources {
 export function toAthlete(src: AthleteSources): AthleteProfile {
   const { me, profile, hrvStatus, records, vo2max, stats7, statsAll, weeklyGoalKm } = src;
 
-  const statusKey: string = hrvStatus?.status?.status || hrvStatus?.suggestion?.status || 'attention';
-  const athleteStatus = READINESS_TO_ATHLETE_STATUS[statusKey] || 'FATIGUED';
+  // Sem medição do dia não há status autonômico: não é fadiga, é ausência de dado.
+  const statusKey: string | null = hrvStatus?.measurement
+    ? hrvStatus?.status?.status || hrvStatus?.suggestion?.status || 'attention'
+    : null;
+  const athleteStatus: AthleteProfile['status'] = statusKey
+    ? READINESS_TO_ATHLETE_STATUS[statusKey] || 'FATIGUED'
+    : 'UNKNOWN';
   const isPro = !!me?.is_pro;
 
   const zones = hrvStatus?.suggestion?.hr_zones || null;

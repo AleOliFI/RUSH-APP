@@ -43,7 +43,7 @@ const PLACEHOLDER_ATHLETE: AthleteProfile = {
   handle: '@—',
   category: 'AGE-GROUP',
   avatarUrl: APP_IMAGES.headerAvatar,
-  status: 'READY',
+  status: 'UNKNOWN',
   statusText: 'CARREGANDO…',
   quote: '',
   vo2Max: 0,

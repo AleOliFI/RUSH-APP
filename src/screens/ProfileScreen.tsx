@@ -185,7 +185,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 ? 'text-[#22C55E]'
                 : athlete.status === 'FATIGUED'
                   ? 'text-[#FACC15]'
-                  : 'text-[#EF4444]'
+                  : athlete.status === 'UNKNOWN'
+                    ? 'text-[#737373]'
+                    : 'text-[#EF4444]'
             }`}
           >
             {athlete.statusText}

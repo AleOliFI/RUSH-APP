@@ -6,7 +6,8 @@ export interface AthleteProfile {
   handle: string;
   category: 'PRO' | 'ELITE' | 'AGE-GROUP';
   avatarUrl: string;
-  status: 'READY' | 'FATIGUED' | 'RECOVERING';
+  /** UNKNOWN = ainda não há medição de VFC registrada hoje. */
+  status: 'READY' | 'FATIGUED' | 'RECOVERING' | 'UNKNOWN';
   statusText: string;
   quote: string;
   vo2Max: number;

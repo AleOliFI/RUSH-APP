@@ -58,8 +58,16 @@ export const Header: React.FC<HeaderProps> = ({
             className="text-right flex flex-col items-end hover:opacity-85 transition-opacity cursor-pointer group"
           >
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-pulse"></span>
-              <span className="font-label-caps text-[10px] text-[#FF5500] uppercase tracking-wider font-extrabold group-hover:underline">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  athlete.status === 'UNKNOWN' ? 'bg-[#737373]' : 'bg-[#FF5500] animate-pulse'
+                }`}
+              />
+              <span
+                className={`font-label-caps text-[10px] uppercase tracking-wider font-extrabold group-hover:underline ${
+                  athlete.status === 'UNKNOWN' ? 'text-[#737373]' : 'text-[#FF5500]'
+                }`}
+              >
                 {athlete.statusText}
               </span>
             </div>
