@@ -12,6 +12,14 @@ module.exports = function hrvRoutes(db) {
   const router = express.Router();
 
   /**
+   * Medições necessárias na janela de 7 dias para tratar a baseline curta
+   * como formada. Abaixo disso a comparação existe, mas ainda está
+   * aprendendo — e a interface precisa saber disso para não apresentar
+   * um desvio como se fosse consolidado (Plews et al., 2013).
+   */
+  const MIN_BASELINE_SAMPLES = 7;
+
+  /**
    * Helper function to recalculate and persist daily status for a given user and date.
    */
   function recalculateDailyStatus(userId, todayDate) {
@@ -180,7 +188,14 @@ module.exports = function hrvRoutes(db) {
       suggestion.action, suggestion.explanation_text
     );
 
-    return { suggestion, stats28, stats7, consecutiveLowDays, sampleCount: lnValues28.length };
+    return {
+      suggestion,
+      stats28,
+      stats7,
+      consecutiveLowDays,
+      sampleCount: lnValues28.length,
+      sample7Count: lnValues7.length,
+    };
   }
 
   // -------------------------------------------------------
@@ -255,6 +270,16 @@ module.exports = function hrvRoutes(db) {
           mean: +(statusCalculation?.stats28.mean || lnrmssd).toFixed(4),
           sd: +(statusCalculation?.stats28.sd || 0.08).toFixed(4),
           sample_size: statusCalculation?.sampleCount || 0,
+        },
+        // Janela curta (7 dias), usada para leitura de tendência recente.
+        // Enquanto não houver uma semana de medições, a baseline ainda está
+        // se formando: is_baseline_learning avisa a interface para não
+        // apresentar a comparação como se fosse consolidada.
+        stats_7d: {
+          mean: +((statusCalculation?.sample7Count || 0) > 0 ? statusCalculation.stats7.mean : lnrmssd).toFixed(4),
+          sd: +(statusCalculation?.stats7?.sd || 0).toFixed(4),
+          sample_size: statusCalculation?.sample7Count || 0,
+          is_baseline_learning: (statusCalculation?.sample7Count || 0) < MIN_BASELINE_SAMPLES,
         },
         consecutive_low_days: statusCalculation?.consecutiveLowDays || 0,
       });
@@ -377,6 +402,11 @@ module.exports = function hrvRoutes(db) {
 
       res.json({
         period_days: days,
+        // days_range é o mesmo valor sob o nome usado pelos consumidores
+        // que leem a janela pedida; mantido ao lado de period_days para
+        // não quebrar quem já lê o campo antigo.
+        days_range: days,
+        total_measurements: measurements.length,
         measurements,
         wellness,
         daily_statuses: statuses,

@@ -558,18 +558,15 @@ async function runAdversarialSuite() {
     }
   });
 
-  await it('4.6 POST /api/hrv/vo2max rejects missing values and out-of-range (< 20 or > 100) VO2max with 400', async () => {
-    const resMissing = await request('POST', '/api/hrv/vo2max', { vo2max_value: 50 }, athleteAuth);
-    expectErrorResponse(resMissing, 400, 'vo2max_value e method são obrigatórios');
+  await it('4.6 VO2máx não aceita valor informado direto; o teste de campo valida a entrada', async () => {
+    // Decisão de projeto: não existe POST /api/hrv/vo2max. O VO2máx vem de
+    // uma medição (Cooper de 12 min), não de um número digitado pelo atleta.
+    const res = await request('POST', '/api/hrv/vo2max', { vo2max_value: 50, method: 'cooper_test' }, athleteAuth);
+    assert.strictEqual(res.status, 404, 'POST /api/hrv/vo2max não deve existir');
 
-    const badVo2 = [-10, 0, 15, 19.9, 100.1, 500, 'super_fit'];
-    for (const vo2max_value of badVo2) {
-      const res = await request('POST', '/api/hrv/vo2max', {
-        vo2max_value,
-        method: 'cooper_test',
-      }, athleteAuth);
-      expectErrorResponse(res, 400, 'vo2max_value deve ser um número entre 20 e 100');
-    }
+    // O caminho legítimo rejeita entrada incompleta.
+    const semTipo = await request('POST', '/api/users/field-test', { distance_km: 2.8 }, athleteAuth);
+    expectErrorResponse(semTipo, 400, 'test_type é obrigatório');
   });
 
   await it('4.7 GET /api/hrv/history handles boundary days parameters safely without error', async () => {

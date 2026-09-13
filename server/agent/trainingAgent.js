@@ -528,7 +528,7 @@ function generateExplanation(status, action, lnrmssdToday, meanBaseline, sdBasel
     if (typeof wellness.soreness === 'number' && wellness.soreness >= SORENESS_CRITICAL_THRESHOLD) factors.push('dor muscular');
     if (typeof wellness.stress === 'number' && wellness.stress >= STRESS_CRITICAL_THRESHOLD) factors.push('estresse');
     if (typeof wellness.readiness === 'number' && wellness.readiness <= READINESS_CRITICAL_THRESHOLD) factors.push('disposição');
-    text += ` Fatores de bem-estar críticos: ${factors.join(', ')}.`;
+    text += ` ${factors.length} fatores de bem-estar estão críticos: ${factors.join(', ')}.`;
   }
 
   if (cycleInfo?.note) {

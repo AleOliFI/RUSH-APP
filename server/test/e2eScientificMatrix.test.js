@@ -12,6 +12,7 @@ const initializeDatabase = require('../database/schema');
 const { generateAccessToken } = require('../middleware/auth');
 const hrvRoutes = require('../routes/hrv');
 const trainingRoutes = require('../routes/training');
+const usersRoutes = require('../routes/users');
 
 console.log('🧪 Starting End-to-End HTTP Route Tests...\n');
 
@@ -53,6 +54,8 @@ async function run() {
   app.use(express.json());
   app.use('/api/hrv', hrvRoutes(db));
   app.use('/api/training', trainingRoutes(db));
+  // O VO2máx é gravado pelo teste de campo, que vive nas rotas de usuário.
+  app.use('/api/users', usersRoutes(db));
 
   const server = app.listen(0);
   const port = server.address().port;
@@ -197,30 +200,50 @@ async function run() {
     });
 
     // ------------------------------------------------------------------
-    // Test 7: VO2max endpoints
+    // Test 7: VO2max — só entra pelo teste de campo
     // ------------------------------------------------------------------
-    await it('POST /api/hrv/vo2max and GET /api/hrv/vo2max handle VO2max data', async () => {
-      const postRes = await fetch(`${baseUrl}/api/hrv/vo2max`, {
+    // Não existe POST /api/hrv/vo2max por decisão de projeto: o VO2máx é
+    // derivado de uma medição real (Cooper de 12 min, POST /users/field-test),
+    // e não de um número digitado. Este teste fixa esse contrato.
+    await it('VO2máx é gravado pelo teste de campo e lido em GET /api/hrv/vo2max', async () => {
+      const notImplemented = await fetch(`${baseUrl}/api/hrv/vo2max`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          vo2max_value: 52.4,
-          method: 'cooper_12min'
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ vo2max_value: 52.4, method: 'cooper_12min' }),
       });
+      assert.strictEqual(notImplemented.status, 404, 'VO2máx não pode ser informado diretamente');
 
-      assert.strictEqual(postRes.status, 201);
+      const fieldTest = await fetch(`${baseUrl}/api/users/field-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          test_type: 'cooper_12min',
+          distance_km: 2.85,
+          duration_seconds: 720,
+          avg_hr: 168,
+          max_hr: 186,
+          rest_hr: 54,
+        }),
+      });
+      const fieldTestBody = await fieldTest.json().catch(() => ({}));
+      assert.ok(
+        [200, 201].includes(fieldTest.status),
+        `teste de campo deve ser aceito (status ${fieldTest.status}: ${JSON.stringify(fieldTestBody)})`,
+      );
 
       const getRes = await fetch(`${baseUrl}/api/hrv/vo2max`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       assert.strictEqual(getRes.status, 200);
       const data = await getRes.json();
-      assert.strictEqual(data.estimates.length, 1);
-      assert.strictEqual(data.estimates[0].vo2max_value, 52.4);
+      assert.strictEqual(data.has_estimate, true);
+      // Cooper (1968): VO2máx = (metros - 504.9) / 44.73
+      const expected = +(((2.85 * 1000) - 504.9) / 44.73).toFixed(1);
+      assert.ok(
+        Math.abs(data.vo2max - expected) < 1,
+        `VO2máx deve seguir a fórmula de Cooper (esperado ~${expected}, recebido ${data.vo2max})`,
+      );
+      assert.ok(Array.isArray(data.history));
     });
 
   } finally {
