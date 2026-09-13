@@ -3,6 +3,7 @@
 // ============================================================
 
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
 
 module.exports = function usersRoutes(db) {
@@ -234,6 +235,33 @@ module.exports = function usersRoutes(db) {
         WHERE user_id = ?
       `).run(paceFormatted, effectiveMaxHr, numRestHr, JSON.stringify(calculatedHrZones), req.user.id);
 
+      // -------------------------------------------------------
+      // VO2max indireto — apenas para o protocolo de Cooper (12 min).
+      // Fórmula original de Cooper (1968): VO2max = (metros - 504.9) / 44.73
+      // Só é válida para um esforço máximo de 12 minutos, por isso o
+      // cálculo é restrito a esse protocolo (com tolerância de +/- 1 min).
+      // -------------------------------------------------------
+      let vo2maxEstimate = null;
+      const isCooper = String(test_type).toLowerCase().includes('cooper');
+      if (isCooper && numDist > 0 && numDur >= 660 && numDur <= 780) {
+        const meters = numDist * 1000;
+        const rawVo2 = (meters - 504.9) / 44.73;
+        if (rawVo2 >= 20 && rawVo2 <= 100) {
+          vo2maxEstimate = +rawVo2.toFixed(1);
+          const today = new Date().toISOString().split('T')[0];
+          db.prepare(`
+            INSERT INTO vo2max_estimates (id, user_id, date, vo2max_value, method, notes)
+            VALUES (?, ?, ?, ?, 'cooper_12min', ?)
+          `).run(
+            uuidv4(),
+            req.user.id,
+            today,
+            vo2maxEstimate,
+            `Teste de Cooper: ${numDist} km em ${Math.round(numDur / 60)} min`,
+          );
+        }
+      }
+
       res.json({
         success: true,
         test_type,
@@ -241,7 +269,10 @@ module.exports = function usersRoutes(db) {
         max_hr: effectiveMaxHr,
         rest_hr: numRestHr,
         zones: calculatedHrZones,
-        message: 'Teste de campo processado e zonas individualizadas salvas!',
+        vo2max: vo2maxEstimate,
+        message: vo2maxEstimate
+          ? `Teste processado! Zonas individualizadas salvas e VO2max estimado em ${vo2maxEstimate} ml/kg/min.`
+          : 'Teste de campo processado e zonas individualizadas salvas!',
       });
     } catch (err) {
       console.error('Field test error:', err);

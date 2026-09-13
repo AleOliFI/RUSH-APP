@@ -158,6 +158,16 @@ export const hrv = {
   zones: () => request('/hrv/zones'),
 };
 
+// Gear (Garagem de Tênis)
+export const gear = {
+  shoes: () => request('/gear/shoes'),
+  createShoe: (data) => request('/gear/shoes', { method: 'POST', body: JSON.stringify(data) }),
+  updateShoe: (id, data) => request(`/gear/shoes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  retireShoe: (id) => request(`/gear/shoes/${id}/retire`, { method: 'POST' }),
+  reactivateShoe: (id) => request(`/gear/shoes/${id}/reactivate`, { method: 'POST' }),
+  deleteShoe: (id) => request(`/gear/shoes/${id}`, { method: 'DELETE' }),
+};
+
 // Menstrual
 export const menstrual = {
   getProfile: () => request('/menstrual/profile'),
@@ -179,8 +189,10 @@ export const activities = {
   list: (page = 1) => request(`/activities?page=${page}`),
   create: (data) => request('/activities', { method: 'POST', body: JSON.stringify(data) }),
   get: (id) => request(`/activities/${id}`),
+  update: (id, data) => request(`/activities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/activities/${id}`, { method: 'DELETE' }),
   stats: (days = 30) => request(`/activities/stats/summary?days=${days}`),
+  records: () => request('/activities/records'),
 };
 
 // Social

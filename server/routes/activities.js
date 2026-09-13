@@ -21,7 +21,7 @@ module.exports = function activitiesRoutes(db) {
         type, title, date, distance_km, duration_seconds,
         avg_pace, avg_hr, max_hr, calories, elevation_gain,
         rpe, rpe_score, feeling_notes, workout_rating, image_url, description,
-        privacy = 'public', session_id, splits
+        privacy = 'public', session_id, splits, shoe_id
       } = req.body;
 
       if (!type || distance_km == null || duration_seconds == null) {
@@ -69,6 +69,16 @@ module.exports = function activitiesRoutes(db) {
         }
       }
 
+      // Calçado utilizado (opcional) — precisa pertencer ao próprio atleta
+      let effectiveShoeId = null;
+      if (shoe_id) {
+        const ownsShoe = db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
+        if (!ownsShoe) {
+          return res.status(400).json({ error: 'shoe_id inválido ou não pertence ao usuário' });
+        }
+        effectiveShoeId = shoe_id;
+      }
+
       const id = uuidv4();
       const activityDate = date || new Date().toISOString();
 
@@ -81,9 +91,9 @@ module.exports = function activitiesRoutes(db) {
           INSERT INTO activities (
             id, user_id, type, title, date, distance_km, duration_seconds,
             avg_pace, avg_hr, max_hr, calories, elevation_gain, rpe, rpe_score,
-            feeling_notes, workout_rating, image_url, hrv_status_display, description, privacy, session_id
+            feeling_notes, workout_rating, image_url, hrv_status_display, description, privacy, session_id, shoe_id
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id, req.user.id, type, title ? String(title).trim() : `${type === 'run' ? 'Corrida' : type} de ${numDist} km`,
           activityDate, numDist, numDuration,
@@ -92,7 +102,7 @@ module.exports = function activitiesRoutes(db) {
           numRpe, numRpe, feeling_notes ? String(feeling_notes).trim() : null,
           workout_rating != null ? Number(workout_rating) : null,
           image_url ? String(image_url).trim() : null,
-          dailyStatus?.status || null, description ? String(description).trim() : null, privacySetting, session_id || null
+          dailyStatus?.status || null, description ? String(description).trim() : null, privacySetting, session_id || null, effectiveShoeId
         );
 
         // Create splits if provided
@@ -233,6 +243,59 @@ module.exports = function activitiesRoutes(db) {
   });
 
   // -------------------------------------------------------
+  // GET /api/activities/records — Recordes pessoais (5/10/21/42 km)
+  // -------------------------------------------------------
+  // Uma atividade conta para uma distância oficial quando percorre pelo
+  // menos aquela distância, com tolerância superior (ex.: 21.10 km conta
+  // como meia-maratona; 25 km não). O tempo é normalizado para a distância
+  // oficial pelo pace médio, que é a convenção usada por apps de corrida.
+  router.get('/records', authenticate, (req, res) => {
+    try {
+      const DISTANCES = [
+        { key: '5k', officialKm: 5, maxKm: 6.5 },
+        { key: '10k', officialKm: 10, maxKm: 12.5 },
+        { key: '21k', officialKm: 21.0975, maxKm: 24 },
+        { key: '42k', officialKm: 42.195, maxKm: 47 },
+      ];
+
+      const records = {};
+
+      for (const dist of DISTANCES) {
+        const best = db.prepare(`
+          SELECT id, title, date, distance_km, duration_seconds,
+                 (duration_seconds * 1.0 / distance_km) as pace_seconds_per_km
+          FROM activities
+          WHERE user_id = ? AND type = 'run'
+            AND distance_km >= ? AND distance_km <= ?
+          ORDER BY pace_seconds_per_km ASC
+          LIMIT 1
+        `).get(req.user.id, dist.officialKm, dist.maxKm);
+
+        if (!best) {
+          records[dist.key] = null;
+          continue;
+        }
+
+        const normalizedSeconds = Math.round(best.pace_seconds_per_km * dist.officialKm);
+        records[dist.key] = {
+          activity_id: best.id,
+          title: best.title,
+          date: best.date,
+          distance_km: best.distance_km,
+          duration_seconds: normalizedSeconds,
+          formatted: formatDuration(normalizedSeconds),
+          avg_pace: formatPaceFromSeconds(best.pace_seconds_per_km),
+        };
+      }
+
+      res.json({ records });
+    } catch (err) {
+      console.error('Get records error:', err);
+      res.status(500).json({ error: 'Erro ao calcular recordes pessoais' });
+    }
+  });
+
+  // -------------------------------------------------------
   // GET /api/activities/:id — Detalhes da atividade
   // -------------------------------------------------------
   router.get('/:id', authenticate, (req, res) => {
@@ -284,6 +347,79 @@ module.exports = function activitiesRoutes(db) {
     } catch (err) {
       console.error('Get activity details error:', err);
       res.status(500).json({ error: 'Erro ao buscar detalhes da atividade' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // PUT /api/activities/:id — Editar atividade (legenda, foto, privacidade)
+  // -------------------------------------------------------
+  router.put('/:id', authenticate, (req, res) => {
+    try {
+      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      if (!activity) {
+        return res.status(404).json({ error: 'Atividade não encontrada' });
+      }
+      if (activity.user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
+      }
+
+      const { title, description, feeling_notes, image_url, privacy, rpe_score, workout_rating, shoe_id } = req.body;
+      const fields = [];
+      const values = [];
+
+      if (title !== undefined) { fields.push('title = ?'); values.push(title ? String(title).trim().slice(0, 120) : null); }
+      if (description !== undefined) { fields.push('description = ?'); values.push(description ? String(description).trim().slice(0, 2000) : null); }
+      if (feeling_notes !== undefined) { fields.push('feeling_notes = ?'); values.push(feeling_notes ? String(feeling_notes).trim().slice(0, 2000) : null); }
+      if (image_url !== undefined) { fields.push('image_url = ?'); values.push(image_url ? String(image_url).trim() : null); }
+
+      if (privacy !== undefined) {
+        if (!VALID_PRIVACY_LEVELS.includes(privacy)) {
+          return res.status(400).json({ error: `privacy inválido. Valores aceitos: ${VALID_PRIVACY_LEVELS.join(', ')}` });
+        }
+        fields.push('privacy = ?'); values.push(privacy);
+      }
+
+      if (rpe_score !== undefined && rpe_score !== null) {
+        const numRpe = Number(rpe_score);
+        if (isNaN(numRpe) || numRpe < 1 || numRpe > 10) {
+          return res.status(400).json({ error: 'rpe_score deve ser um número entre 1 e 10' });
+        }
+        fields.push('rpe_score = ?'); values.push(numRpe);
+        fields.push('rpe = ?'); values.push(numRpe);
+      }
+
+      if (workout_rating !== undefined && workout_rating !== null) {
+        const numRating = Number(workout_rating);
+        if (isNaN(numRating) || numRating < 1 || numRating > 5) {
+          return res.status(400).json({ error: 'workout_rating deve ser um número entre 1 e 5' });
+        }
+        fields.push('workout_rating = ?'); values.push(numRating);
+      }
+
+      if (shoe_id !== undefined) {
+        if (shoe_id === null || shoe_id === '') {
+          fields.push('shoe_id = ?'); values.push(null);
+        } else {
+          const ownsShoe = db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
+          if (!ownsShoe) {
+            return res.status(400).json({ error: 'shoe_id inválido ou não pertence ao usuário' });
+          }
+          fields.push('shoe_id = ?'); values.push(shoe_id);
+        }
+      }
+
+      if (!fields.length) {
+        return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+      }
+
+      values.push(req.params.id);
+      db.prepare(`UPDATE activities SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
+
+      const updated = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      res.json({ activity: updated });
+    } catch (err) {
+      console.error('Update activity error:', err);
+      res.status(500).json({ error: 'Erro ao atualizar atividade' });
     }
   });
 
@@ -347,6 +483,27 @@ function checkAndAwardAchievements(db, userId, distanceKm, type) {
       }
     }
   }
+}
+
+/**
+ * Formata segundos em "h:mm:ss" ou "mm:ss".
+ */
+function formatDuration(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+/**
+ * Formata segundos por km em "m:ss/km".
+ */
+function formatPaceFromSeconds(secondsPerKm) {
+  if (!secondsPerKm || !isFinite(secondsPerKm)) return null;
+  const m = Math.floor(secondsPerKm / 60);
+  const sec = Math.round(secondsPerKm % 60);
+  return `${m}:${sec < 10 ? '0' : ''}${sec}/km`;
 }
 
 function awardAchievement(db, userId, achievementId, achievementName) {

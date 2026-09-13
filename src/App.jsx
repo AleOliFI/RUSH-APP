@@ -1,17 +1,21 @@
 // ============================================================
-// RUSH PERFORMANCE — App Root & Route Setup
+// RUSH RUNNING — App Root & Route Setup
+// ------------------------------------------------------------
+// Área pública: Login / Registro / Onboarding.
+// Área autenticada: RushShell (6 abas do novo design system).
+// O painel da assessoria (/coach) permanece na estrutura antiga.
 // ============================================================
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
-import Dashboard from './pages/Dashboard';
-import Feed from './pages/Feed';
-import Training from './pages/Training';
-import Profile from './pages/Profile';
 import CoachDashboard from './pages/CoachDashboard';
 import BottomNav from './components/BottomNav';
+import RushShell from './RushShell';
+
+/** Rotas do shell novo — tudo o que não for pública nem /coach cai aqui. */
+const SHELL_PATHS = ['/', '/medicao', '/treinos', '/feed', '/pro', '/perfil'];
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -19,10 +23,8 @@ function ProtectedRoute({ children, requireOnboarding = true }) {
 
   if (isLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
-        <div style={{ color: 'var(--accent-primary)', fontWeight: 800, fontSize: '1.2rem', letterSpacing: '0.1em' }}>
-          RUSH
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0D0D0D]">
+        <div className="font-headline text-2xl text-[#FF5500] uppercase tracking-widest animate-pulse">RUSH</div>
       </div>
     );
   }
@@ -55,20 +57,13 @@ function PublicRoute({ children }) {
   return children;
 }
 
-function BottomNavWrapper() {
-  const { isAuthenticated } = useAuth();
-  const location = useLocation();
-
-  const hideNavOn = ['/login', '/register', '/onboarding'];
-  if (!isAuthenticated || hideNavOn.includes(location.pathname)) {
-    return null;
-  }
-
-  return <BottomNav />;
-}
-
 function AppRoutes() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+
+  // O shell novo traz a própria navegação inferior; a barra antiga fica
+  // restrita ao painel da assessoria, que ainda usa o design system legado.
+  const showLegacyNav = location.pathname === '/coach';
 
   return (
     <div className="app-shell">
@@ -98,48 +93,29 @@ function AppRoutes() {
           }
         />
         <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Dashboard user={user} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/feed"
-          element={
-            <ProtectedRoute>
-              <Feed user={user} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/training"
-          element={
-            <ProtectedRoute>
-              <Training user={user} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/coach"
           element={
             <ProtectedRoute>
-              <CoachDashboard user={user} />
+              <CoachDashboard user={user} onLogout={logout} />
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile user={user} onLogout={logout} />
-            </ProtectedRoute>
-          }
-        />
+
+        {SHELL_PATHS.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={
+              <ProtectedRoute>
+                <RushShell />
+              </ProtectedRoute>
+            }
+          />
+        ))}
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <BottomNavWrapper />
+      {showLegacyNav && <BottomNav />}
     </div>
   );
 }

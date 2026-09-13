@@ -573,6 +573,40 @@ module.exports = function initializeDatabase(db) {
   `);
 
   // ============================================================
+  // GEAR — Frota de calçados (Gear Garage / Aposentadoria)
+  // ============================================================
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shoes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      model_type TEXT DEFAULT NULL,
+      colorway TEXT DEFAULT NULL,
+      plate_technology TEXT DEFAULT NULL,
+      image_url TEXT DEFAULT NULL,
+      initial_km REAL NOT NULL DEFAULT 0 CHECK (initial_km >= 0),
+      max_km REAL NOT NULL DEFAULT 800 CHECK (max_km > 0),
+      is_default INTEGER NOT NULL DEFAULT 0,
+      retired_at TEXT DEFAULT NULL,
+      purchased_at TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_shoes_user ON shoes(user_id);
+    CREATE INDEX IF NOT EXISTS idx_shoes_retired ON shoes(user_id, retired_at);
+  `);
+
+  // Vínculo atividade -> calçado (quilometragem acumula automaticamente)
+  try {
+    db.exec(`ALTER TABLE activities ADD COLUMN shoe_id TEXT DEFAULT NULL REFERENCES shoes(id) ON DELETE SET NULL`);
+  } catch (_) {}
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_shoe ON activities(shoe_id)`);
+  } catch (_) {}
+
+  // ============================================================
   // SEED DATA — Achievements
   // ============================================================
 

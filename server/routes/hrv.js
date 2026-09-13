@@ -368,6 +368,48 @@ module.exports = function hrvRoutes(db) {
   });
 
   // -------------------------------------------------------
+  // GET /api/hrv/vo2max — Última estimativa de VO2max + histórico
+  // -------------------------------------------------------
+  router.get('/vo2max', authenticate, (req, res) => {
+    try {
+      const latest = db.prepare(`
+        SELECT id, date, vo2max_value, method, notes
+        FROM vo2max_estimates
+        WHERE user_id = ?
+        ORDER BY date DESC LIMIT 1
+      `).get(req.user.id);
+
+      const history = db.prepare(`
+        SELECT date, vo2max_value, method
+        FROM vo2max_estimates
+        WHERE user_id = ?
+        ORDER BY date DESC LIMIT 12
+      `).all(req.user.id);
+
+      // Variação percentual contra a estimativa mais antiga disponível na janela
+      let trendPercent = null;
+      if (history.length >= 2) {
+        const oldest = history[history.length - 1];
+        if (oldest.vo2max_value > 0) {
+          trendPercent = +(((history[0].vo2max_value - oldest.vo2max_value) / oldest.vo2max_value) * 100).toFixed(1);
+        }
+      }
+
+      res.json({
+        has_estimate: !!latest,
+        vo2max: latest ? +latest.vo2max_value.toFixed(1) : null,
+        method: latest?.method || null,
+        date: latest?.date || null,
+        trend_percent: trendPercent,
+        history,
+      });
+    } catch (err) {
+      console.error('VO2max fetch error:', err);
+      res.status(500).json({ error: 'Erro ao buscar VO2max' });
+    }
+  });
+
+  // -------------------------------------------------------
   // GET /api/hrv/zones — Zonas de FC calculadas (Z1-Z5)
   // -------------------------------------------------------
   router.get('/zones', authenticate, (req, res) => {
