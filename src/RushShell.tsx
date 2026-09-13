@@ -106,7 +106,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [isAthleteModalOpen, setIsAthleteModalOpen] = useState(false);
   const [activeViewingImage, setActiveViewingImage] = useState<ImageViewerItem | null>(null);
   const [isBleModalOpen, setIsBleModalOpen] = useState(false);
-  const [isShoeRetirementOpen, setIsShoeRetirementOpen] = useState(false);
+  const [retirementShoeId, setRetirementShoeId] = useState<string | null>(null);
   const [isGearGarageOpen, setIsGearGarageOpen] = useState(false);
   const [isStoryExporterOpen, setIsStoryExporterOpen] = useState(false);
   const [isWorkoutSummaryOpen, setIsWorkoutSummaryOpen] = useState(false);
@@ -296,15 +296,20 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
       <BleHardwareModal isOpen={isBleModalOpen} onClose={() => setIsBleModalOpen(false)} />
 
       <ShoeRetirementModal
-        isOpen={isShoeRetirementOpen}
-        onClose={() => setIsShoeRetirementOpen(false)}
+        isOpen={!!retirementShoeId}
+        shoe={shoes.find((shoe: any) => shoe.id === retirementShoeId) || null}
+        onClose={() => setRetirementShoeId(null)}
+        onReloadGear={reloadGear}
         onViewImage={viewImage}
       />
 
       <GearGarageModal
         isOpen={isGearGarageOpen}
+        shoes={shoes}
+        summary={shoesSummary}
         onClose={() => setIsGearGarageOpen(false)}
-        onOpenShoeRetirement={() => setIsShoeRetirementOpen(true)}
+        onReloadGear={reloadGear}
+        onOpenShoeRetirement={(shoeId) => setRetirementShoeId(shoeId)}
         onViewImage={viewImage}
       />
 

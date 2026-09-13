@@ -1,408 +1,324 @@
+// ============================================================
+// RUSH RUNNING — Diagnóstico de desgaste do calçado
+// ------------------------------------------------------------
+// O protótipo exibia telemetria biomecânica (impacto tibial em G,
+// tempo de contato com o solo, energia elástica residual, confiança
+// de modelo) que este app não tem como medir: não há footpod,
+// plataforma de força nem análise de acelerometria. Exibir esses
+// números levaria o atleta a decidir sobre risco de lesão com base
+// em dados inventados, então eles saíram.
+//
+// O que fica é o que realmente se sabe: quilometragem acumulada pelas
+// atividades vinculadas, vida útil declarada no cadastro, número de
+// sessões e pace médio com aquele par.
+// ============================================================
+
 import React, { useState } from 'react';
-import { RETIRED_SHOE_CRITICAL } from '../../data/appAssets';
-import { ImageViewerItem } from '../../types';
+import { ImageViewerItem, RunningShoe } from '../../types';
 import { downloadImageToDevice } from '../../utils/imageDownload';
+import { gear as gearApi } from '../../api';
 
 interface ShoeRetirementModalProps {
   isOpen: boolean;
+  shoe: RunningShoe | null;
   onClose: () => void;
+  onReloadGear: () => Promise<void>;
   onViewImage: (item: ImageViewerItem) => void;
 }
 
+const STATUS_COLOR: Record<string, string> = {
+  OPTIMAL: '#22C55E',
+  NEW: '#22C55E',
+  WARNING: '#FACC15',
+  CRITICAL: '#EF4444',
+  RETIRED: '#737373',
+};
+
+/** Orientação geral por faixa de uso — não é uma medição deste par. */
+const GUIDANCE: Record<string, string> = {
+  NEW: 'Par novo. Registre as corridas com ele para acompanhar a quilometragem automaticamente.',
+  OPTIMAL: 'Dentro da faixa de uso prevista para este par. Siga acompanhando a quilometragem.',
+  WARNING:
+    'O par passou de dois terços da vida útil que você declarou. É um bom momento para começar a rodar um par de substituição em paralelo.',
+  CRITICAL:
+    'O par atingiu ou ultrapassou a vida útil declarada. A recomendação usual é reduzir o uso em treinos de maior volume ou intensidade e aposentá-lo.',
+  RETIRED: 'Par aposentado. Ele não recebe mais quilometragem de novas corridas.',
+};
+
 export const ShoeRetirementModal: React.FC<ShoeRetirementModalProps> = ({
   isOpen,
+  shoe,
   onClose,
+  onReloadGear,
   onViewImage,
 }) => {
-  const [isRetired, setIsRetired] = useState(false);
-  const [selectedObjective, setSelectedObjective] = useState<'all' | 'volume' | 'race' | 'recovery'>('volume');
-  const [selectedStrike, setSelectedStrike] = useState<'neutra' | 'pronada' | 'supinada'>('neutra');
-  const [selectedTerrain, setSelectedTerrain] = useState<'asfalto' | 'pista' | 'misto'>('asfalto');
-  const shoe = RETIRED_SHOE_CRITICAL;
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  if (!isOpen) return null;
+  if (!isOpen || !shoe) return null;
 
-  const handleRetireShoe = () => {
-    setIsRetired(true);
+  const color = STATUS_COLOR[shoe.status] || '#22C55E';
+  const pct = shoe.foamDegradationPct;
+  const remainingKm = Math.max(0, +(shoe.maxKm - shoe.currentKm).toFixed(1));
+  const overKm = shoe.currentKm > shoe.maxKm ? +(shoe.currentKm - shoe.maxKm).toFixed(1) : 0;
+
+  const handleRetire = async () => {
+    setIsBusy(true);
+    setError(null);
+    try {
+      await gearApi.retireShoe(shoe.id);
+      await onReloadGear();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível aposentar o calçado.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    setIsBusy(true);
+    setError(null);
+    try {
+      await gearApi.reactivateShoe(shoe.id);
+      await onReloadGear();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível reativar o calçado.');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setIsBusy(true);
+    setError(null);
+    try {
+      await gearApi.deleteShoe(shoe.id);
+      await onReloadGear();
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível remover o calçado.');
+    } finally {
+      setIsBusy(false);
+      setConfirmDelete(false);
+    }
   };
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="shoe-retirement-title"
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-black/90 backdrop-blur-md transition-opacity"
+      aria-labelledby="shoe-retire-title"
+      className="fixed inset-0 z-[55] flex flex-col justify-end bg-black/92 backdrop-blur-md transition-opacity"
     >
       <div className="flex-1 w-full" onClick={onClose} />
 
-      <div className="relative w-full max-w-xl mx-auto max-h-[94vh] flex flex-col bg-[#0D0D0D] rounded-t-3xl border-t border-[#EF4444]/60 shadow-[0_-12px_45px_rgba(0,0,0,0.95)] overflow-hidden">
-        {/* Grab Pill */}
+      <div className="relative w-full max-w-xl mx-auto max-h-[92vh] flex flex-col bg-[#0D0D0D] rounded-t-3xl border-t shadow-[0_-12px_45px_rgba(0,0,0,0.95)] overflow-hidden"
+        style={{ borderTopColor: `${color}99` }}
+      >
         <div className="w-full flex items-center justify-center pt-3 pb-1">
           <div className="w-12 h-1.5 rounded-full bg-[#353534]" />
         </div>
 
-        {/* Modal Header with Critical Alert */}
-        <div className="px-5 py-3 flex items-center justify-between border-b border-[#262626] bg-[#1a0f0f]/60">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-ping" />
-              <span className="font-label-sm text-[10px] text-[#EF4444] tracking-widest uppercase font-bold">
-                DIAGNÓSTICO BIOMECÂNICO CRÍTICO
-              </span>
-            </div>
-            <h2 id="shoe-retirement-title" className="font-headline text-2xl text-[#F7F5F3] uppercase tracking-normal">
-              {shoe.name} • {isRetired ? 'APOSENTADO' : 'LIMITE ATINGIDO'}
+        <div className="px-5 py-3 flex items-center justify-between border-b border-[#262626] gap-3">
+          <div className="min-w-0">
+            <span className="font-label-sm text-[10px] tracking-widest uppercase block" style={{ color }}>
+              DIAGNÓSTICO DE DESGASTE
+            </span>
+            <h2 id="shoe-retire-title" className="font-headline text-2xl text-[#F7F5F3] uppercase tracking-normal truncate">
+              {shoe.name}
             </h2>
           </div>
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3] flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 shrink-0 rounded-full bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3] flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Fechar diagnóstico"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {/* Main Shoe Card with Image & High Contrast degradation */}
-          <div className="bg-[#1C1C1C] rounded-2xl border border-[#EF4444]/40 overflow-hidden shadow-xl">
-            <div className="relative h-52 w-full bg-[#101010] flex items-center justify-center overflow-hidden">
-              <img
-                src={shoe.imageUrl}
-                alt={shoe.name}
-                className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-500"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#1C1C1C] via-transparent to-black/40" />
+          {/* Imagem e estado */}
+          <div className="bg-[#1C1C1C] rounded-2xl border border-[#262626] overflow-hidden shadow-lg">
+            {shoe.imageUrl && (
+              <div className="relative h-44 bg-[#101010]">
+                <img src={shoe.imageUrl} alt={shoe.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1C1C1C] via-transparent to-transparent" />
 
-              {/* Badges Over Image */}
-              <div className="absolute top-3 left-3 flex items-center gap-2">
-                <span className="bg-[#EF4444] text-[#0D0D0D] font-headline text-xs px-2.5 py-1 rounded uppercase tracking-wider font-extrabold flex items-center gap-1 shadow-md">
-                  <span className="material-symbols-outlined text-[16px]">warning</span>
-                  102% DESGASTADO
-                </span>
-                <span className="bg-[#101010]/80 backdrop-blur-md text-[#F7F5F3] font-telemetry text-xs px-2 py-0.5 rounded border border-[#262626]">
-                  {shoe.currentKm} / {shoe.maxKm} KM
-                </span>
-              </div>
-
-              {/* View & Download Buttons */}
-              <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    onViewImage({
-                      url: shoe.imageUrl,
-                      title: `${shoe.name} (${shoe.currentKm} km)`,
-                      subtitle: 'Desgaste severo de entressola detectado por sensores',
-                      category: 'DIAGNÓSTICO DE CALÇADO',
-                      filename: 'asics_superblast2_worn_critical.jpg',
-                    })
-                  }
-                  className="min-h-[44px] min-w-[44px] bg-[#0D0D0D]/85 hover:bg-[#0D0D0D] text-white p-2.5 rounded-xl border border-white/20 flex items-center justify-center backdrop-blur-md transition-all cursor-pointer"
-                  title="Visualizar em alta resolução"
+                <span
+                  className="absolute top-3 left-3 px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider"
+                  style={{ backgroundColor: color, color: '#0D0D0D' }}
                 >
-                  <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                </button>
-                <button
-                  onClick={() =>
-                    downloadImageToDevice(
-                      shoe.imageUrl,
-                      'asics_superblast2_worn_critical.jpg',
-                      `${shoe.name} - Telemetria de Desgaste`
-                    )
-                  }
-                  className="min-h-[44px] min-w-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] p-2.5 rounded-xl flex items-center justify-center font-bold shadow-lg transition-all cursor-pointer"
-                  title="Baixar foto do calçado"
-                >
-                  <span className="material-symbols-outlined text-[18px]">download</span>
-                </button>
-              </div>
-            </div>
+                  {shoe.statusLabel}
+                </span>
 
-            {/* Degradation Metrics Bar */}
+                <div className="absolute bottom-3 right-3 flex gap-2">
+                  <button
+                    onClick={() =>
+                      onViewImage({
+                        url: shoe.imageUrl,
+                        title: `${shoe.name} (${shoe.currentKm} km)`,
+                        subtitle: shoe.modelType,
+                        category: 'DIAGNÓSTICO DE DESGASTE',
+                        filename: `${shoe.id}.jpg`,
+                      })
+                    }
+                    className="min-h-[40px] min-w-[40px] bg-[#0D0D0D]/80 hover:bg-black text-white p-2 rounded-xl border border-white/20 flex items-center justify-center backdrop-blur-md cursor-pointer"
+                    title="Ver em tela cheia"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">zoom_in</span>
+                  </button>
+                  <button
+                    onClick={() => downloadImageToDevice(shoe.imageUrl, `${shoe.id}.jpg`, shoe.name)}
+                    className="min-h-[40px] min-w-[40px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] p-2 rounded-xl flex items-center justify-center cursor-pointer"
+                    title="Baixar imagem"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">download</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="p-4 space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[#A1A1AA] uppercase font-label-caps tracking-wider">
-                  Vida Útil da Entressola Supercritical
-                </span>
-                <span className="text-[#EF4444] font-telemetry font-bold">
-                  +{shoe.overKm} KM ALÉM DO LIMITE SEGURO
+              <div className="flex items-baseline justify-between gap-2">
+                <div>
+                  <span className="font-headline text-4xl tracking-tight" style={{ color }}>
+                    {shoe.currentKm}
+                  </span>
+                  <span className="font-label-sm text-xs text-[#A1A1AA] uppercase ml-1.5">
+                    KM DE {shoe.maxKm} KM
+                  </span>
+                </div>
+                <span className="font-telemetry text-sm font-bold shrink-0" style={{ color }}>
+                  {pct}% consumido
                 </span>
               </div>
 
               <div className="w-full h-3 bg-[#101010] rounded-full overflow-hidden border border-[#262626]">
                 <div
-                  className="h-full bg-gradient-to-r from-[#22C55E] via-[#FACC15] to-[#EF4444] rounded-full"
-                  style={{ width: '100%' }}
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.min(100, pct)}%`, backgroundColor: color }}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-xs font-telemetry text-[#A1A1AA] pt-1">
-                <span>0 km (Novo)</span>
-                <span>350 km (50%)</span>
-                <span className="text-[#EF4444] font-bold">700 km (Limite Máx)</span>
-              </div>
+              <p className="text-xs text-[#A1A1AA] font-telemetry">
+                {overKm > 0
+                  ? `${overKm} km além da vida útil declarada.`
+                  : `Restam ${remainingKm} km até a vida útil declarada.`}
+              </p>
             </div>
           </div>
 
-          {/* Telemetria Biomecânica Coletada */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-headline text-lg text-[#F7F5F3] uppercase tracking-normal">
-                Telemetria Coletada (Stryd & Polar)
-              </h3>
-              <span className="font-telemetry text-[11px] text-[#A1A1AA]">ID: {shoe.reportId}</span>
-            </div>
+          {/* Uso medido */}
+          <div className="bg-[#1C1C1C] p-4 rounded-2xl border border-[#262626] space-y-3">
+            <span className="font-label-caps text-xs text-[#A1A1AA] uppercase tracking-wider block">
+              Uso registrado com este par
+            </span>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-[#1C1C1C] p-3.5 rounded-xl border border-[#EF4444]/30 space-y-1">
-                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-                  IMPACTO TIBIAL MÉDIO
-                </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-headline text-2xl text-[#EF4444]">{shoe.tibialImpactG} G</span>
-                  <span className="text-[10px] text-[#EF4444] font-telemetry font-bold">ZONA VERMELHA</span>
-                </div>
-                <span className="font-telemetry text-[11px] text-[#EF4444] block">
-                  {shoe.tibialImpactDiff}
-                </span>
+            <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="bg-[#101010] p-3 rounded-xl border border-[#262626]">
+                <span className="text-[10px] text-[#A1A1AA] uppercase block">SESSÕES</span>
+                <span className="font-headline text-2xl text-[#F7F5F3] block mt-0.5">{shoe.sessionsCount}</span>
               </div>
-
-              <div className="bg-[#1C1C1C] p-3.5 rounded-xl border border-[#EF4444]/30 space-y-1">
-                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-                  TEMPO CONTATO SOLO
-                </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-headline text-2xl text-[#EF4444]">{shoe.groundContactTimeMs} ms</span>
-                  <span className="text-[10px] text-[#FACC15] font-telemetry font-bold">LENTO</span>
-                </div>
-                <span className="font-telemetry text-[11px] text-[#A1A1AA] block">
-                  {shoe.groundContactDiff}
-                </span>
+              <div className="bg-[#101010] p-3 rounded-xl border border-[#262626]">
+                <span className="text-[10px] text-[#A1A1AA] uppercase block">PACE MÉDIO</span>
+                <span className="font-headline text-2xl text-[#FF5500] block mt-0.5">{shoe.avgPace}</span>
               </div>
-
-              <div className="bg-[#1C1C1C] p-3.5 rounded-xl border border-[#262626] space-y-1">
-                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-                  RETORNO DE ENERGIA
-                </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-headline text-2xl text-[#FACC15]">{shoe.residualElasticEnergy}%</span>
-                  <span className="text-[10px] text-[#A1A1AA] font-telemetry font-bold">RESIDUAL</span>
-                </div>
-                <span className="font-telemetry text-[11px] text-[#A1A1AA] block">
-                  Colapso de Espuma
-                </span>
-              </div>
-
-              <div className="bg-[#1C1C1C] p-3.5 rounded-xl border border-[#262626] space-y-1">
-                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-                  HISTÓRICO DE SESSÕES
-                </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-headline text-2xl text-[#F7F5F3]">{shoe.sessionsLogged}</span>
-                  <span className="text-[10px] text-[#A1A1AA] font-telemetry font-bold">TREINOS</span>
-                </div>
-                <span className="font-telemetry text-[11px] text-[#A1A1AA] block">
-                  Ritmo Médio: {shoe.historicalPace}
+              <div className="bg-[#101010] p-3 rounded-xl border border-[#262626]">
+                <span className="text-[10px] text-[#A1A1AA] uppercase block">KM / SESSÃO</span>
+                <span className="font-headline text-2xl text-[#F7F5F3] block mt-0.5">
+                  {shoe.sessionsCount > 0 ? (shoe.currentKm / shoe.sessionsCount).toFixed(1) : '—'}
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* AI Forensic Report Card */}
-          <div className="bg-[#1C1C1C] p-4 rounded-xl border border-[#262626] space-y-2 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#FF5500] text-[20px]">psychology</span>
-                <span className="font-label-caps text-xs text-[#FF5500] uppercase tracking-wider font-bold">
-                  Parecer Prometheus AI (Stryd Sync)
-                </span>
-              </div>
-              <span className="font-telemetry text-xs text-[#22C55E] font-bold">
-                CONFIANÇA {shoe.modelConfidence}
-              </span>
-            </div>
-            <p className="text-xs text-[#e5e2e1] leading-relaxed italic">
-              {shoe.aiReport}
-            </p>
-          </div>
-
-          {/* Action: Aposentar Este Tênis Agora */}
-          <div>
-            {!isRetired ? (
-              <button
-                onClick={handleRetireShoe}
-                className="w-full min-h-[52px] py-3.5 px-4 bg-[#EF4444] hover:bg-[#DC2626] active:scale-[0.98] text-white rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#EF4444]/25 transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[22px]">archive</span>
-                <span className="font-headline text-base uppercase tracking-wider whitespace-nowrap">
-                  Aposentar Este Tênis Agora
-                </span>
-              </button>
-            ) : (
-              <div className="p-4 bg-[#22C55E]/15 border border-[#22C55E]/40 rounded-xl flex items-center gap-3 text-[#22C55E]">
-                <span className="material-symbols-outlined text-[24px]">verified</span>
-                <div>
-                  <span className="font-bold text-sm block">Calçado Aposentado com Honras!</span>
-                  <span className="text-xs text-[#A1A1AA]">
-                    Registrado na frota histórica (712 km). O modelo não será sugerido para treinos ativos.
-                  </span>
-                </div>
-              </div>
+            {shoe.plateTechnology && (
+              <p className="text-[11px] text-[#737373]">
+                Tecnologia declarada: <span className="text-[#A1A1AA]">{shoe.plateTechnology}</span>
+              </p>
             )}
           </div>
 
-          {/* Seção: Filtros Avançados de Biomecânica & Recomendações */}
-          <div className="space-y-4 pt-2 border-t border-[#262626]">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-label-sm text-[10px] text-[#FF5500] uppercase tracking-widest font-bold">
-                  PROMETHEUS ENGINE
-                </span>
-                <h3 className="font-headline text-xl text-[#F7F5F3] uppercase tracking-normal">
-                  Substitutos Compatíveis com seu Perfil
-                </h3>
-              </div>
-              <span className="bg-[#FF5500]/15 text-[#FF5500] font-telemetry text-xs font-bold px-2 py-0.5 rounded">
-                2 MATCHES
+          {/* Orientação */}
+          <div className="bg-[#1C1C1C] p-4 rounded-2xl border space-y-2" style={{ borderColor: `${color}55` }}>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px]" style={{ color }}>
+                info
+              </span>
+              <span className="font-label-caps text-xs uppercase font-extrabold tracking-wider" style={{ color }}>
+                Orientação
               </span>
             </div>
+            <p className="text-xs text-[#e5e2e1] leading-relaxed">{GUIDANCE[shoe.status]}</p>
+            <p className="text-[10px] text-[#737373] leading-relaxed pt-1 border-t border-[#262626]">
+              O percentual acima compara a quilometragem acumulada com a vida útil que você declarou ao cadastrar
+              o par. Não é uma medição do estado físico da entressola: avaliar amortecimento real exige inspeção
+              do calçado ou sensores de força que o app não possui.
+            </p>
+          </div>
 
-            {/* Quick Interactive Filters */}
-            <div className="space-y-2">
-              <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-                Objetivo do Treino
-              </span>
-              <div className="grid grid-cols-4 gap-1.5">
-                {[
-                  { id: 'all', label: 'Todos' },
-                  { id: 'volume', label: 'Rodagem' },
-                  { id: 'race', label: 'Provas' },
-                  { id: 'recovery', label: 'Recovery' },
-                ].map((tab) => (
+          {error && (
+            <p className="text-xs text-[#EF4444] font-bold" role="alert">
+              {error}
+            </p>
+          )}
+
+          {/* Ações */}
+          <div className="space-y-2.5 pt-1">
+            {shoe.status === 'RETIRED' ? (
+              <button
+                onClick={handleReactivate}
+                disabled={isBusy}
+                className="w-full min-h-[52px] py-3.5 px-4 bg-[#22C55E] hover:bg-[#16A34A] disabled:opacity-60 disabled:cursor-wait text-[#0D0D0D] rounded-xl flex items-center justify-center gap-2 shadow-lg font-headline text-base uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[22px]">restart_alt</span>
+                <span>{isBusy ? 'Reativando…' : 'Voltar à rotação'}</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleRetire}
+                disabled={isBusy}
+                className="w-full min-h-[52px] py-3.5 px-4 bg-[#EF4444] hover:bg-[#DC2626] disabled:opacity-60 disabled:cursor-wait text-white rounded-xl flex items-center justify-center gap-2 shadow-lg font-headline text-base uppercase tracking-wider transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[22px]">archive</span>
+                <span>{isBusy ? 'Aposentando…' : 'Aposentar este par'}</span>
+              </button>
+            )}
+
+            {confirmDelete ? (
+              <div className="bg-[#EF4444]/10 border border-[#EF4444]/40 rounded-xl p-3 space-y-2.5">
+                <p className="text-xs text-[#e5e2e1] leading-relaxed">
+                  Remover apaga o par da frota permanentemente. As corridas continuam registradas, mas perdem o
+                  vínculo com este calçado.
+                </p>
+                <div className="flex gap-2">
                   <button
-                    key={tab.id}
-                    onClick={() => setSelectedObjective(tab.id as any)}
-                    className={`min-h-[44px] py-1.5 px-2 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
-                      selectedObjective === tab.id
-                        ? 'bg-[#FF5500] text-[#0D0D0D]'
-                        : 'bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3] border border-[#262626]'
-                    }`}
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 h-10 rounded-lg bg-[#262626] text-[#F7F5F3] text-xs font-bold uppercase cursor-pointer"
                   >
-                    {tab.label}
+                    Cancelar
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Recommendation Cards */}
-            <div className="space-y-4">
-              {shoe.recommendations.map((rec) => (
-                <div
-                  key={rec.id}
-                  className="bg-[#1C1C1C] rounded-2xl border border-[#262626] hover:border-[#FF5500]/50 transition-all overflow-hidden shadow-lg space-y-3 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-16 h-16 rounded-xl bg-[#101010] border border-[#262626] overflow-hidden shrink-0">
-                        <img
-                          src={rec.imageUrl}
-                          alt={rec.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          onClick={() =>
-                            onViewImage({
-                              url: rec.imageUrl,
-                              title: rec.name,
-                              subtitle: rec.category,
-                              category: 'RECOMENDAÇÃO DE CALÇADO',
-                              filename: `${rec.name.toLowerCase().replace(/\s+/g, '_')}.jpg`,
-                            })
-                          }
-                          className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center text-white transition-opacity"
-                          title="Ver detalhes"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                        </button>
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="bg-[#22C55E]/15 text-[#22C55E] font-telemetry text-xs font-extrabold px-1.5 py-0.5 rounded">
-                            {rec.matchPercentage}% MATCH
-                          </span>
-                          <span className="font-label-sm text-[10px] text-[#FF5500] font-bold uppercase">
-                            {rec.badgeText}
-                          </span>
-                        </div>
-                        <h4 className="font-headline text-lg text-[#F7F5F3] uppercase tracking-wide truncate mt-0.5">
-                          {rec.name}
-                        </h4>
-                        <p className="text-xs text-[#A1A1AA] truncate">{rec.category}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Telemetry Advantages */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-[#101010] p-2.5 rounded-lg border border-[#262626]">
-                      <span className="text-[#A1A1AA] block text-[10px] uppercase">Retorno Elástico</span>
-                      <span className="text-[#22C55E] font-telemetry font-bold block mt-0.5">
-                        {rec.energyReturnDiff}
-                      </span>
-                    </div>
-                    <div className="bg-[#101010] p-2.5 rounded-lg border border-[#262626]">
-                      <span className="text-[#A1A1AA] block text-[10px] uppercase">Impacto Tibial</span>
-                      <span className="text-[#22C55E] font-telemetry font-bold block mt-0.5">
-                        {rec.tibialImpactDiff}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Pricing & Direct Store Links */}
-                  <div className="pt-1 flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                      {rec.priceOriginal && (
-                        <span className="text-[11px] text-[#737373] line-through block leading-none">
-                          {rec.priceOriginal}
-                        </span>
-                      )}
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-headline text-2xl text-[#FF5500] leading-tight">
-                          {rec.pricePro}
-                        </span>
-                        <span className="text-[10px] text-[#22C55E] font-bold uppercase">
-                          {rec.discountPro}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={rec.mercadoLivreUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-h-[44px] bg-[#262626] hover:bg-[#353534] text-[#F7F5F3] font-bold text-xs py-2.5 px-3 rounded-lg border border-[#353534] flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-[#FACC15]">shopping_bag</span>
-                        <span>M. Livre</span>
-                      </a>
-                      <a
-                        href={rec.amazonUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-h-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-extrabold text-xs py-2.5 px-3.5 rounded-lg flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">store</span>
-                        <span>Amazon</span>
-                      </a>
-                    </div>
-                  </div>
+                  <button
+                    onClick={handleDelete}
+                    disabled={isBusy}
+                    className="flex-1 h-10 rounded-lg bg-[#EF4444] text-white text-xs font-bold uppercase disabled:opacity-60 cursor-pointer"
+                  >
+                    Remover
+                  </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="w-full min-h-[44px] text-xs text-[#737373] hover:text-[#EF4444] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Remover da frota
+              </button>
+            )}
           </div>
         </div>
       </div>

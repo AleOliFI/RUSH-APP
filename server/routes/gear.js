@@ -23,9 +23,9 @@ function formatPace(secondsPerKm) {
 }
 
 /**
- * Deriva status de desgaste a partir da fração consumida.
- * O percentual de degradação da entressola é um PROXY linear de uso,
- * não uma medição física do material.
+ * Deriva o status a partir da fração da vida útil DECLARADA que já foi
+ * consumida. É uma medida de uso acumulado, não uma avaliação física da
+ * entressola: o app não mede amortecimento, apenas quilometragem.
  */
 function deriveStatus(shoe, currentKm, sessionsCount) {
   if (shoe.retired_at) {
@@ -33,15 +33,15 @@ function deriveStatus(shoe, currentKm, sessionsCount) {
   }
   const consumed = currentKm / shoe.max_km;
   if (consumed >= CRITICAL_THRESHOLD) {
-    return { status: 'CRITICAL', statusLabel: 'Crítico: Colapso de Espuma' };
+    return { status: 'CRITICAL', statusLabel: 'Vida útil atingida' };
   }
   if (consumed >= WARNING_THRESHOLD) {
-    return { status: 'WARNING', statusLabel: 'Atenção: Entressola Média' };
+    return { status: 'WARNING', statusLabel: 'Perto do limite de uso' };
   }
   if (sessionsCount === 0 && currentKm <= 0) {
     return { status: 'NEW', statusLabel: 'Novo' };
   }
-  return { status: 'OPTIMAL', statusLabel: 'Amortecimento Ótimo' };
+  return { status: 'OPTIMAL', statusLabel: 'Dentro da faixa de uso' };
 }
 
 module.exports = function gearRoutes(db) {
@@ -76,6 +76,7 @@ module.exports = function gearRoutes(db) {
       maxKm: shoe.max_km,
       status,
       statusLabel,
+      // Percentual da vida útil declarada já consumido (não é medição de espuma).
       foamDegradationPct: Math.min(100, Math.max(0, consumedPct)),
       isDefault: !!shoe.is_default,
       colorway: shoe.colorway || '',
