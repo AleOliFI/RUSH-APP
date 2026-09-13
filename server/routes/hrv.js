@@ -191,13 +191,15 @@ module.exports = function hrvRoutes(db) {
       const { rmssd_ms, hr_rest_bpm, rhr_bpm, duration_seconds, device_id, timestamp } = req.body;
       const effectiveRhr = rhr_bpm != null ? rhr_bpm : hr_rest_bpm;
 
-      if (!rmssd_ms || !effectiveRhr) {
-        return res.status(400).json({ error: 'rmssd_ms e hr_rest_bpm / rhr_bpm são obrigatórios' });
+      // duration_seconds também é obrigatório: assumir 60 s para uma medição
+      // de duração desconhecida seria registrar um dado que ninguém mediu.
+      if (!rmssd_ms || !effectiveRhr || duration_seconds == null) {
+        return res.status(400).json({ error: 'rmssd_ms, hr_rest_bpm / rhr_bpm e duration_seconds são obrigatórios' });
       }
 
       const numRmssd = Number(rmssd_ms);
       const numHrRest = Number(effectiveRhr);
-      const numDuration = Number(duration_seconds) || 60;
+      const numDuration = Number(duration_seconds);
 
       if (isNaN(numRmssd) || numRmssd < 10 || numRmssd > 200) {
         return res.status(400).json({ error: 'RMSSD deve ser um número entre 10 e 200 ms' });
@@ -205,6 +207,24 @@ module.exports = function hrvRoutes(db) {
 
       if (isNaN(numHrRest) || numHrRest < 30 || numHrRest > 120) {
         return res.status(400).json({ error: 'FC de repouso deve ser um número entre 30 e 120 bpm' });
+      }
+
+      // O banco exige medição de pelo menos 60 s (janela mínima para um
+      // RMSSD utilizável). Sem esta checagem o CHECK estoura e o cliente
+      // recebe 500 no lugar de uma mensagem acionável.
+      if (isNaN(numDuration) || numDuration < 60 || numDuration > 3600) {
+        return res.status(400).json({ error: 'duration_seconds deve ser um número entre 60 e 3600 segundos' });
+      }
+
+      // device_id só é aceito quando aponta para um sensor pareado do
+      // próprio atleta; qualquer outro valor entra como null em vez de
+      // violar a chave estrangeira e derrubar a medição.
+      let effectiveDeviceId = null;
+      if (device_id) {
+        const ownsDevice = db
+          .prepare('SELECT id FROM wearable_devices WHERE id = ? AND user_id = ?')
+          .get(device_id, req.user.id);
+        effectiveDeviceId = ownsDevice ? device_id : null;
       }
 
       const id = uuidv4();
@@ -215,7 +235,7 @@ module.exports = function hrvRoutes(db) {
       db.prepare(`
         INSERT INTO hrv_measurements (id, user_id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, rhr_bpm, device_id, duration_seconds)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, req.user.id, ts, numRmssd, lnrmssd, numHrRest, numHrRest, device_id || null, numDuration);
+      `).run(id, req.user.id, ts, numRmssd, lnrmssd, numHrRest, numHrRest, effectiveDeviceId, numDuration);
 
       // Recalculate daily status
       const statusCalculation = recalculateDailyStatus(req.user.id, today);

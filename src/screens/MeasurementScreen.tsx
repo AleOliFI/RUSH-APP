@@ -213,7 +213,7 @@ export const MeasurementScreen: React.FC<MeasurementScreenProps> = ({
         rmssd_ms: captured.rmssd_ms,
         rhr_bpm: captured.hr_rest_bpm,
         duration_seconds: captured.duration_seconds,
-        device_id: captured.device_name,
+        device_name: captured.device_name,
         wellness: {
           sleep: feedback.sleepQuality,
           fatigue: feedback.fatigueLevel,

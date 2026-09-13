@@ -136,7 +136,12 @@ export interface MeasurementPayload {
   rmssd_ms: number;
   rhr_bpm: number;
   duration_seconds?: number;
-  device_id?: string | null;
+  /**
+   * Nome do sensor exibido na captura (ex.: "Polar H10", "Câmera PPG").
+   * NÃO é o identificador do banco: a medição só é vinculada a um
+   * dispositivo quando esse nome corresponde a um sensor já pareado.
+   */
+  device_name?: string | null;
   wellness?: { sleep: number; fatigue: number; soreness: number; stress: number; readiness: number } | null;
 }
 
@@ -326,19 +331,34 @@ export function useRushData(): RushData {
   /** Registra a medição matinal (VFC + bem-estar) e recarrega a prescrição. */
   const submitMeasurement = useCallback(
     async (payload: MeasurementPayload) => {
-      if (payload.wellness) {
-        await hrv.wellness(payload.wellness);
-      }
+      // device_id precisa ser o id de um sensor pareado (wearable_devices).
+      // Captura por câmera ou entrada manual não têm dispositivo: vão sem
+      // vínculo, em vez de inventar um identificador.
+      const name = payload.device_name?.trim().toLowerCase();
+      const paired = name
+        ? devices.find(
+            (d: any) =>
+              String(d.brand || '').trim().toLowerCase() === name ||
+              String(d.device_id || '').trim().toLowerCase() === name,
+          )
+        : null;
+
+      // A medição vem primeiro: se ela falhar, o bem-estar não fica gravado
+      // sozinho, o que deixaria o dia com questionário e sem VFC.
       await hrv.measure({
         rmssd_ms: payload.rmssd_ms,
         rhr_bpm: payload.rhr_bpm,
         hr_rest_bpm: payload.rhr_bpm,
         duration_seconds: payload.duration_seconds ?? 60,
-        device_id: payload.device_id ?? null,
+        device_id: paired?.id ?? null,
       });
+
+      if (payload.wellness) {
+        await hrv.wellness(payload.wellness);
+      }
       await reload();
     },
-    [reload],
+    [reload, devices],
   );
 
   /** Grava a corrida concluída como atividade real. */
