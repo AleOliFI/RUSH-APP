@@ -280,14 +280,9 @@ img {
   color: var(--text-secondary);
 }
 
-.text-xs {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-tertiary);
-}
+/* .text-xs foi removida: não era usada por nenhuma página legada e o nome
+   colide com o utilitário text-xs do Tailwind, vazando text-transform,
+   font-family e color para todas as telas novas. */
 
 .text-gradient {
   background: var(--gradient-fire);

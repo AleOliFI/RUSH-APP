@@ -70,14 +70,19 @@ export default function RushShell() {
     weeklySummary,
     upcomingSessions,
     currentWeek,
-    userPosts,
+    feedPosts,
+    feedChannel,
+    setFeedChannel,
+    isLoadingFeed,
+    toggleKudo,
+    activeChallenge,
+    joinChallenge,
     hrvStatusRaw,
     profileRaw,
     recordsRaw,
     isLoading,
     error,
     submitMeasurement,
-    publishPost,
     finishRun,
     reload,
   } = useRushData();
@@ -99,13 +104,11 @@ export default function RushShell() {
   const [isProSuccessOpen, setIsProSuccessOpen] = useState(false);
   const [lastRunSummary, setLastRunSummary] = useState<RunSummary | null>(null);
 
-  const handlePostCreated = useCallback(
-    async (caption: string) => {
-      await publishPost(caption);
-      goToTab('feed');
-    },
-    [publishPost, goToTab],
-  );
+  /** Depois de publicar, volta para o feed já atualizado. */
+  const handlePosted = useCallback(async () => {
+    await reload();
+    goToTab('feed');
+  }, [reload, goToTab]);
 
   /** Grava a corrida concluída (HUD ou execução guiada) como atividade. */
   const handleFinishRun = useCallback(
@@ -175,10 +178,16 @@ export default function RushShell() {
 
         {currentTab === 'feed' && (
           <FeedScreen
+            posts={feedPosts}
+            channel={feedChannel}
+            isLoadingFeed={isLoadingFeed}
+            activeChallenge={activeChallenge}
+            onChangeChannel={setFeedChannel}
+            onToggleKudo={toggleKudo}
+            onJoinChallenge={joinChallenge}
             onOpenNewPost={() => setIsNewPostOpen(true)}
             onOpenComments={(postId) => setActiveCommentsPostId(postId)}
             onViewImage={viewImage}
-            userPosts={userPosts}
           />
         )}
 
@@ -274,13 +283,17 @@ export default function RushShell() {
 
       <ActivityCommentsModal
         isOpen={!!activeCommentsPostId}
+        activityId={activeCommentsPostId}
+        currentUserId={athlete.id}
         onClose={() => setActiveCommentsPostId(null)}
+        onInteraction={() => setFeedChannel(feedChannel)}
       />
 
       <NewPostModal
         isOpen={isNewPostOpen}
+        athlete={athlete}
         onClose={() => setIsNewPostOpen(false)}
-        onPostCreated={handlePostCreated}
+        onPosted={handlePosted}
       />
 
       <ProCheckoutModal

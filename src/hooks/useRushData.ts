@@ -5,7 +5,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { activities as activitiesApi, hrv, social, training, users } from '../api';
+import { activities as activitiesApi, challenges as challengesApi, hrv, social, training, users } from '../api';
 import {
   AthleteProfile,
   DailyMileage,
@@ -85,7 +85,12 @@ export interface RushData {
   upcomingSessions: UpcomingSession[];
   currentWeek: number | null;
   feedPosts: FeedPost[];
-  userPosts: FeedPost[];
+  feedChannel: FeedChannel;
+  setFeedChannel: (channel: FeedChannel) => void;
+  isLoadingFeed: boolean;
+  toggleKudo: (postId: string) => Promise<void>;
+  activeChallenge: any | null;
+  joinChallenge: (id: string) => Promise<void>;
   hrvStatusRaw: any;
   planRaw: any;
   profileRaw: any;
@@ -94,12 +99,17 @@ export interface RushData {
   error: string | null;
   reload: () => Promise<void>;
   submitMeasurement: (payload: MeasurementPayload) => Promise<void>;
-  publishPost: (
-    caption: string,
-    options?: { privacy?: 'public' | 'followers' | 'private'; activityId?: string },
-  ) => Promise<void>;
   finishRun: (payload: FinishRunPayload) => Promise<any>;
 }
+
+export type FeedChannel = 'foryou' | 'following' | 'club';
+
+/** Cada canal do feed mapeia para um escopo do endpoint social. */
+const CHANNEL_SCOPE: Record<FeedChannel, string> = {
+  foryou: 'global',
+  following: 'following',
+  club: 'academy',
+};
 
 export interface MeasurementPayload {
   rmssd_ms: number;
@@ -135,6 +145,10 @@ export function useRushData(): RushData {
   });
   const [feedPosts, setFeedPosts] = useState<FeedPost[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
+  const [feedChannel, setFeedChannelState] = useState<FeedChannel>('foryou');
+  const [isLoadingFeed, setIsLoadingFeed] = useState(false);
+  const [activeChallenge, setActiveChallenge] = useState<any | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [hrvStatusRaw, setHrvStatusRaw] = useState<any>(null);
   const [planRaw, setPlanRaw] = useState<any>(null);
   const [profileRaw, setProfileRaw] = useState<any>(null);
@@ -164,7 +178,7 @@ export function useRushData(): RushData {
           safe(activitiesApi.records()),
           safe(hrv.vo2max()),
           safe(activitiesApi.list(1)),
-          safe(social.feed('global', 1)),
+          safe(social.feed(CHANNEL_SCOPE[feedChannel], 1)),
         ]);
 
       if (!mounted.current) return;
@@ -192,17 +206,55 @@ export function useRushData(): RushData {
       setWeeklySchedule(toWeeklySchedule(plan, recentActivities?.activities || []));
       setWeeklySummary(toWeeklySummary(plan, stats7, recentActivities?.activities || []));
       setUpcomingSessions(toUpcomingSessions(plan, profile));
+      setCurrentUserId(me.id);
       setFeedPosts(toFeedPosts(feed?.feed || [], me.id));
+
+      // Desafio em destaque: o que o atleta já participa, senão o primeiro ativo.
+      const challengeList = await safe(challengesApi.list());
+      const all = challengeList?.challenges || [];
+      setActiveChallenge(all.find((c: any) => c.is_participating) || all[0] || null);
     } catch (err: any) {
       if (mounted.current) setError(err?.message || 'Erro ao carregar dados');
     } finally {
       if (mounted.current) setIsLoading(false);
     }
-  }, []);
+  }, [feedChannel]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  /** Troca o canal do feed e recarrega apenas a lista de posts. */
+  const setFeedChannel = useCallback(
+    async (channel: FeedChannel) => {
+      setFeedChannelState(channel);
+      setIsLoadingFeed(true);
+      const feed = await safe(social.feed(CHANNEL_SCOPE[channel], 1));
+      if (mounted.current) {
+        setFeedPosts(toFeedPosts(feed?.feed || [], currentUserId || undefined));
+        setIsLoadingFeed(false);
+      }
+    },
+    [currentUserId],
+  );
+
+  /** Curte/descurte uma atividade, refletindo a contagem devolvida pela API. */
+  const toggleKudo = useCallback(async (postId: string) => {
+    const result = await social.like(postId);
+    setFeedPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, isKudoed: !!result.liked, kudosCount: result.likes_count ?? p.kudosCount } : p,
+      ),
+    );
+  }, []);
+
+  /** Entra em um desafio e atualiza o card em destaque. */
+  const joinChallenge = useCallback(async (id: string) => {
+    await challengesApi.join(id);
+    const list = await safe(challengesApi.list());
+    const all = list?.challenges || [];
+    setActiveChallenge(all.find((c: any) => c.id === id) || all[0] || null);
+  }, []);
 
   /** Registra a medição matinal (VFC + bem-estar) e recarrega a prescrição. */
   const submitMeasurement = useCallback(
@@ -216,33 +268,6 @@ export function useRushData(): RushData {
         hr_rest_bpm: payload.rhr_bpm,
         duration_seconds: payload.duration_seconds ?? 60,
         device_id: payload.device_id ?? null,
-      });
-      await reload();
-    },
-    [reload],
-  );
-
-  /**
-   * Publica no feed. No modelo do backend a "postagem" é a própria
-   * atividade: a legenda e a privacidade escolhidas são gravadas na
-   * atividade mais recente do atleta.
-   */
-  const publishPost = useCallback(
-    async (caption: string, options?: { privacy?: 'public' | 'followers' | 'private'; activityId?: string }) => {
-      let targetId = options?.activityId;
-
-      if (!targetId) {
-        const mine = await safe(activitiesApi.list(1));
-        targetId = mine?.activities?.[0]?.id;
-      }
-
-      if (!targetId) {
-        throw new Error('Nenhuma atividade registrada para publicar. Registre uma corrida primeiro.');
-      }
-
-      await activitiesApi.update(targetId, {
-        feeling_notes: caption,
-        privacy: options?.privacy || 'public',
       });
       await reload();
     },
@@ -278,7 +303,12 @@ export function useRushData(): RushData {
     upcomingSessions,
     currentWeek: planRaw?.plan?.current_week ?? null,
     feedPosts,
-    userPosts: feedPosts,
+    feedChannel,
+    setFeedChannel,
+    isLoadingFeed,
+    toggleKudo,
+    activeChallenge,
+    joinChallenge,
     hrvStatusRaw,
     planRaw,
     profileRaw,
@@ -287,7 +317,6 @@ export function useRushData(): RushData {
     error,
     reload,
     submitMeasurement,
-    publishPost,
     finishRun,
   };
 }

@@ -1,40 +1,62 @@
-import React, { useState } from 'react';
-import { FEED_POSTS } from '../data/appAssets';
+import React from 'react';
 import { FeedPost, ImageViewerItem } from '../types';
 import { downloadImageToDevice } from '../utils/imageDownload';
+import type { FeedChannel } from '../hooks/useRushData';
 
 interface FeedScreenProps {
+  posts: FeedPost[];
+  channel: FeedChannel;
+  isLoadingFeed: boolean;
+  activeChallenge: any | null;
+  onChangeChannel: (channel: FeedChannel) => void;
+  onToggleKudo: (postId: string) => Promise<void>;
+  onJoinChallenge: (id: string) => Promise<void>;
   onOpenNewPost: () => void;
   onOpenComments: (postId: string) => void;
   onViewImage: (item: ImageViewerItem) => void;
-  userPosts: FeedPost[];
 }
 
+const CHANNEL_EMPTY_TEXT: Record<FeedChannel, string> = {
+  foryou: 'Nenhuma atividade pública no momento. Seja o primeiro a publicar.',
+  following: 'Ninguém que você segue publicou ainda. Siga outros atletas para ver as corridas deles aqui.',
+  club: 'Sua assessoria ainda não tem atividades publicadas.',
+};
+
 export const FeedScreen: React.FC<FeedScreenProps> = ({
+  posts,
+  channel,
+  isLoadingFeed,
+  activeChallenge,
+  onChangeChannel,
+  onToggleKudo,
+  onJoinChallenge,
   onOpenNewPost,
   onOpenComments,
   onViewImage,
-  userPosts,
 }) => {
-  const [feedChannel, setFeedChannel] = useState<'foryou' | 'following' | 'club'>('foryou');
-  const [posts, setPosts] = useState<FeedPost[]>(FEED_POSTS);
+  const allPosts = posts;
 
-  const allPosts = [...userPosts, ...posts];
+  /** Compartilha via Web Share API, com cópia do link como alternativa. */
+  const handleShare = async (post: FeedPost) => {
+    const text = `${post.authorName} — ${post.workoutTitle || 'Treino'}: ${post.distanceKm} km em ${post.duration} (${post.avgPace}).`;
+    const url = `${window.location.origin}/feed`;
 
-  const handleToggleKudo = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const isK = !p.isKudoed;
-          return {
-            ...p,
-            isKudoed: isK,
-            kudosCount: isK ? p.kudosCount + 1 : p.kudosCount - 1,
-          };
-        }
-        return p;
-      })
-    );
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'RUSH RUNNING', text, url });
+        return;
+      } catch {
+        // Usuário cancelou o compartilhamento nativo.
+        return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(`${text} ${url}`);
+      window.alert('Resumo da atividade copiado para a área de transferência.');
+    } catch {
+      window.alert('Não foi possível compartilhar neste navegador.');
+    }
   };
 
   return (
@@ -49,9 +71,9 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
           ].map((ch) => (
             <button
               key={ch.id}
-              onClick={() => setFeedChannel(ch.id as any)}
+              onClick={() => onChangeChannel(ch.id as FeedChannel)}
               className={`min-h-[44px] py-1.5 px-3 rounded-full text-xs font-bold uppercase transition-all cursor-pointer ${
-                feedChannel === ch.id
+                channel === ch.id
                   ? 'bg-[#FF5500] text-[#0D0D0D] shadow-md'
                   : 'bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3]'
               }`}
@@ -88,6 +110,23 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
 
       {/* Posts List */}
       <div className="space-y-5">
+        {isLoadingFeed && (
+          <div className="bg-[#1C1C1C] rounded-2xl border border-[#262626] p-6 text-center">
+            <span className="font-telemetry text-xs text-[#737373] uppercase tracking-widest animate-pulse">
+              Carregando feed…
+            </span>
+          </div>
+        )}
+
+        {!isLoadingFeed && allPosts.length === 0 && (
+          <div className="bg-[#1C1C1C] rounded-2xl border border-dashed border-[#262626] p-8 text-center">
+            <span className="material-symbols-outlined text-[32px] text-[#404040]">groups</span>
+            <p className="text-xs text-[#737373] mt-2 leading-relaxed max-w-xs mx-auto">
+              {CHANNEL_EMPTY_TEXT[channel]}
+            </p>
+          </div>
+        )}
+
         {allPosts.map((post) => (
           <article
             key={post.id}
@@ -139,7 +178,8 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                   </span>
                   {post.badgeText && (
                     <span className="bg-[#22C55E]/20 text-[#22C55E] font-telemetry text-xs font-bold px-2 py-0.5 rounded">
-                      {post.badgeText} ({post.badgeDiff})
+                      {post.badgeText}
+                      {post.badgeDiff ? ` (${post.badgeDiff})` : ''}
                     </span>
                   )}
                 </div>
@@ -148,7 +188,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                   <div>
                     <span className="text-[9px] text-[#A1A1AA] uppercase block">DISTÂNCIA</span>
                     <span className="font-headline text-base text-[#F7F5F3] block mt-0.5">
-                      {post.distanceKm} km
+                      {post.distanceKm ? `${post.distanceKm} km` : '—'}
                     </span>
                   </div>
                   <div>
@@ -166,7 +206,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                   <div>
                     <span className="text-[9px] text-[#A1A1AA] uppercase block">FC MÉDIA</span>
                     <span className="font-headline text-base text-[#EF4444] block mt-0.5">
-                      {post.avgHr} bpm
+                      {post.avgHr ? `${post.avgHr} bpm` : '—'}
                     </span>
                   </div>
                 </div>
@@ -221,7 +261,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             <div className="px-4 pb-3 flex items-center justify-between border-t border-[#262626] pt-2.5 text-xs text-[#A1A1AA]">
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => handleToggleKudo(post.id)}
+                  onClick={() => onToggleKudo(post.id)}
                   className={`min-h-[44px] flex items-center gap-1.5 font-headline uppercase transition-colors cursor-pointer ${
                     post.isKudoed ? 'text-[#FF5500]' : 'hover:text-[#F7F5F3]'
                   }`}
@@ -242,7 +282,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
               </div>
 
               <button
-                onClick={() => onOpenComments(post.id)}
+                onClick={() => handleShare(post)}
                 className="hover:text-white flex items-center gap-1 text-xs cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[16px]">share</span>
@@ -252,38 +292,66 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
           </article>
         ))}
 
-        {/* Challenge Banner: Desafio Rush 100K */}
-        <div className="bg-gradient-to-r from-[#FF5500]/20 to-[#1C1C1C] rounded-2xl border border-[#FF5500]/40 p-4 shadow-lg space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#FF5500] text-[24px]">flag</span>
-              <span className="font-headline text-lg text-[#F7F5F3] uppercase tracking-wide">
-                Desafio Rush 100K Mensal
+        {/* Desafio ativo do atleta */}
+        {activeChallenge && (
+          <div className="bg-gradient-to-r from-[#FF5500]/20 to-[#1C1C1C] rounded-2xl border border-[#FF5500]/40 p-4 shadow-lg space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="material-symbols-outlined text-[#FF5500] text-[24px]">flag</span>
+                <span className="font-headline text-lg text-[#F7F5F3] uppercase tracking-wide truncate">
+                  {activeChallenge.name}
+                </span>
+              </div>
+              {(() => {
+                const end = new Date(activeChallenge.end_date);
+                const days = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000));
+                return (
+                  <span className="font-telemetry text-xs text-[#FF5500] font-bold shrink-0">
+                    {days} {days === 1 ? 'DIA RESTANTE' : 'DIAS RESTANTES'}
+                  </span>
+                );
+              })()}
+            </div>
+
+            {activeChallenge.is_participating ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-telemetry">
+                  <span className="text-[#A1A1AA]">
+                    Seu progresso: {activeChallenge.my_progress} / {activeChallenge.target_value}{' '}
+                    {activeChallenge.unit || ''}
+                  </span>
+                  <span className="text-[#22C55E] font-bold">{activeChallenge.progress_pct}%</span>
+                </div>
+                <div className="w-full h-2 bg-[#101010] rounded-full overflow-hidden border border-[#262626]">
+                  <div
+                    className="h-full bg-[#FF5500] rounded-full"
+                    style={{ width: `${Math.min(100, activeChallenge.progress_pct)}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-[#A1A1AA] leading-relaxed">
+                {activeChallenge.description ||
+                  `Meta de ${activeChallenge.target_value} ${activeChallenge.unit || ''} no período.`}
+              </p>
+            )}
+
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-[#262626]">
+              <span className="text-[#A1A1AA]">
+                {activeChallenge.participants_count} participante
+                {activeChallenge.participants_count === 1 ? '' : 's'}
               </span>
-            </div>
-            <span className="font-telemetry text-xs text-[#FF5500] font-bold">14 DIAS RESTANTES</span>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-telemetry">
-              <span className="text-[#A1A1AA]">Seu progresso: 64.2 km / 100 km</span>
-              <span className="text-[#22C55E] font-bold">64.2%</span>
-            </div>
-            <div className="w-full h-2 bg-[#101010] rounded-full overflow-hidden border border-[#262626]">
-              <div className="h-full bg-[#FF5500] rounded-full" style={{ width: '64.2%' }} />
+              {!activeChallenge.is_participating && (
+                <button
+                  onClick={() => onJoinChallenge(activeChallenge.id)}
+                  className="text-[#FF5500] font-bold hover:underline cursor-pointer uppercase"
+                >
+                  Entrar no desafio
+                </button>
+              )}
             </div>
           </div>
-
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-[#262626]">
-            <span className="text-[#A1A1AA]">Líder da sua faixa: Lucas Viana (148.4 km)</span>
-            <button
-              onClick={() => alert('Convite enviado para o pelotão!')}
-              className="text-[#FF5500] font-bold hover:underline cursor-pointer"
-            >
-              Convidar Amigo
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

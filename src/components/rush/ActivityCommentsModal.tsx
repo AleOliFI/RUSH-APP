@@ -1,50 +1,118 @@
-import React, { useState } from 'react';
-import { ACTIVITY_COMMENTS } from '../../data/appAssets';
+// ============================================================
+// RUSH RUNNING — Comentários e Kudos de uma atividade
+// Carrega likes e comentários reais de GET /api/activities/:id e
+// grava novos comentários em POST /api/social/comment/:activityId.
+// ============================================================
+
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityComment } from '../../types';
+import { activities as activitiesApi, social } from '../../api';
+import { timeAgo } from '../../data/adapters';
+import { APP_IMAGES } from '../../data/appAssets';
 
 interface ActivityCommentsModalProps {
   isOpen: boolean;
+  activityId: string | null;
+  currentUserId: string | null;
   onClose: () => void;
+  /** Notifica o feed para atualizar contadores após curtir/comentar. */
+  onInteraction?: () => void;
+}
+
+interface KudosUser {
+  user_id: string;
+  name: string;
+  username: string;
 }
 
 export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
   isOpen,
+  activityId,
+  currentUserId,
   onClose,
+  onInteraction,
 }) => {
-  const [comments, setComments] = useState<ActivityComment[]>(ACTIVITY_COMMENTS);
+  const [comments, setComments] = useState<ActivityComment[]>([]);
+  const [kudosUsers, setKudosUsers] = useState<KudosUser[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
-  const [kudoCount, setKudoCount] = useState(142);
+  const [kudoCount, setKudoCount] = useState(0);
   const [hasKudoed, setHasKudoed] = useState(false);
+  const [activityTitle, setActivityTitle] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  const load = useCallback(async () => {
+    if (!activityId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await activitiesApi.get(activityId);
+      setActivityTitle(data.activity?.title || 'atividade');
+      setKudoCount(data.likes?.count ?? 0);
+      setHasKudoed(!!data.likes?.has_liked);
+      setKudosUsers(data.likes?.users || []);
+      setComments(
+        (data.comments?.items || []).map((c: any) => ({
+          id: c.id,
+          authorName: c.name || 'Atleta',
+          authorHandle: `@${c.username || 'rush'}`,
+          authorAvatar: c.avatar_url || APP_IMAGES.headerAvatar,
+          timeAgo: timeAgo(c.created_at),
+          text: c.content,
+          kudosCount: 0,
+          isCoach: false,
+        })),
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível carregar a discussão.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activityId]);
 
-  const handleToggleKudo = () => {
-    if (hasKudoed) {
-      setKudoCount((prev) => prev - 1);
-      setHasKudoed(false);
+  useEffect(() => {
+    if (isOpen) {
+      load();
     } else {
-      setKudoCount((prev) => prev + 1);
-      setHasKudoed(true);
+      setComments([]);
+      setKudosUsers([]);
+      setNewCommentText('');
+      setError(null);
+    }
+  }, [isOpen, load]);
+
+  if (!isOpen || !activityId) return null;
+
+  const handleToggleKudo = async () => {
+    try {
+      const result = await social.like(activityId);
+      setHasKudoed(!!result.liked);
+      setKudoCount(result.likes_count ?? kudoCount);
+      onInteraction?.();
+      load();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível registrar o kudos.');
     }
   };
 
-  const handleAddComment = (e?: React.FormEvent) => {
+  const handleAddComment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newCommentText.trim()) return;
+    const text = newCommentText.trim();
+    if (!text || isSending) return;
 
-    const newComment: ActivityComment = {
-      id: `comm-${Date.now()}`,
-      authorName: 'Você (Mariana Vasconcelos)',
-      authorHandle: '@marianarun',
-      authorAvatar: 'https://lh3.googleusercontent.com/aida/AEtjO1XvPhuypywyEQ-BrcL4kOil_ogDeBTC7pBDUl6sF-u0oU6VvOXP7c2AxkfgB9S3WRxs-GfGu83DTMq-BTGSnatAyGhKqFXYAbczKQ8uqwBbcysq5W64Gt0EdwOSVkthPJoTLg-2IzFznXTC4YoI5E9Mxm7OK7UmaGbIuPWBQGTd9ed8Ss28WaSvvdla7n68xmmKHLkfdH6zKF22K8VQbUtCAPzmD7oBYMO1S1OCMYeHoGsweLFBd6oO7NM',
-      timeAgo: 'Agora mesmo',
-      text: newCommentText.trim(),
-      kudosCount: 1,
-      tag: 'Geral',
-    };
-
-    setComments((prev) => [newComment, ...prev]);
-    setNewCommentText('');
+    setIsSending(true);
+    setError(null);
+    try {
+      await social.comment(activityId, text);
+      setNewCommentText('');
+      await load();
+      onInteraction?.();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível enviar o comentário.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const quickReactions = [
@@ -108,33 +176,34 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
                   </span>
                   <span>{kudoCount} Kudos</span>
                 </button>
-                <span className="text-xs text-[#A1A1AA]">no treino de 21K</span>
+                <span className="text-xs text-[#A1A1AA] truncate">em “{activityTitle}”</span>
               </div>
-              <span className="font-telemetry text-xs text-[#22C55E] font-bold">142 ATLETAS</span>
+              <span className="font-telemetry text-xs text-[#22C55E] font-bold shrink-0">
+                {kudoCount} {kudoCount === 1 ? 'ATLETA' : 'ATLETAS'}
+              </span>
             </div>
 
-            {/* Avatares Carrossel */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {[
-                { name: 'Beto', emoji: '🔥' },
-                { name: 'Carol', emoji: '🚀' },
-                { name: 'Marcos', emoji: '⚡' },
-                { name: 'Aline', emoji: '👟' },
-                { name: 'Diego', emoji: '💪' },
-                { name: 'Fernanda', emoji: '🔥' },
-              ].map((item, idx) => (
-                <div
-                  key={idx}
-                  className="w-9 h-9 rounded-full bg-[#262626] border border-[#353534] flex items-center justify-center shrink-0 text-sm"
-                  title={item.name}
-                >
-                  {item.emoji}
-                </div>
-              ))}
-              <div className="h-9 px-3 rounded-full bg-[#101010] border border-[#262626] flex items-center justify-center text-xs font-telemetry text-[#A1A1AA] shrink-0">
-                +136 outros
+            {/* Quem curtiu */}
+            {kudosUsers.length > 0 ? (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {kudosUsers.map((u) => (
+                  <div
+                    key={u.user_id}
+                    className="w-9 h-9 rounded-full bg-[#262626] border border-[#353534] flex items-center justify-center shrink-0 text-xs font-bold text-[#F7F5F3] uppercase"
+                    title={u.name}
+                  >
+                    {(u.name || u.username || '?').slice(0, 2)}
+                  </div>
+                ))}
+                {kudoCount > kudosUsers.length && (
+                  <div className="h-9 px-3 rounded-full bg-[#101010] border border-[#262626] flex items-center justify-center text-xs font-telemetry text-[#A1A1AA] shrink-0">
+                    +{kudoCount - kudosUsers.length} outros
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <p className="text-xs text-[#737373]">Ainda sem kudos nesta atividade.</p>
+            )}
           </div>
 
           {/* Quick Reaction Buttons */}
@@ -163,6 +232,22 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
               </h3>
               <span className="font-telemetry text-xs text-[#A1A1AA]">ORDEM CRONOLÓGICA</span>
             </div>
+
+            {isLoading && (
+              <p className="text-xs text-[#737373] animate-pulse">Carregando discussão…</p>
+            )}
+
+            {error && (
+              <p className="text-xs text-[#EF4444] font-bold" role="alert">
+                {error}
+              </p>
+            )}
+
+            {!isLoading && comments.length === 0 && (
+              <p className="text-xs text-[#737373] leading-relaxed">
+                Nenhum comentário ainda. Seja o primeiro a comentar esta sessão.
+              </p>
+            )}
 
             <div className="space-y-3">
               {comments.map((comm) => (
@@ -202,10 +287,6 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
                   </p>
 
                   <div className="flex items-center justify-end gap-3 pt-1 border-t border-[#262626] text-xs text-[#A1A1AA]">
-                    <button className="hover:text-[#FF5500] flex items-center gap-1 cursor-pointer">
-                      <span className="material-symbols-outlined text-[15px]">thumb_up</span>
-                      <span>{comm.kudosCount}</span>
-                    </button>
                     <button
                       onClick={() => setNewCommentText(`@${comm.authorHandle.replace('@', '')} `)}
                       className="hover:text-white flex items-center gap-1 cursor-pointer"
@@ -234,10 +315,10 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
           />
           <button
             type="submit"
-            disabled={!newCommentText.trim()}
-            className="min-h-[44px] px-4 py-2.5 bg-[#FF5500] hover:bg-[#FF6B00] disabled:opacity-40 text-[#0D0D0D] font-headline text-sm uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0"
+            disabled={!newCommentText.trim() || isSending}
+            className="min-h-[44px] px-4 py-2.5 bg-[#FF5500] hover:bg-[#FF6B00] disabled:opacity-40 disabled:cursor-wait text-[#0D0D0D] font-headline text-sm uppercase tracking-wider rounded-xl transition-all cursor-pointer shrink-0"
           >
-            Enviar
+            {isSending ? '…' : 'Enviar'}
           </button>
         </form>
       </div>
