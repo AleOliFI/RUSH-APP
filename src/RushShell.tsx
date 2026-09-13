@@ -318,7 +318,12 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         onViewImage={viewImage}
       />
 
-      <StoryExporterModal isOpen={isStoryExporterOpen} onClose={() => setIsStoryExporterOpen(false)} />
+      <StoryExporterModal
+        isOpen={isStoryExporterOpen}
+        athleteName={athlete.name}
+        defaultShoeName={shoes.find((shoe: any) => shoe.isDefault)?.name || null}
+        onClose={() => setIsStoryExporterOpen(false)}
+      />
 
       <WorkoutSummaryModal
         isOpen={isWorkoutSummaryOpen}

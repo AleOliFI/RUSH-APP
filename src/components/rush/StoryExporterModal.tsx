@@ -1,54 +1,219 @@
-import React, { useState } from 'react';
-import { APP_IMAGES } from '../../data/appAssets';
-import { downloadImageToDevice } from '../../utils/imageDownload';
+// ============================================================
+// RUSH RUNNING — Exportador de Story 9:16
+// ------------------------------------------------------------
+// A arte é renderizada de verdade num canvas 1080x1920 com os
+// números da atividade escolhida e baixada como PNG. O protótipo
+// baixava a foto de fundo original sem nenhum dado sobreposto.
+//
+// Exportação animada (vídeo/GIF) não está disponível: gerar vídeo no
+// navegador exige codificação em tempo real que este app não faz. Em
+// vez de oferecer um botão que entrega um PNG, a tela diz isso.
+// ============================================================
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { activities as activitiesApi } from '../../api';
+import { formatDuration, paceFromActivity, timeAgo } from '../../data/adapters';
+import {
+  canvasToBlob,
+  renderStoryCanvas,
+  STORY_HEIGHT,
+  STORY_WIDTH,
+  StoryData,
+} from '../../utils/storyCanvas';
+import { prepareImageForUpload } from '../../utils/imageUpload';
 
 interface StoryExporterModalProps {
   isOpen: boolean;
+  athleteName: string;
+  defaultShoeName?: string | null;
   onClose: () => void;
 }
 
-export const StoryExporterModal: React.FC<StoryExporterModalProps> = ({ isOpen, onClose }) => {
-  const [selectedFormat, setSelectedFormat] = useState<'video' | 'gif' | 'photo'>('gif');
-  const [selectedPlatform, setSelectedPlatform] = useState<'stories' | 'tiktok' | 'whatsapp' | 'strava'>('stories');
-  const [selectedStyle, setSelectedStyle] = useState<'tactical' | 'minimal' | 'map' | 'cardio'>('tactical');
-  const [selectedColor, setSelectedColor] = useState<'#FF5500' | '#FFFFFF' | '#C3F400' | '#00E5FF'>('#FF5500');
-  const [showSafeZone, setShowSafeZone] = useState(true);
-  const [animatedTelemetry, setAnimatedTelemetry] = useState(true);
-  const [losslessCompression, setLosslessCompression] = useState(true);
-  const [showBpm, setShowBpm] = useState(true);
-  const [showMap, setShowMap] = useState(true);
+const ACCENT_COLORS = ['#FF5500', '#FFFFFF', '#C3F400', '#00E5FF'] as const;
+
+export const StoryExporterModal: React.FC<StoryExporterModalProps> = ({
+  isOpen,
+  athleteName,
+  defaultShoeName,
+  onClose,
+}) => {
+  const [activities, setActivities] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [accentColor, setAccentColor] = useState<string>(ACCENT_COLORS[0]);
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [showHr, setShowHr] = useState(true);
   const [showShoe, setShowShoe] = useState(true);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportFeedback, setExportFeedback] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  const selected = useMemo(
+    () => activities.find((a) => a.id === selectedId) || null,
+    [activities, selectedId],
+  );
+
+  const storyData: StoryData | null = useMemo(() => {
+    if (!selected) return null;
+    const distance = selected.distance_km || 0;
+    const duration = selected.duration_seconds || 0;
+    return {
+      title: selected.title || 'Sessão RUSH',
+      distanceKm: distance,
+      duration: formatDuration(duration),
+      avgPace: selected.avg_pace || `${paceFromActivity(distance, duration)}/km`,
+      avgHr: selected.avg_hr ?? null,
+      dateLabel: timeAgo(selected.date),
+      shoeName: defaultShoeName || null,
+      locationLabel: athleteName,
+    };
+  }, [selected, defaultShoeName, athleteName]);
+
+  /* ---------- carrega atividades ---------- */
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+
+    (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await activitiesApi.list(1);
+        if (cancelled) return;
+        const list = (data.activities || []).slice(0, 10);
+        setActivities(list);
+        if (list[0]) {
+          setSelectedId(list[0].id);
+          setBackgroundUrl(list[0].image_url || null);
+        }
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Não foi possível carregar suas atividades.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  /* ---------- gera a pré-visualização ---------- */
+  const renderPreview = useCallback(async () => {
+    if (!storyData) return;
+    setIsRendering(true);
+    setError(null);
+    try {
+      const canvas = await renderStoryCanvas(storyData, {
+        accentColor,
+        backgroundImageUrl: backgroundUrl,
+        showHr,
+        showShoe,
+      });
+      const blob = await canvasToBlob(canvas);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      setPreviewUrl(url);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível gerar a arte.');
+    } finally {
+      setIsRendering(false);
+    }
+  }, [storyData, accentColor, backgroundUrl, showHr, showShoe]);
+
+  useEffect(() => {
+    if (isOpen && storyData) renderPreview();
+  }, [isOpen, storyData, renderPreview]);
+
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    },
+    [],
+  );
 
   if (!isOpen) return null;
 
-  const handleDownloadExport = () => {
-    setIsExporting(true);
-    setTimeout(() => {
-      downloadImageToDevice(
-        APP_IMAGES.marianaActionRunning,
-        `rush_telemetry_story_${selectedFormat}_21k.jpg`,
-        'Story de Telemetria Dinâmica RUSH'
-      );
-      setIsExporting(false);
-      setExportFeedback('Exportado com sucesso para o dispositivo!');
-      setTimeout(() => setExportFeedback(null), 3000);
-    }, 1200);
+  const handlePickBackground = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError(null);
+    try {
+      const prepared = await prepareImageForUpload(file);
+      setBackgroundUrl(prepared.dataUrl);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível preparar a imagem.');
+    }
   };
 
-  const handleShareDirect = () => {
-    if (navigator.share) {
-      navigator
-        .share({
-          title: 'Treino RUSH PRO • 21.10 KM',
-          text: '21.10 km a 4:21/km com RUSH PRO Kinetic Telemetry.',
-          url: window.location.href,
-        })
-        .catch(() => {});
-    } else {
-      setExportFeedback('Link copiado para compartilhar nos Stories!');
-      setTimeout(() => setExportFeedback(null), 3000);
+  const handleDownload = async () => {
+    if (!storyData) return;
+    setIsRendering(true);
+    setError(null);
+    try {
+      const canvas = await renderStoryCanvas(storyData, {
+        accentColor,
+        backgroundImageUrl: backgroundUrl,
+        showHr,
+        showShoe,
+      });
+      const blob = await canvasToBlob(canvas);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `rush-story-${storyData.distanceKm.toFixed(1)}km.png`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+
+      setFeedback('Imagem 1080x1920 salva no dispositivo.');
+      setTimeout(() => setFeedback(null), 3000);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível exportar.');
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!storyData) return;
+    setError(null);
+    try {
+      const canvas = await renderStoryCanvas(storyData, {
+        accentColor,
+        backgroundImageUrl: backgroundUrl,
+        showHr,
+        showShoe,
+      });
+      const blob = await canvasToBlob(canvas);
+      const file = new File([blob], `rush-story-${storyData.distanceKm.toFixed(1)}km.png`, {
+        type: 'image/png',
+      });
+
+      const nav: any = navigator;
+      if (nav.canShare?.({ files: [file] })) {
+        await nav.share({
+          files: [file],
+          title: 'RUSH RUNNING',
+          text: `${storyData.distanceKm.toFixed(2)} km a ${storyData.avgPace}.`,
+        });
+        return;
+      }
+
+      setFeedback('Compartilhamento de arquivo indisponível aqui — use o download.');
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        setError(err?.message || 'Não foi possível compartilhar.');
+      }
     }
   };
 
@@ -61,283 +226,206 @@ export const StoryExporterModal: React.FC<StoryExporterModalProps> = ({ isOpen, 
     >
       <div className="flex-1 w-full" onClick={onClose} />
 
-      <div className="relative w-full max-w-xl mx-auto max-h-[95vh] flex flex-col bg-[#0D0D0D] rounded-t-3xl border-t border-[#FF5500]/60 shadow-[0_-12px_45px_rgba(0,0,0,0.95)] overflow-hidden">
-        {/* Grab Pill */}
+      <div className="relative w-full max-w-xl mx-auto max-h-[94vh] flex flex-col bg-[#0D0D0D] rounded-t-3xl border-t border-[#FF5500]/60 shadow-[0_-12px_45px_rgba(0,0,0,0.95)] overflow-hidden">
         <div className="w-full flex items-center justify-center pt-3 pb-1">
           <div className="w-12 h-1.5 rounded-full bg-[#353534]" />
         </div>
 
-        {/* Header */}
-        <div className="px-5 py-3 flex items-center justify-between border-b border-[#262626]">
-          <div>
+        <div className="px-5 py-3 flex items-center justify-between border-b border-[#262626] gap-3">
+          <div className="min-w-0">
             <span className="font-label-sm text-[10px] text-[#FF5500] tracking-widest uppercase block">
-              EXPORTAR WORKOUT • TELEMETRIA DINÂMICA
+              COMPARTILHAMENTO
             </span>
             <h2 id="story-exporter-title" className="font-headline text-2xl text-[#F7F5F3] uppercase tracking-normal">
-              Canvas Stories & TikTok (9:16)
+              Story 9:16
             </h2>
           </div>
 
           <button
             onClick={onClose}
-            className="w-9 h-9 rounded-full bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3] flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 shrink-0 rounded-full bg-[#1C1C1C] text-[#A1A1AA] hover:text-[#F7F5F3] flex items-center justify-center transition-colors cursor-pointer"
             aria-label="Fechar exportador"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {/* 9:16 Interactive Canvas Container */}
-          <div className="flex justify-center">
-            <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-2xl overflow-hidden border border-[#FF5500]/40 shadow-2xl bg-black select-none">
-              {/* Background Photo */}
-              <img
-                src={APP_IMAGES.marianaActionRunning}
-                alt="Atleta em Corrida"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/80" />
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {isLoading && <p className="text-xs text-[#737373] animate-pulse">Carregando atividades…</p>}
 
-              {/* Safe-Zone Guide Overlay */}
-              {showSafeZone && (
-                <div className="absolute inset-0 border-x-2 border-y-8 border-[#FF5500]/30 pointer-events-none flex flex-col justify-between p-2">
-                  <div className="flex items-center justify-between text-[8px] font-telemetry text-[#FF5500] bg-black/60 px-1 py-0.5 rounded">
-                    <span>TOP SAFE ZONE (STORIES)</span>
-                    <span>1080x1920</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[8px] font-telemetry text-[#FF5500] bg-black/60 px-1 py-0.5 rounded">
-                    <span>BOTTOM SAFE ZONE</span>
-                    <span>60 FPS LOOP</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Watermark Top */}
-              <div className="absolute top-4 left-4 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/15">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedColor }} />
-                <span className="font-headline text-[11px] text-white tracking-wider">RUSH PRO</span>
-                <span className="font-telemetry text-[9px] text-[#A1A1AA]">TELEMETRY</span>
-              </div>
-
-              {/* Overlaid Kinetic HUD Sticker */}
-              <div className="absolute inset-x-3 bottom-6 bg-black/80 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-2xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[14px]" style={{ color: selectedColor }}>
-                      speed
-                    </span>
-                    <span className="font-headline text-sm text-white tracking-wide">
-                      MEIA MARATONA • 21.10 KM
-                    </span>
-                  </div>
-                  <span className="font-telemetry text-[10px] font-bold" style={{ color: selectedColor }}>
-                    RP
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5 text-center">
-                  <div className="bg-white/5 p-1 rounded border border-white/10">
-                    <span className="text-[8px] text-[#A1A1AA] uppercase block">TEMPO</span>
-                    <span className="font-headline text-xs text-white">1:32:04</span>
-                  </div>
-                  <div className="bg-white/5 p-1 rounded border border-white/10">
-                    <span className="text-[8px] text-[#A1A1AA] uppercase block">RITMO</span>
-                    <span className="font-headline text-xs" style={{ color: selectedColor }}>
-                      4:21/km
-                    </span>
-                  </div>
-                  <div className="bg-white/5 p-1 rounded border border-white/10">
-                    <span className="text-[8px] text-[#A1A1AA] uppercase block">BPM Z4</span>
-                    <span className="font-headline text-xs text-white">166</span>
-                  </div>
-                </div>
-
-                {showMap && (
-                  <div className="flex items-center justify-between text-[9px] text-[#A1A1AA] pt-0.5 border-t border-white/10">
-                    <span className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[12px] text-[#22C55E]">alt_route</span>
-                      USP Raia • +148m
-                    </span>
-                    {showShoe && (
-                      <span className="truncate max-w-[120px]">Nike Vaporfly 3</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Safe Zone Toggle */}
-          <div className="flex items-center justify-between bg-[#1C1C1C] p-3 rounded-xl border border-[#262626]">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#FF5500] text-[20px]">crop_free</span>
-              <span className="text-xs font-bold text-[#F7F5F3]">Exibir Guias Safe-Zone 9:16</span>
-            </div>
-            <button
-              onClick={() => setShowSafeZone(!showSafeZone)}
-              className={`px-3 py-1 rounded-full text-xs font-bold uppercase transition-all cursor-pointer ${
-                showSafeZone ? 'bg-[#FF5500] text-[#0D0D0D]' : 'bg-[#262626] text-[#A1A1AA]'
-              }`}
-            >
-              {showSafeZone ? 'Ativo' : 'Oculto'}
-            </button>
-          </div>
-
-          {/* Format Selector */}
-          <div className="space-y-2">
-            <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-              Formato de Renderização
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'gif', label: 'GIF Loop (60FPS)', icon: 'gif' },
-                { id: 'video', label: 'Vídeo MP4', icon: 'movie' },
-                { id: 'photo', label: 'Foto HD', icon: 'image' },
-              ].map((fmt) => (
-                <button
-                  key={fmt.id}
-                  onClick={() => setSelectedFormat(fmt.id as any)}
-                  className={`min-h-[44px] py-2 px-2.5 rounded-xl flex flex-col items-center justify-center gap-1 border transition-all cursor-pointer ${
-                    selectedFormat === fmt.id
-                      ? 'bg-[#FF5500] text-[#0D0D0D] border-[#FF5500] font-extrabold shadow-md'
-                      : 'bg-[#1C1C1C] text-[#A1A1AA] border-[#262626] hover:text-[#F7F5F3]'
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[20px]">{fmt.icon}</span>
-                  <span className="text-[10px] uppercase">{fmt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Platform Presets */}
-          <div className="space-y-2">
-            <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-              Destino do Compartilhamento
-            </span>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { id: 'stories', label: 'Stories' },
-                { id: 'tiktok', label: 'TikTok' },
-                { id: 'whatsapp', label: 'WhatsApp' },
-                { id: 'strava', label: 'Strava' },
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPlatform(p.id as any)}
-                  className={`min-h-[44px] py-2 px-2 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
-                    selectedPlatform === p.id
-                      ? 'bg-[#F7F5F3] text-[#0D0D0D]'
-                      : 'bg-[#1C1C1C] text-[#A1A1AA] border border-[#262626] hover:text-[#F7F5F3]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Color Chips for Sticker HUD */}
-          <div className="space-y-2">
-            <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-              Paleta de Cor da Telemetria
-            </span>
-            <div className="flex items-center gap-3">
-              {[
-                { color: '#FF5500', name: 'Laranja Rush' },
-                { color: '#FFFFFF', name: 'Branco Puro' },
-                { color: '#C3F400', name: 'Volt Ácido' },
-                { color: '#00E5FF', name: 'Ciano' },
-              ].map((chip) => (
-                <button
-                  key={chip.color}
-                  onClick={() => setSelectedColor(chip.color as any)}
-                  className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${
-                    selectedColor === chip.color
-                      ? 'border-white bg-[#262626]'
-                      : 'border-[#262626] bg-[#1C1C1C]'
-                  }`}
-                >
-                  <span
-                    className="w-4 h-4 rounded-full border border-black/40 shadow-inner"
-                    style={{ backgroundColor: chip.color }}
-                  />
-                  <span className="text-xs text-[#F7F5F3] font-bold pr-1">{chip.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Metric Toggles */}
-          <div className="bg-[#1C1C1C] p-3.5 rounded-xl border border-[#262626] space-y-2.5">
-            <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">
-              Elementos Sobrepostos
-            </span>
-            <div className="flex items-center justify-around text-xs">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showBpm}
-                  onChange={(e) => setShowBpm(e.target.checked)}
-                  className="accent-[#FF5500] w-4 h-4 rounded"
-                />
-                <span className="text-[#F7F5F3]">Zonas BPM</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showMap}
-                  onChange={(e) => setShowMap(e.target.checked)}
-                  className="accent-[#FF5500] w-4 h-4 rounded"
-                />
-                <span className="text-[#F7F5F3]">Traçado GPS</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showShoe}
-                  onChange={(e) => setShowShoe(e.target.checked)}
-                  className="accent-[#FF5500] w-4 h-4 rounded"
-                />
-                <span className="text-[#F7F5F3]">Tênis Pareado</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Feedback banner */}
-          {exportFeedback && (
-            <div className="p-3 bg-[#22C55E]/15 border border-[#22C55E]/50 rounded-xl text-center text-[#22C55E] text-xs font-bold">
-              {exportFeedback}
+          {!isLoading && activities.length === 0 && (
+            <div className="bg-[#1C1C1C] rounded-2xl border border-dashed border-[#262626] p-6 text-center">
+              <span className="material-symbols-outlined text-[30px] text-[#404040]">image</span>
+              <p className="text-xs text-[#737373] mt-2 leading-relaxed">
+                Você precisa de pelo menos uma corrida registrada para gerar um story.
+              </p>
             </div>
           )}
 
-          {/* Action CTAs */}
-          <div className="space-y-2.5 pt-1">
-            <button
-              onClick={handleShareDirect}
-              className="w-full min-h-[52px] py-3.5 px-4 bg-[#FF5500] hover:bg-[#FF6B00] active:scale-[0.98] text-[#0D0D0D] rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#FF5500]/25 transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[22px]">share</span>
-              <span className="font-headline text-base uppercase tracking-wider whitespace-nowrap">
-                Compartilhar no {selectedPlatform === 'stories' ? 'Instagram Stories' : selectedPlatform.toUpperCase()}
-              </span>
-            </button>
+          {activities.length > 0 && (
+            <>
+              {/* Pré-visualização real */}
+              <div className="flex justify-center">
+                <div className="relative w-full max-w-[280px] aspect-[9/16] rounded-2xl overflow-hidden border border-[#FF5500]/40 shadow-2xl bg-black">
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="Pré-visualização do story" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="font-telemetry text-xs text-[#737373] animate-pulse">
+                        Gerando arte…
+                      </span>
+                    </div>
+                  )}
 
-            <button
-              onClick={handleDownloadExport}
-              disabled={isExporting}
-              className="w-full min-h-[48px] py-3 px-4 bg-[#262626] hover:bg-[#353534] active:scale-[0.98] text-[#F7F5F3] rounded-xl flex items-center justify-center gap-2 border border-[#353534] transition-all cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[20px] text-[#FF5500] ${isExporting ? 'animate-spin' : ''}`}>
-                {isExporting ? 'progress_activity' : 'download'}
-              </span>
-              <span className="font-bold text-xs uppercase tracking-wider">
-                {isExporting ? 'Renderizando Canvas...' : `Baixar ${selectedFormat.toUpperCase()} para o Aparelho`}
-              </span>
-            </button>
-          </div>
+                  {isRendering && previewUrl && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-white animate-spin text-[28px]">
+                        progress_activity
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[#737373] text-center font-telemetry">
+                {STORY_WIDTH} × {STORY_HEIGHT} px • PNG
+              </p>
+
+              {/* Atividade */}
+              <div className="space-y-2">
+                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">Atividade</span>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {activities.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => {
+                        setSelectedId(a.id);
+                        setBackgroundUrl(a.image_url || null);
+                      }}
+                      className={`shrink-0 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+                        a.id === selectedId
+                          ? 'bg-[#FF5500]/15 border-[#FF5500] text-[#F7F5F3]'
+                          : 'bg-[#1C1C1C] border-[#262626] text-[#A1A1AA] hover:text-[#F7F5F3]'
+                      }`}
+                    >
+                      <span className="block text-[11px] font-bold truncate max-w-[150px]">
+                        {a.title || 'Atividade'}
+                      </span>
+                      <span className="block text-[10px] font-telemetry">
+                        {(a.distance_km || 0).toFixed(1)} km • {timeAgo(a.date)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fundo */}
+              <div className="space-y-2">
+                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">Imagem de fundo</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePickBackground}
+                  className="hidden"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 h-11 rounded-xl bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] text-[11px] font-bold uppercase text-[#F7F5F3] cursor-pointer"
+                  >
+                    {backgroundUrl ? 'Trocar foto' : 'Escolher foto'}
+                  </button>
+                  {backgroundUrl && (
+                    <button
+                      onClick={() => setBackgroundUrl(null)}
+                      className="h-11 px-4 rounded-xl bg-[#101010] border border-[#262626] text-[11px] font-bold uppercase text-[#A1A1AA] hover:text-[#F7F5F3] cursor-pointer"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Cor de destaque */}
+              <div className="space-y-2">
+                <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase block">Cor de destaque</span>
+                <div className="flex gap-2">
+                  {ACCENT_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      onClick={() => setAccentColor(color)}
+                      aria-label={`Cor ${color}`}
+                      className={`w-11 h-11 rounded-xl border-2 transition-all cursor-pointer ${
+                        accentColor === color ? 'border-white scale-105' : 'border-[#262626]'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Dados no cartão */}
+              <div className="bg-[#1C1C1C] p-4 rounded-2xl border border-[#262626] space-y-1 text-xs">
+                <label className="flex items-center justify-between cursor-pointer min-h-[44px]">
+                  <span className="text-[#F7F5F3] font-bold">Mostrar frequência cardíaca</span>
+                  <input
+                    type="checkbox"
+                    checked={showHr}
+                    onChange={(e) => setShowHr(e.target.checked)}
+                    className="accent-[#FF5500] w-4 h-4 rounded cursor-pointer"
+                  />
+                </label>
+                <div className="border-t border-[#262626]" />
+                <label className="flex items-center justify-between cursor-pointer min-h-[44px]">
+                  <span className="text-[#F7F5F3] font-bold">Mostrar calçado usado</span>
+                  <input
+                    type="checkbox"
+                    checked={showShoe}
+                    onChange={(e) => setShowShoe(e.target.checked)}
+                    disabled={!defaultShoeName}
+                    className="accent-[#FF5500] w-4 h-4 rounded cursor-pointer disabled:opacity-40"
+                  />
+                </label>
+              </div>
+
+              {feedback && (
+                <p className="text-xs text-[#22C55E] font-bold" role="status">
+                  {feedback}
+                </p>
+              )}
+              {error && (
+                <p className="text-xs text-[#EF4444] font-bold" role="alert">
+                  {error}
+                </p>
+              )}
+
+              {/* Ações */}
+              <div className="space-y-2.5 pt-1">
+                <button
+                  onClick={handleDownload}
+                  disabled={isRendering}
+                  className="w-full min-h-[52px] py-3.5 px-4 bg-[#FF5500] hover:bg-[#FF6B00] disabled:opacity-60 disabled:cursor-wait text-[#0D0D0D] rounded-xl flex items-center justify-center gap-2 shadow-lg font-headline text-base uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[22px]">download</span>
+                  <span>{isRendering ? 'Gerando…' : 'Baixar PNG 1080x1920'}</span>
+                </button>
+
+                <button
+                  onClick={handleShare}
+                  disabled={isRendering}
+                  className="w-full min-h-[48px] py-3 px-4 bg-[#262626] hover:bg-[#353534] disabled:opacity-60 text-[#F7F5F3] rounded-xl border border-[#353534] font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Compartilhar direto
+                </button>
+              </div>
+
+              <p className="text-[10px] text-[#737373] leading-relaxed">
+                A exportação gera uma imagem estática. Story animado em vídeo ou GIF exigiria codificação de
+                vídeo no dispositivo, que o app ainda não faz.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
