@@ -593,6 +593,22 @@ module.exports = function initializeDatabase(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_notif_user_read ON notifications(user_id, read);
+
+    -- Inscrições de Web Push. O endpoint é a identidade da inscrição
+    -- perante o serviço do navegador, por isso é ele a chave primária:
+    -- o mesmo atleta tem uma linha por navegador/aparelho, e reinstalar
+    -- o app gera um endpoint novo em vez de duplicar o antigo.
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      last_success_at TEXT DEFAULT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
   `);
 
   // ============================================================

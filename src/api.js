@@ -274,6 +274,12 @@ export const notifications = {
   unreadCount: () => request('/notifications/unread-count'),
   markRead: (id) => request(`/notifications/${id}/read`, { method: 'PUT' }),
   readAll: () => request('/notifications/read-all', { method: 'PUT' }),
+  pushKey: () => request('/notifications/push/key'),
+  pushSubscribe: (subscription) =>
+    request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+  pushUnsubscribe: (endpoint) =>
+    request('/notifications/push/subscribe', { method: 'DELETE', body: JSON.stringify({ endpoint }) }),
+  pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 };
 
 // Academies (Coach / Assessoria)

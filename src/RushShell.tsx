@@ -25,9 +25,12 @@ import { CycleScreen } from './screens/CycleScreen';
 import { DeleteAccountScreen } from './screens/DeleteAccountScreen';
 import { ActivityDetailScreen } from './screens/ActivityDetailScreen';
 import { AthleteSearchScreen } from './screens/AthleteSearchScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { useActivityDetail } from './hooks/useActivityDetail';
 import { useSocial, usePublicProfile } from './hooks/useSocial';
+import { useNotifications } from './hooks/useNotifications';
+import { usePushNotifications } from './hooks/usePushNotifications';
 import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
@@ -153,6 +156,16 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [feedView, setFeedView] = useState<'feed' | 'buscar'>('feed');
   const [openAthleteId, setOpenAthleteId] = useState<string | null>(null);
   const social = useSocial();
+
+  /**
+   * A central é uma sobreposição, não uma aba: o sino aparece em todas
+   * as telas, e mandar o atleta para uma aba faria ele perder onde
+   * estava. As notificações são carregadas desde o início porque o
+   * contador do sino depende delas.
+   */
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notifications = useNotifications();
+  const push = usePushNotifications(isNotificationsOpen);
   const publicProfile = usePublicProfile(openAthleteId);
 
   const [profileView, setProfileView] = useState<'perfil' | 'conta'>('perfil');
@@ -237,10 +250,20 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         readiness={readiness}
         onOpenProfile={() => setIsAthleteModalOpen(true)}
         onStartMeasure={() => goToTab('medicao')}
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
+        unreadCount={notifications.unreadCount}
       />
 
       <main className="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-[#0D0D0D]">
-        {currentTab === 'inicio' && (
+        {isNotificationsOpen && (
+          <NotificationsScreen
+            notifications={notifications}
+            push={push}
+            onBack={() => setIsNotificationsOpen(false)}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'inicio' && (
           <HomeScreen
             athlete={athlete}
             readiness={readiness}
@@ -262,7 +285,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'medicao' && (
+        {!isNotificationsOpen && currentTab === 'medicao' && (
           <div className="flex flex-col w-full">
             <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
               <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
@@ -306,7 +329,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {currentTab === 'treinos' && (
+        {!isNotificationsOpen && currentTab === 'treinos' && (
           <div className="flex flex-col w-full">
             {/* Prescrição do dia x histórico: mesma aba, duas faces. */}
             <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
@@ -367,7 +390,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {currentTab === 'feed' && openAthleteId && (
+        {!isNotificationsOpen && currentTab === 'feed' && openAthleteId && (
           <PublicProfileScreen
             profile={publicProfile.profile}
             isLoading={publicProfile.isLoading}
@@ -377,7 +400,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'feed' && !openAthleteId && feedView === 'buscar' && (
+        {!isNotificationsOpen && currentTab === 'feed' && !openAthleteId && feedView === 'buscar' && (
           <AthleteSearchScreen
             social={social}
             onOpenAthlete={(userId) => setOpenAthleteId(userId)}
@@ -385,7 +408,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'feed' && !openAthleteId && feedView === 'feed' && (
+        {!isNotificationsOpen && currentTab === 'feed' && !openAthleteId && feedView === 'feed' && (
           <FeedScreen
             onOpenSearch={() => setFeedView('buscar')}
             posts={feedPosts}
@@ -401,7 +424,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'premium-pro' && (
+        {!isNotificationsOpen && currentTab === 'premium-pro' && (
           <ProScreen
             athlete={athlete}
             readiness={readiness}
@@ -421,7 +444,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'perfil' && profileView === 'conta' && (
+        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'conta' && (
           <DeleteAccountScreen
             subscription={subscription}
             activities={recentActivitiesRaw}
@@ -432,7 +455,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'perfil' && profileView === 'perfil' && (
+        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'perfil' && (
           <ProfileScreen
             athlete={athlete}
             readiness={readiness}
@@ -458,7 +481,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         )}
       </main>
 
-      <BottomNav currentTab={currentTab} onTabChange={goToTab} isMeasuring={currentTab === 'medicao'} />
+      <BottomNav currentTab={currentTab} onTabChange={goToTab} isMeasuring={!isNotificationsOpen && currentTab === 'medicao'} />
 
       <WorkoutDetailModal
         workout={todayWorkout}

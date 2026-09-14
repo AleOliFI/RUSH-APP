@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
 
 module.exports = function socialRoutes(db) {
@@ -112,10 +113,12 @@ module.exports = function socialRoutes(db) {
 
       // Notify
       const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, type, source_user_id, message)
-        VALUES (?, ?, 'follow', ?, ?)
-      `).run(uuidv4(), targetId, req.user.id, `${profile?.name || 'Alguém'} começou a seguir você`);
+      criarNotificacao(db, {
+        userId: targetId,
+        type: 'follow',
+        sourceUserId: req.user.id,
+        message: `${profile?.name || 'Alguém'} começou a seguir você`,
+      });
 
       const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
       res.json({ following: true, followers_count: followers.count });
@@ -216,10 +219,13 @@ module.exports = function socialRoutes(db) {
       // Notify activity owner
       if (activity.user_id !== req.user.id) {
         const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-        db.prepare(`
-          INSERT INTO notifications (id, user_id, type, source_user_id, activity_id, message)
-          VALUES (?, ?, 'like', ?, ?, ?)
-        `).run(uuidv4(), activity.user_id, req.user.id, activityId, `${profile?.name || 'Alguém'} curtiu sua atividade`);
+        criarNotificacao(db, {
+          userId: activity.user_id,
+          type: 'like',
+          sourceUserId: req.user.id,
+          activityId,
+          message: `${profile?.name || 'Alguém'} curtiu sua atividade`,
+        });
       }
 
       const count = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(activityId);
@@ -261,10 +267,13 @@ module.exports = function socialRoutes(db) {
       // Notify activity owner
       if (activity.user_id !== req.user.id) {
         const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-        db.prepare(`
-          INSERT INTO notifications (id, user_id, type, source_user_id, activity_id, message)
-          VALUES (?, ?, 'comment', ?, ?, ?)
-        `).run(uuidv4(), activity.user_id, req.user.id, activityId, `${profile?.name || 'Alguém'} comentou na sua atividade`);
+        criarNotificacao(db, {
+          userId: activity.user_id,
+          type: 'comment',
+          sourceUserId: req.user.id,
+          activityId,
+          message: `${profile?.name || 'Alguém'} comentou na sua atividade`,
+        });
       }
 
       const comment = db.prepare(`

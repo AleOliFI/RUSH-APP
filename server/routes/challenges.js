@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 
 module.exports = function challengesRoutes(db) {
   const router = express.Router();
@@ -220,10 +221,11 @@ module.exports = function challengesRoutes(db) {
       `).run(numProgress, newStatus, completedAt, challengeId, req.user.id);
 
       if (newStatus === 'completed' && participant.status !== 'completed') {
-        db.prepare(`
-          INSERT INTO notifications (id, user_id, type, message)
-          VALUES (?, ?, 'challenge', ?)
-        `).run(uuidv4(), req.user.id, `🎉 Parabéns! Você completou o desafio "${challenge.name}"!`);
+        criarNotificacao(db, {
+          userId: req.user.id,
+          type: 'challenge',
+          message: `🎉 Parabéns! Você completou o desafio "${challenge.name}"!`,
+        });
       }
 
       res.json({ progress_value: numProgress, status: newStatus, completed: newStatus === 'completed' });

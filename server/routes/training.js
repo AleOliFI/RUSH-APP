@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 
 module.exports = function trainingRoutes(db) {
   const router = express.Router();
@@ -191,10 +192,12 @@ module.exports = function trainingRoutes(db) {
       `).run(assignId, user_id, plan_id, formattedStartDate, formattedEndDate);
 
       // Notify athlete
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, type, source_user_id, message)
-        VALUES (?, ?, 'plan_assigned', ?, ?)
-      `).run(uuidv4(), user_id, req.user.id, `Novo plano atribuído: ${plan.name}`);
+      criarNotificacao(db, {
+        userId: user_id,
+        type: 'plan_assigned',
+        sourceUserId: req.user.id,
+        message: `Novo plano atribuído: ${plan.name}`,
+      });
 
       res.status(201).json({
         assignment: { id: assignId, user_id, plan_id, start_date: formattedStartDate, end_date: formattedEndDate },

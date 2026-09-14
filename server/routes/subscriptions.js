@@ -6,6 +6,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 
 module.exports = function subscriptionsRoutes(db) {
   const router = express.Router();
@@ -83,10 +84,11 @@ module.exports = function subscriptionsRoutes(db) {
       `).run(trialEndsAt, req.user.id);
 
       // Notification
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, type, message)
-        VALUES (?, ?, 'system', 'Parabéns! Seus 7 dias de teste do RUSH PRO foram ativados com sucesso.')
-      `).run(uuidv4(), req.user.id);
+      criarNotificacao(db, {
+        userId: req.user.id,
+        type: 'system',
+        message: 'Parabéns! Seus 7 dias de teste do RUSH PRO foram ativados com sucesso.',
+      });
 
       res.json({
         success: true,
@@ -130,10 +132,11 @@ module.exports = function subscriptionsRoutes(db) {
           VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
         `).run(subId, req.user.id, amountCents, provider, expiresAt);
 
-        db.prepare(`
-          INSERT INTO notifications (id, user_id, type, message)
-          VALUES (?, ?, 'system', 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.')
-        `).run(uuidv4(), req.user.id);
+        criarNotificacao(db, {
+          userId: req.user.id,
+          type: 'system',
+          message: 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.',
+        });
       })();
 
       res.json({

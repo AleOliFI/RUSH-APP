@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, optionalAuth } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
 
@@ -1065,10 +1066,11 @@ function checkAndAwardAchievements(db, userId, distanceKm, type) {
 function awardAchievement(db, userId, achievementId, achievementName) {
   try {
     db.prepare('INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)').run(userId, achievementId);
-    db.prepare(`
-      INSERT INTO notifications (id, user_id, type, message)
-      VALUES (?, ?, 'achievement', ?)
-    `).run(uuidv4(), userId, `🏆 Nova conquista desbloqueada: ${achievementName}!`);
+    criarNotificacao(db, {
+      userId,
+      type: 'achievement',
+      message: `🏆 Nova conquista desbloqueada: ${achievementName}!`,
+    });
   } catch (e) {
     // Already earned, ignore
   }

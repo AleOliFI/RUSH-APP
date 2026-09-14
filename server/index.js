@@ -31,6 +31,15 @@ if (!fs.existsSync(dataDir)) {
 const db = new Database(DB_PATH);
 initializeDatabase(db);
 
+// Web Push. Sem as chaves VAPID no ambiente o app segue inteiro: as
+// notificações continuam sendo gravadas e aparecem na central, apenas
+// não chegam ao aparelho. O aviso serve para isso não passar batido
+// num deploy que esqueceu de cadastrar as variáveis.
+const { configurarPush } = require('./services/notificacoes');
+if (!configurarPush()) {
+  console.warn('⚠️  Web Push desligado: defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY.');
+}
+
 // Auto-seed if running on Vercel or database is newly initialized
 try {
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();

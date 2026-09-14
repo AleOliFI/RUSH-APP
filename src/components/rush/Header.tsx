@@ -8,6 +8,9 @@ interface HeaderProps {
   readiness: PhysiologicalReadiness;
   onOpenProfile: () => void;
   onStartMeasure: () => void;
+  onOpenNotifications: () => void;
+  /** Não lidas. Acima de 9 o selo vira "9+" para não esticar o cabeçalho. */
+  unreadCount: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,6 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   readiness,
   onOpenProfile,
   onStartMeasure,
+  onOpenNotifications,
+  unreadCount,
 }) => {
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-[#0D0D0D]/90 backdrop-blur-xl pt-safe border-b border-[#262626]/80 shadow-[0_1px_12px_rgba(0,0,0,0.5)]">
@@ -74,6 +79,24 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="font-telemetry text-xs text-[#F7F5F3] font-bold tracking-tight">
               {readiness.hrvPercentage}% HRV
             </span>
+          </button>
+
+          {/* Sino de notificações */}
+          <button
+            onClick={onOpenNotifications}
+            aria-label={
+              unreadCount > 0
+                ? `Notificações, ${unreadCount} não ${unreadCount === 1 ? 'lida' : 'lidas'}`
+                : 'Notificações'
+            }
+            className="relative w-9 h-9 flex items-center justify-center rounded-xl bg-[#1C1C1C] border border-[#262626] text-[#A1A1AA] hover:text-[#F7F5F3] active:scale-95 transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[20px]">notifications</span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF5500] text-[#0D0D0D] font-telemetry text-[10px] font-black flex items-center justify-center ring-2 ring-[#0D0D0D]">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
 
           {/* Profile Trigger Button */}

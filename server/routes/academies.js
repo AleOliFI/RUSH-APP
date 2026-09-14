@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
+const { criarNotificacao } = require('../services/notificacoes');
 
 module.exports = function academiesRoutes(db) {
   const router = express.Router();
@@ -211,10 +212,12 @@ module.exports = function academiesRoutes(db) {
       db.prepare("UPDATE users SET academy_id = ?, role = 'athlete', updated_at = datetime('now') WHERE id = ?").run(req.user.academy_id, user.id);
 
       // Notify
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, type, source_user_id, message)
-        VALUES (?, ?, 'system', ?, ?)
-      `).run(uuidv4(), user.id, req.user.id, `Você foi vinculado à assessoria ${academy.name}`);
+      criarNotificacao(db, {
+        userId: user.id,
+        type: 'system',
+        sourceUserId: req.user.id,
+        message: `Você foi vinculado à assessoria ${academy.name}`,
+      });
 
       res.json({ status: 'linked', message: 'Atleta vinculado com sucesso' });
     } catch (err) {
@@ -369,13 +372,12 @@ module.exports = function academiesRoutes(db) {
 
       // Notify athlete of coach's prescription
       const coachProfile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      db.prepare(`
-        INSERT INTO notifications (id, user_id, type, source_user_id, message)
-        VALUES (?, ?, 'plan_assigned', ?, ?)
-      `).run(
-        uuidv4(), athleteId, req.user.id,
-        `Seu treinador ${coachProfile?.name || 'do RUSH'} prescreveu uma nova sessão: ${title || type} (${distance_km || 5} km)`
-      );
+      criarNotificacao(db, {
+        userId: athleteId,
+        type: 'plan_assigned',
+        sourceUserId: req.user.id,
+        message: `Seu treinador ${coachProfile?.name || 'do RUSH'} prescreveu uma nova sessão: ${title || type} (${distance_km || 5} km)`,
+      });
 
       res.json({
         success: true,

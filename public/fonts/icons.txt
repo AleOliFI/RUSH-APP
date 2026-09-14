@@ -10,11 +10,13 @@ badge
 bedtime
 biotech
 block
+bloqueado
 bluetooth
 bluetooth_connected
 bluetooth_searching
 bolt
 calendar_view_week
+chat_bubble
 chat_bubble_outline
 check
 check_circle
@@ -62,6 +64,9 @@ logout
 manage_accounts
 map
 monitoring
+notifications
+notifications_active
+notifications_off
 opacity
 open_in_new
 pace
@@ -103,6 +108,7 @@ timer
 touch_app
 trending_down
 trending_up
+trophy
 verified
 verified_user
 visibility

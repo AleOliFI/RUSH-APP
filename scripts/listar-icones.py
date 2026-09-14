@@ -30,7 +30,7 @@ LITERAL = re.compile(r"'([a-z0-9_]{2,40})'")
 # Nomes guardados em estruturas de dados e renderizados como {item.icon}.
 # Só vale em arquivos que de fato usam a fonte de ícones, para não
 # arrastar qualquer campo chamado "icon" de outro contexto.
-PADRAO_CAMPO_ICON = re.compile(r"\bicon:\s*'([a-z0-9_]{2,40})'")
+PADRAO_CAMPO_ICON = re.compile(r"\b(?:icon|icone|iconName)\s*:\s*'([a-z0-9_]{2,40})'")
 
 # Nomes passados como propriedade para um componente que desenha o ícone:
 # <EmptyState icone="search_off" />. Sem isto o nome vira texto na tela,
