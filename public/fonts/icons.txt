@@ -38,6 +38,7 @@ footprint
 fullscreen
 gps_off
 groups
+healing
 history
 image
 info
@@ -73,10 +74,12 @@ sensors
 share
 speed
 sports_martial_arts
+stacked_line_chart
 stop
 switch_account
 thumb_up
 timeline
+timer
 touch_app
 trending_down
 trending_up

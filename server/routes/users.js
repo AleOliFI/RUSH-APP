@@ -53,7 +53,15 @@ module.exports = function usersRoutes(db) {
         distance_km: objectives?.distance_km,
         level: objectives?.level,
         profile,
-        objectives,
+        objectives: objectives
+          ? {
+              ...objectives,
+              // A coluna guarda JSON; o cliente sempre recebe uma lista.
+              active_injuries: objectives.active_injuries
+                ? JSON.parse(objectives.active_injuries)
+                : [],
+            }
+          : objectives,
         settings,
         privacy,
       });
@@ -370,7 +378,10 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   router.put('/objectives', authenticate, (req, res) => {
     try {
-      const { distance_km, target_race_date, level } = req.body;
+      const {
+        distance_km, target_race_date, level,
+        focus, typical_weekly_km, active_injuries,
+      } = req.body;
 
       if (!distance_km || !level) {
         return res.status(400).json({ error: 'distance_km e level são obrigatórios' });
@@ -385,18 +396,65 @@ module.exports = function usersRoutes(db) {
         return res.status(400).json({ error: 'level deve ser beginner, intermediate ou advanced' });
       }
 
+      // Campos da calibração — todos opcionais, para não quebrar quem já
+      // salva objetivos só com distância e nível.
+      const FOCOS = ['race', 'pace', 'injury_prevention', 'volume'];
+      if (focus != null && !FOCOS.includes(focus)) {
+        return res.status(400).json({ error: `focus deve ser um de: ${FOCOS.join(', ')}` });
+      }
+
+      let numWeeklyKm = null;
+      if (typical_weekly_km != null && typical_weekly_km !== '') {
+        numWeeklyKm = Number(typical_weekly_km);
+        if (isNaN(numWeeklyKm) || numWeeklyKm < 0 || numWeeklyKm > 300) {
+          return res.status(400).json({ error: 'typical_weekly_km deve ser um número entre 0 e 300' });
+        }
+      }
+
+      // Lesões ativas são guardadas como lista de identificadores. É
+      // registro informativo: o agente NÃO ajusta a carga por lesão, porque
+      // isso exige critério clínico que o app não tem.
+      const LESOES = ['shin_splints', 'plantar_fasciitis', 'it_band', 'knee', 'achilles', 'other'];
+      let injuriesJson = null;
+      if (active_injuries !== undefined) {
+        if (active_injuries === null) {
+          injuriesJson = null;
+        } else if (Array.isArray(active_injuries)) {
+          const invalidas = active_injuries.filter((i) => !LESOES.includes(i));
+          if (invalidas.length > 0) {
+            return res.status(400).json({ error: `lesão inválida: ${invalidas.join(', ')}` });
+          }
+          injuriesJson = active_injuries.length > 0 ? JSON.stringify(active_injuries) : null;
+        } else {
+          return res.status(400).json({ error: 'active_injuries deve ser uma lista' });
+        }
+      }
+
       db.prepare(`
-        INSERT INTO user_objectives (user_id, distance_km, target_race_date, level)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO user_objectives (
+          user_id, distance_km, target_race_date, level,
+          focus, typical_weekly_km, active_injuries
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET
           distance_km = excluded.distance_km,
           target_race_date = excluded.target_race_date,
           level = excluded.level,
+          focus = COALESCE(excluded.focus, user_objectives.focus),
+          typical_weekly_km = COALESCE(excluded.typical_weekly_km, user_objectives.typical_weekly_km),
+          active_injuries = COALESCE(excluded.active_injuries, user_objectives.active_injuries),
           updated_at = datetime('now')
-      `).run(req.user.id, numDistance, target_race_date || null, level);
+      `).run(
+        req.user.id, numDistance, target_race_date || null, level,
+        focus || null, numWeeklyKm, injuriesJson,
+      );
 
       const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
-      res.json(objectives);
+      res.json({
+        ...objectives,
+        // A coluna guarda JSON; o cliente recebe a lista já pronta.
+        active_injuries: objectives.active_injuries ? JSON.parse(objectives.active_injuries) : [],
+      });
     } catch (err) {
       console.error('Users objectives error:', err);
       res.status(500).json({ error: 'Erro interno do servidor' });

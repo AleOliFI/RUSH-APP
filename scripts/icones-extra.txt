@@ -1,0 +1,8 @@
+# Ícones Material Symbols que a varredura automática não alcança —
+# montados por concatenação ou vindos de dados em tempo de execução.
+# Um nome a cada linha. Depois de editar, rode scripts/atualizar-fontes.sh.
+#
+# A varredura já cobre sozinha:
+#   <span className="material-symbols-outlined">nome</span>
+#   <span className="material-symbols-outlined">{cond ? 'a' : 'b'}</span>
+#   icon: 'nome'  (em arquivos que usam a fonte)

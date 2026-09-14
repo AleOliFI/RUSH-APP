@@ -125,10 +125,30 @@ module.exports = function initializeDatabase(db) {
       distance_km INTEGER NOT NULL CHECK (distance_km IN (5, 10, 21, 42)),
       target_race_date TEXT DEFAULT NULL,
       level TEXT NOT NULL CHECK (level IN ('beginner', 'intermediate', 'advanced')),
+      -- Calibração declarada pelo atleta na entrada:
+      -- focus: o que ele quer do plano (prova, pace, prevenção, volume)
+      -- typical_weekly_km: volume que ele já sustenta hoje
+      -- active_injuries: lesões em curso, como registro informativo
+      focus TEXT DEFAULT NULL CHECK (focus IN ('race', 'pace', 'injury_prevention', 'volume') OR focus IS NULL),
+      typical_weekly_km REAL DEFAULT NULL CHECK (typical_weekly_km IS NULL OR (typical_weekly_km >= 0 AND typical_weekly_km <= 300)),
+      active_injuries TEXT DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrações para bancos que já existem: colunas novas da calibração.
+  // Sem CHECK aqui — o ALTER TABLE do SQLite não aceita — então a rota
+  // valida os mesmos limites antes de gravar.
+  for (const coluna of [
+    'focus TEXT DEFAULT NULL',
+    'typical_weekly_km REAL DEFAULT NULL',
+    'active_injuries TEXT DEFAULT NULL',
+  ]) {
+    try {
+      db.exec(`ALTER TABLE user_objectives ADD COLUMN ${coluna}`);
+    } catch (_) { /* coluna já existe */ }
+  }
 
   // ============================================================
   // ASSESSORIAS (SLC)
