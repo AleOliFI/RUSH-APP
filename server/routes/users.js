@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
+const bcrypt = require('bcryptjs');
 
 module.exports = function usersRoutes(db) {
   const router = express.Router();
@@ -592,9 +593,34 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/users/me — Exclusão definitiva de conta (Apple 5.1.1)
   // -------------------------------------------------------
-  router.delete('/me', authenticate, (req, res) => {
+  router.delete('/me', authenticate, async (req, res) => {
     try {
+      // Exclusão é irreversível: exigir a senha impede que um token roubado
+      // ou um aparelho destravado apaguem a conta de outra pessoa.
+      const { password } = req.body || {};
+      if (!password) {
+        return res.status(400).json({ error: 'Informe sua senha para confirmar a exclusão' });
+      }
+
+      const user = db
+        .prepare('SELECT id, password_hash FROM users WHERE id = ? AND deleted_at IS NULL')
+        .get(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      const senhaConfere = await bcrypt.compare(String(password), user.password_hash);
+      if (!senhaConfere) {
+        return res.status(401).json({ error: 'Senha incorreta' });
+      }
+
       db.prepare("UPDATE users SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(req.user.id);
+
+      // Sessões abertas param de valer imediatamente.
+      try {
+        db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(req.user.id);
+      } catch (_) { /* tabela pode não existir em bancos antigos */ }
+
       res.json({ success: true, message: 'Conta excluída com sucesso.' });
     } catch (err) {
       console.error('Delete account error:', err);

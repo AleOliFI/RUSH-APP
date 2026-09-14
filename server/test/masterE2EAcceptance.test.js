@@ -70,6 +70,12 @@ let baseUrl;
 function request(method, urlPath, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const targetUrl = new URL(urlPath, baseUrl);
+    // Sem Content-Length o corpo vai em chunked, e uma resposta de erro
+    // enviada antes de o servidor drenar a requisição deixa o socket
+    // reaproveitável em estado sujo — a requisição seguinte morre com
+    // "socket hang up". Declarar o tamanho evita isso.
+    const payload =
+      body == null ? null : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
     const reqOptions = {
       method,
       hostname: targetUrl.hostname,
@@ -77,6 +83,7 @@ function request(method, urlPath, body = null, headers = {}) {
       path: targetUrl.pathname + targetUrl.search,
       headers: {
         'Content-Type': 'application/json',
+        ...(payload ? { 'Content-Length': payload.length } : {}),
         ...headers,
       },
     };
@@ -97,8 +104,8 @@ function request(method, urlPath, body = null, headers = {}) {
 
     req.on('error', reject);
 
-    if (body) {
-      req.write(typeof body === 'string' ? body : JSON.stringify(body));
+    if (payload) {
+      req.write(payload);
     }
     req.end();
   });
@@ -627,6 +634,38 @@ async function runMasterSuite() {
       assert.strictEqual(res.status, 201, `tipo ${type} deveria ser aceito, veio ${res.status}`);
       assert.strictEqual(res.body.activity.type, type, `tipo ${type} não foi gravado como enviado`);
     }
+  });
+
+  await it('R4.2c: exclusão de conta exige a senha e encerra o acesso', async () => {
+    // App Store 5.1.1 exige exclusão dentro do app. Sendo irreversível, o
+    // endpoint não pode se contentar com o token: um aparelho destravado
+    // ou um token vazado apagaria a conta de outra pessoa.
+    const email = `delete-${Date.now()}@rush.test`;
+    const senha = 'SenhaForte12345';
+
+    const registro = await request('POST', '/api/auth/register', {
+      email, password: senha, name: 'Conta Descartável', username: `del${Date.now()}`.slice(0, 20),
+    });
+    assert.strictEqual(registro.status, 201, 'cadastro de apoio deve funcionar');
+    const auth = { Authorization: `Bearer ${registro.body.access_token || registro.body.token}` };
+
+    const semSenha = await request('DELETE', '/api/users/me', {}, auth);
+    assert.strictEqual(semSenha.status, 400, 'sem senha deve ser recusado');
+
+    const senhaErrada = await request('DELETE', '/api/users/me', { password: 'outra-senha' }, auth);
+    assert.strictEqual(senhaErrada.status, 401, 'senha errada deve ser recusada');
+
+    const intacta = await request('GET', '/api/users/me', null, auth);
+    assert.strictEqual(intacta.status, 200, 'tentativa falha não pode excluir a conta');
+
+    const excluida = await request('DELETE', '/api/users/me', { password: senha }, auth);
+    assert.strictEqual(excluida.status, 200, 'senha correta deve excluir');
+
+    const sumiu = await request('GET', '/api/users/me', null, auth);
+    assert.strictEqual(sumiu.status, 404, 'conta excluída não pode mais ser lida');
+
+    const login = await request('POST', '/api/auth/login', { email, password: senha });
+    assert.ok(login.status >= 400, 'login deve ficar bloqueado após a exclusão');
   });
 
   await it('R4.3: Route hardening: Validation rejections across routes return 400 with structured JSON', async () => {

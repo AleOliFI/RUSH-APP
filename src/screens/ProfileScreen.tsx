@@ -40,6 +40,8 @@ interface ProfileScreenProps {
   onViewImage: (item: ImageViewerItem) => void;
   /** Abre o percurso GPS da atividade (só existe quando ela foi rastreada). */
   onViewRoute: (activity: { id: string; title?: string | null }) => void;
+  /** Abre a tela de exclusão de conta. */
+  onOpenAccount: () => void;
 }
 
 const ACWR_ZONE_TEXT: Record<string, string> = {
@@ -69,6 +71,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenEditProfile,
   onViewImage,
   onViewRoute,
+  onOpenAccount,
 }) => {
   const [activeTab, setActiveTab] = useState<'posts' | 'stats' | 'badges'>('posts');
 
@@ -312,6 +315,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <span className="text-[10px] text-[#A1A1AA] truncate block max-w-[130px]">
                 {devices.length > 0 ? devices.map((d) => d.brand).join(' • ') : 'Nenhum sensor pareado'}
               </span>
+            </div>
+          </div>
+          <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
+        </button>
+
+        <button
+          onClick={onOpenAccount}
+          className="min-h-[56px] p-3.5 bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] rounded-2xl flex items-center justify-between transition-all cursor-pointer shadow-md text-left sm:col-span-2"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-[#A1A1AA] text-[24px]">manage_accounts</span>
+            <div>
+              <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Conta</span>
+              <span className="text-[10px] text-[#A1A1AA] block">Excluir conta e dados</span>
             </div>
           </div>
           <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>

@@ -39,7 +39,8 @@ export interface AccountSettingsData {
   /** Envia apenas os campos informados; um objeto vazio é recusado pelo backend. */
   updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
   updatePrivacy: (patch: Partial<PrivacySettings>) => Promise<void>;
-  deleteAccount: () => Promise<void>;
+  /** Exige a senha: exclusão é irreversível e não pode depender só do token. */
+  deleteAccount: (password: string) => Promise<void>;
 }
 
 /** O banco guarda booleanos como 0/1. */
@@ -129,11 +130,11 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
    * atleta antes e por encerrar a sessão depois — o backend marca a conta
    * como excluída e os dados saem do ar imediatamente.
    */
-  const deleteAccount = useCallback(async () => {
+  const deleteAccount = useCallback(async (password: string) => {
     setIsSaving(true);
     setError(null);
     try {
-      await users.deleteAccount();
+      await users.deleteAccount(password);
     } catch (err: any) {
       setError(err?.message || 'Não foi possível excluir a conta');
       throw err;

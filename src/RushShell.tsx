@@ -22,6 +22,8 @@ import { ImageViewerModal } from './components/rush/ImageViewerModal';
 import { RouteMapModal } from './components/rush/RouteMapModal';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { CycleScreen } from './screens/CycleScreen';
+import { DeleteAccountScreen } from './screens/DeleteAccountScreen';
+import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
 import { useHrZones } from './hooks/useTrainingReference';
@@ -133,6 +135,19 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   // A aba Medição também tem duas faces: a captura de VFC e o ciclo.
   const [measureView, setMeasureView] = useState<'vfc' | 'ciclo'>('vfc');
   const cycle = useCycle(measureView === 'ciclo');
+
+  // Perfil também abre a área de conta (hoje: exclusão).
+  const [profileView, setProfileView] = useState<'perfil' | 'conta'>('perfil');
+  const account = useAccountSettings(profileView === 'conta');
+
+  /** Exclusão confirmada: encerra a sessão e volta para o login. */
+  const handleDeleteAccount = useCallback(
+    async (password: string) => {
+      await account.deleteAccount(password);
+      onLogout();
+    },
+    [account, onLogout],
+  );
 
   // As zonas alimentam a classificação de intensidade do histórico; só são
   // buscadas quando o atleta abre essa visão.
@@ -356,7 +371,18 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {currentTab === 'perfil' && (
+        {currentTab === 'perfil' && profileView === 'conta' && (
+          <DeleteAccountScreen
+            subscription={subscription}
+            activities={recentActivitiesRaw}
+            isDeleting={account.isSaving}
+            error={account.error}
+            onDelete={handleDeleteAccount}
+            onCancel={() => setProfileView('perfil')}
+          />
+        )}
+
+        {currentTab === 'perfil' && profileView === 'perfil' && (
           <ProfileScreen
             athlete={athlete}
             readiness={readiness}
@@ -377,6 +403,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onOpenEditProfile={() => setIsAthleteModalOpen(true)}
             onViewImage={viewImage}
             onViewRoute={setActiveRoute}
+            onOpenAccount={() => setProfileView('conta')}
           />
         )}
       </main>
