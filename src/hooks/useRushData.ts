@@ -161,6 +161,8 @@ export interface FinishRunPayload {
   session_id?: string | null;
   /** Polilinha bruta do GPS, quando a corrida foi rastreada pelo app. */
   track?: { lat: number; lon: number; t: number; acc: number | null; alt: number | null }[] | null;
+  /** Série cardíaca da corrida, quando havia cinta BLE pareada. */
+  hr_samples?: { t: number; bpm: number }[] | null;
 }
 
 export function useRushData(): RushData {
@@ -380,6 +382,8 @@ export function useRushData(): RushData {
         shoe_id: payload.shoe_id ?? undefined,
         session_id: payload.session_id ?? undefined,
         track: payload.track && payload.track.length > 0 ? payload.track : undefined,
+        hr_samples:
+          payload.hr_samples && payload.hr_samples.length > 0 ? payload.hr_samples : undefined,
       });
       await reload();
       return created;

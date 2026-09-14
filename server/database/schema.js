@@ -593,6 +593,26 @@ module.exports = function initializeDatabase(db) {
   `);
 
   // ============================================================
+  // AMOSTRAS DE FC — série cardíaca bruta de cada atividade
+  // ------------------------------------------------------------
+  // Mesma estratégia do traçado GPS: UMA linha por atividade, com
+  // a série em JSON. A cinta BLE entrega ~1 leitura por segundo,
+  // então uma corrida de 1 h gera ~3.600 amostras — inúteis como
+  // linhas separadas, já que a série só é lida inteira (curva de
+  // FC e distribuição por zonas).
+  // Cada amostra: { t (segundos desde a largada), bpm }.
+  // ============================================================
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_hr_samples (
+      activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+      samples_json TEXT NOT NULL,
+      sample_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // ============================================================
   // GEAR — Frota de calçados (Gear Garage / Aposentadoria)
   // ============================================================
 

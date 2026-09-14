@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, optionalAuth } = require('../middleware/auth');
+const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
 
 module.exports = function activitiesRoutes(db) {
   const router = express.Router();
@@ -57,6 +58,116 @@ module.exports = function activitiesRoutes(db) {
     return reduced;
   }
 
+  /**
+   * Limite de amostras de FC por atividade. A ~1 Hz cobre mais de 5 h de
+   * corrida; acima disso a série é reamostrada.
+   */
+  const MAX_HR_SAMPLES = 20000;
+
+  /**
+   * Valida a série cardíaca vinda do rastreador. Amostras fora da faixa
+   * fisiológica são descartadas em vez de virarem lixo no banco.
+   */
+  function sanitizeHrSamples(samples) {
+    if (!Array.isArray(samples) || samples.length === 0) return null;
+
+    const clean = [];
+    for (const raw of samples) {
+      if (!raw || typeof raw !== 'object') continue;
+      const t = Number(raw.t ?? raw.seconds);
+      const bpm = Number(raw.bpm ?? raw.hr);
+      if (!isFinite(t) || t < 0) continue;
+      if (!isFinite(bpm) || bpm < 30 || bpm > 250) continue;
+      clean.push({ t: Math.round(t), bpm: Math.round(bpm) });
+    }
+
+    if (clean.length === 0) return null;
+    if (clean.length <= MAX_HR_SAMPLES) return clean;
+
+    const step = clean.length / MAX_HR_SAMPLES;
+    const reduced = [];
+    for (let i = 0; i < MAX_HR_SAMPLES; i++) reduced.push(clean[Math.floor(i * step)]);
+    reduced[reduced.length - 1] = clean[clean.length - 1];
+    return reduced;
+  }
+
+  /** Lê a série cardíaca gravada; null quando a atividade não tem uma. */
+  function readHrSamples(activityId) {
+    const row = db
+      .prepare('SELECT samples_json, sample_count FROM activity_hr_samples WHERE activity_id = ?')
+      .get(activityId);
+    if (!row) return null;
+    try {
+      const samples = JSON.parse(row.samples_json);
+      if (!Array.isArray(samples) || samples.length === 0) return null;
+      return { samples, sample_count: row.sample_count };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Reparte a série cardíaca nas cinco zonas do atleta.
+   * O tempo de cada amostra é o intervalo até a amostra seguinte, e não uma
+   * fatia fixa: a cinta pode falhar leituras e uma contagem simples de
+   * amostras distorceria a distribuição.
+   * Devolve null quando não há zonas ou série — a interface deve dizer que
+   * o treino não teve cinta, não desenhar um gráfico vazio.
+   */
+  function buildZoneDistribution(userId, samples) {
+    if (!samples || samples.length < 2) return null;
+
+    const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+    const maxHr = calculateMaxHr({
+      age: profile?.date_of_birth
+        ? Math.max(15, new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear())
+        : 30,
+      gender: profile?.gender || 'male',
+      weightKg: profile?.weight_kg,
+      heightCm: profile?.height_cm,
+    });
+    const zones = calculateHrZones(maxHr);
+
+    const seconds = { Z1: 0, Z2: 0, Z3: 0, Z4: 0, Z5: 0 };
+    let total = 0;
+
+    for (let i = 0; i < samples.length - 1; i++) {
+      const span = Math.max(0, samples[i + 1].t - samples[i].t);
+      if (span === 0) continue;
+      const bpm = samples[i].bpm;
+
+      let key = 'Z1';
+      for (const zone of ['Z5', 'Z4', 'Z3', 'Z2', 'Z1']) {
+        if (bpm >= zones[zone].minBpm) { key = zone; break; }
+      }
+
+      seconds[key] += span;
+      total += span;
+    }
+
+    if (total === 0) return null;
+
+    return {
+      max_hr_reference: maxHr,
+      // A FC máxima é estimada por idade quando não há teste de campo: a
+      // interface precisa dizer isso ao lado do gráfico.
+      max_hr_is_estimated: true,
+      total_seconds: total,
+      zones: Object.fromEntries(
+        Object.entries(seconds).map(([zone, sec]) => [
+          zone,
+          {
+            name: zones[zone].name,
+            min_bpm: zones[zone].minBpm,
+            max_bpm: zones[zone].maxBpm,
+            seconds: sec,
+            percent: +((sec / total) * 100).toFixed(1),
+          },
+        ]),
+      ),
+    };
+  }
+
   /** Lê o traçado gravado; devolve null quando a atividade não tem percurso. */
   function readTrack(activityId) {
     const row = db.prepare('SELECT points_json, point_count, started_at FROM activity_tracks WHERE activity_id = ?').get(activityId);
@@ -79,7 +190,7 @@ module.exports = function activitiesRoutes(db) {
         type, title, date, distance_km, duration_seconds,
         avg_pace, avg_hr, max_hr, calories, elevation_gain,
         rpe, rpe_score, feeling_notes, workout_rating, image_url, description,
-        privacy = 'public', session_id, splits, shoe_id, track
+        privacy = 'public', session_id, splits, shoe_id, track, hr_samples
       } = req.body;
 
       if (!type || distance_km == null || duration_seconds == null) {
@@ -179,6 +290,16 @@ module.exports = function activitiesRoutes(db) {
           }
         }
 
+        // Série cardíaca (opcional) — o HUD coleta amostra a amostra da
+        // cinta BLE; sem gravá-las não há curva de FC nem zonas do treino.
+        const cleanHrSamples = sanitizeHrSamples(hr_samples);
+        if (cleanHrSamples) {
+          db.prepare(`
+            INSERT INTO activity_hr_samples (activity_id, samples_json, sample_count)
+            VALUES (?, ?, ?)
+          `).run(id, JSON.stringify(cleanHrSamples), cleanHrSamples.length);
+        }
+
         // Traçado GPS (opcional) — gravado como polilinha única
         const trackPoints = sanitizeTrack(track);
         if (trackPoints) {
@@ -208,6 +329,7 @@ module.exports = function activitiesRoutes(db) {
         activity,
         splits: activitySplits,
         track_point_count: savedTrack ? savedTrack.point_count : 0,
+        hr_sample_count: readHrSamples(id)?.sample_count || 0,
       });
     } catch (err) {
       console.error('Create activity error:', err);
@@ -220,7 +342,7 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   router.get('/', authenticate, (req, res) => {
     try {
-      const { page = 1, limit = 20, type } = req.query;
+      const { page = 1, limit = 20, type, from, to } = req.query;
       const parsedPage = Math.max(1, parseInt(page, 10) || 1);
       const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
       const offset = (parsedPage - 1) * parsedLimit;
@@ -233,23 +355,42 @@ module.exports = function activitiesRoutes(db) {
         params.push(type);
       }
 
+      // Janela de datas — usada pelo calendário mensal, que precisa do mês
+      // inteiro e não da paginação por quantidade.
+      if (from) {
+        query += ' AND date >= ?';
+        params.push(String(from));
+      }
+      if (to) {
+        query += ' AND date <= ?';
+        params.push(String(to));
+      }
+
       query += ' ORDER BY date DESC LIMIT ? OFFSET ?';
       params.push(parsedLimit, offset);
 
       const activities = db.prepare(query).all(...params);
-      const total = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ?').get(req.user.id);
+      let countQuery = 'SELECT COUNT(*) as count FROM activities WHERE user_id = ?';
+      const countParams = [req.user.id];
+      if (type) { countQuery += ' AND type = ?'; countParams.push(type); }
+      if (from) { countQuery += ' AND date >= ?'; countParams.push(String(from)); }
+      if (to) { countQuery += ' AND date <= ?'; countParams.push(String(to)); }
+      const total = db.prepare(countQuery).get(...countParams);
 
       // Get likes/comments count for each
       const enriched = activities.map(a => {
         const likes = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
         const comments = db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
         const trackRow = db.prepare('SELECT point_count FROM activity_tracks WHERE activity_id = ?').get(a.id);
+        const hrRow = db.prepare('SELECT sample_count FROM activity_hr_samples WHERE activity_id = ?').get(a.id);
         return {
           ...a,
           likes_count: likes.count,
           comments_count: comments.count,
           has_track: !!trackRow,
           track_point_count: trackRow ? trackRow.point_count : 0,
+          has_hr_series: !!hrRow,
+          hr_sample_count: hrRow ? hrRow.sample_count : 0,
         };
       });
 
@@ -489,11 +630,14 @@ module.exports = function activitiesRoutes(db) {
       const hasLiked = db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(activity.id, req.user.id);
 
       const track = readTrack(activity.id);
+      const hr = readHrSamples(activity.id);
 
       res.json({
         activity,
         splits,
         track: track ? track.points : null,
+        hr_samples: hr ? hr.samples : null,
+        zone_distribution: hr ? buildZoneDistribution(activity.user_id, hr.samples) : null,
         likes: { count: likes.length, users: likes.slice(0, 10), has_liked: !!hasLiked },
         comments: { count: comments.length, items: comments },
       });

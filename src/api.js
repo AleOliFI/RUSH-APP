@@ -221,7 +221,15 @@ export const training = {
 
 // Activities
 export const activities = {
-  list: (page = 1) => request(`/activities?page=${page}`),
+  list: (page = 1, options = {}) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.type) params.set('type', options.type);
+    // Janela de datas (ISO) — usada pelo calendário mensal do histórico.
+    if (options.from) params.set('from', options.from);
+    if (options.to) params.set('to', options.to);
+    return request(`/activities?${params.toString()}`);
+  },
   create: (data) => request('/activities', { method: 'POST', body: JSON.stringify(data) }),
   get: (id) => request(`/activities/${id}`),
   update: (id, data) => request(`/activities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

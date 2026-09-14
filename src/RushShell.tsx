@@ -20,6 +20,9 @@ import { WorkoutDetailModal } from './components/rush/WorkoutDetailModal';
 import { AthleteModal } from './components/rush/AthleteModal';
 import { ImageViewerModal } from './components/rush/ImageViewerModal';
 import { RouteMapModal } from './components/rush/RouteMapModal';
+import { HistoryScreen } from './screens/HistoryScreen';
+import { useActivityHistory } from './hooks/useActivityHistory';
+import { useHrZones } from './hooks/useTrainingReference';
 import { DownloadToast } from './components/rush/DownloadToast';
 import { BleHardwareModal } from './components/rush/BleHardwareModal';
 import { ShoeRetirementModal } from './components/rush/ShoeRetirementModal';
@@ -120,6 +123,15 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [lastRunSummary, setLastRunSummary] = useState<RunSummary | null>(null);
   const [activeRoute, setActiveRoute] = useState<{ id: string; title?: string | null } | null>(null);
 
+  // A aba Treinos tem duas faces: a prescrição do dia e o histórico.
+  const [workoutsView, setWorkoutsView] = useState<'prescricao' | 'historico'>('prescricao');
+  const [historyTab, setHistoryTab] = useState<'calendario' | 'lista' | 'carga'>('calendario');
+
+  // As zonas alimentam a classificação de intensidade do histórico; só são
+  // buscadas quando o atleta abre essa visão.
+  const { zones } = useHrZones(workoutsView === 'historico');
+  const history = useActivityHistory(zones);
+
   /** Depois de publicar, volta para o feed já atualizado. */
   const handlePosted = useCallback(async () => {
     await reload();
@@ -143,6 +155,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           acc: point.accuracy,
           alt: point.altitude,
         })),
+        hr_samples: summary.hrSamples,
       });
     },
     [finishRun],
@@ -217,14 +230,51 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         )}
 
         {currentTab === 'treinos' && (
-          <WorkoutsScreen
-            workout={todayWorkout}
-            upcomingSessions={upcomingSessions}
-            currentWeek={currentWeek}
-            onOpenDetailModal={() => setIsWorkoutDetailOpen(true)}
-            onViewImage={viewImage}
-            onFinishWorkout={handleFinishRun}
-          />
+          <div className="flex flex-col w-full">
+            {/* Prescrição do dia x histórico: mesma aba, duas faces. */}
+            <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
+                {([
+                  { id: 'prescricao', label: 'Prescrição' },
+                  { id: 'historico', label: 'Histórico' },
+                ] as const).map((view) => (
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => setWorkoutsView(view.id)}
+                    aria-pressed={workoutsView === view.id}
+                    className={`min-h-[44px] rounded-lg font-label-caps text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
+                      workoutsView === view.id
+                        ? 'bg-[#FF5500] text-[#0D0D0D] shadow-[0_0_12px_rgba(255,85,0,0.35)]'
+                        : 'bg-[#141414] text-[#A1A1AA] hover:text-[#F7F5F3]'
+                    }`}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {workoutsView === 'prescricao' ? (
+              <WorkoutsScreen
+                workout={todayWorkout}
+                upcomingSessions={upcomingSessions}
+                currentWeek={currentWeek}
+                onOpenDetailModal={() => setIsWorkoutDetailOpen(true)}
+                onViewImage={viewImage}
+                onFinishWorkout={handleFinishRun}
+              />
+            ) : (
+              <HistoryScreen
+                history={history}
+                trainingLoad={trainingLoad}
+                activeTab={historyTab}
+                onTabChange={setHistoryTab}
+                onViewRoute={setActiveRoute}
+                onExportCsv={handleExportCsv}
+              />
+            )}
+          </div>
         )}
 
         {currentTab === 'feed' && (
