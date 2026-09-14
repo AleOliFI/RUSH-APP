@@ -95,6 +95,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
     reloadGear,
     reloadDevices,
     hrvStatusRaw,
+    fatigueAlert,
     profileRaw,
     recordsRaw,
     meRaw,
@@ -217,6 +218,8 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onOpenBleHardware={() => setIsBleModalOpen(true)}
             onStartActiveRun={() => setIsActiveRunOpen(true)}
             onOpenFieldProtocol={() => setIsFieldProtocolOpen(true)}
+            fatigueAlert={fatigueAlert}
+            acwr={trainingLoad?.has_enough_history ? trainingLoad.acwr : null}
           />
         )}
 

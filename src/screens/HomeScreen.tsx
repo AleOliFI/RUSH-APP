@@ -3,6 +3,8 @@ import { AthleteProfile, PhysiologicalReadiness, WorkoutPrescription, DailyMilea
 import { downloadImageToDevice } from '../utils/imageDownload';
 import { APP_IMAGES } from '../data/appAssets';
 import { DailySummary } from '../components/rush/DailySummary';
+import { FatigueAlert } from '../components/rush/FatigueAlert';
+import type { FatigueAlert as FatigueAlertData } from '../data/adapters';
 
 interface HomeScreenProps {
   athlete: AthleteProfile;
@@ -21,6 +23,10 @@ interface HomeScreenProps {
   onOpenBleHardware?: () => void;
   onStartActiveRun?: () => void;
   onOpenFieldProtocol?: () => void;
+  /** Alerta de fadiga acumulada — invisível abaixo de 2 dias consecutivos. */
+  fatigueAlert: FatigueAlertData;
+  /** Razão carga aguda:crônica, para o aviso de carga dentro do alerta. */
+  acwr?: number | null;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -39,6 +45,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenBleHardware,
   onStartActiveRun,
   onOpenFieldProtocol,
+  fatigueAlert,
+  acwr = null,
 }) => {
   const [isDownloadingWorkoutImg, setIsDownloadingWorkoutImg] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
@@ -99,6 +107,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="flex flex-col w-full max-w-2xl mx-auto px-4 sm:px-5 space-y-4 pt-2 pb-6">
+      {/* Alerta de fadiga vem antes de tudo: é o que muda a decisão do dia. */}
+      <FatigueAlert
+        alert={fatigueAlert}
+        acwr={acwr}
+        onStartRecoverySession={onStartActiveRun}
+        onOpenWorkouts={onOpenWorkoutsTab}
+      />
+
       {/* 0. Resumo Diário Compacto & Minimalista */}
       <DailySummary
         readinessScore={readiness.score}

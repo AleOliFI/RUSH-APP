@@ -655,7 +655,25 @@ export interface FatigueAlert {
   /** Protocolo do dia, já montado pelo backend. Exibir como veio. */
   recoveryActivities: string[];
   recoveryLevel: number | null;
+  recoveryLabel: string | null;
   suggestIceBath: boolean;
+
+  /** Quanto a VFC de hoje está afastada da baseline, em %. */
+  deltaPercent: number | null;
+  /** RMSSD de hoje, em ms. Null quando não houve medição. */
+  rmssdMs: number | null;
+  /** Faixa considerada normal para este atleta (baseline ± menor diferença relevante). */
+  rmssdBaselineRange: { min: number; max: number } | null;
+  rhrToday: number | null;
+  /** Quanto a FC de repouso está acima (ou abaixo) da média, em bpm. */
+  rhrDelta: number | null;
+  /** Sessão que o agente colocou no lugar da planejada. */
+  adjustedSession: {
+    type: string;
+    durationMin: number | null;
+    targetZone: string | null;
+    description: string | null;
+  } | null;
 }
 
 const FATIGUE_MIN_DAYS = 2;
@@ -669,7 +687,14 @@ export const NO_FATIGUE_ALERT: FatigueAlert = {
   explanation: null,
   recoveryActivities: [],
   recoveryLevel: null,
+  recoveryLabel: null,
   suggestIceBath: false,
+  deltaPercent: null,
+  rmssdMs: null,
+  rmssdBaselineRange: null,
+  rhrToday: null,
+  rhrDelta: null,
+  adjustedSession: null,
 };
 
 export function toFatigueAlert(hrvStatus: any): FatigueAlert {
@@ -690,6 +715,23 @@ export function toFatigueAlert(hrvStatus: any): FatigueAlert {
   const isCritical = days >= OVERREACHING_DAYS;
   const recovery = suggestion?.recovery_level || null;
 
+  const metrics = suggestion?.metrics || null;
+  const session = suggestion?.adjusted_session || null;
+
+  // A baseline vive em escala logarítmica (lnRMSSD): a faixa em ms é a
+  // exponencial da média ± a menor diferença que conta como mudança real
+  // (SWC, Plews et al. 2013). Sem baseline não há faixa a mostrar.
+  let rmssdRange: { min: number; max: number } | null = null;
+  if (metrics?.lnrmssd_baseline_mean > 0 && metrics?.swc > 0) {
+    rmssdRange = {
+      min: Math.round(Math.exp(metrics.lnrmssd_baseline_mean - metrics.swc)),
+      max: Math.round(Math.exp(metrics.lnrmssd_baseline_mean + metrics.swc)),
+    };
+  }
+
+  const rhrToday = metrics?.rhr_today ?? measurement?.rhr_bpm ?? measurement?.hr_rest_bpm ?? null;
+  const rhrBaseline = metrics?.rhr_baseline_mean ?? null;
+
   return {
     consecutiveLowDays: days,
     severity: isCritical ? 'critical' : 'attention',
@@ -703,6 +745,24 @@ export function toFatigueAlert(hrvStatus: any): FatigueAlert {
     recoveryActivities:
       suggestion?.adjusted_session?.recovery_activities || recovery?.recovery_activities || [],
     recoveryLevel: recovery?.level ?? null,
+    recoveryLabel: recovery?.label ?? null,
     suggestIceBath: !!suggestion?.suggest_ice_bath,
+
+    deltaPercent: typeof metrics?.delta_percent === 'number' ? metrics.delta_percent : null,
+    rmssdMs: measurement?.rmssd_ms ?? null,
+    rmssdBaselineRange: rmssdRange,
+    rhrToday,
+    rhrDelta:
+      typeof rhrToday === 'number' && typeof rhrBaseline === 'number'
+        ? +(rhrToday - rhrBaseline).toFixed(1)
+        : null,
+    adjustedSession: session
+      ? {
+          type: session.type,
+          durationMin: session.duration_min ?? null,
+          targetZone: session.target_hr_zone ?? null,
+          description: session.description ?? null,
+        }
+      : null,
   };
 }
