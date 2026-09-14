@@ -370,7 +370,7 @@ module.exports = function initializeDatabase(db) {
     CREATE TABLE IF NOT EXISTS activities (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK (type IN ('run', 'bike', 'strength', 'swim', 'walk', 'other')),
+      type TEXT NOT NULL CHECK (type IN ('run', 'trail_run', 'treadmill', 'walk', 'cycling', 'swimming', 'strength', 'other')),
       title TEXT DEFAULT NULL,
       date TEXT NOT NULL,
       distance_km REAL NOT NULL CHECK (distance_km > 0),
@@ -397,6 +397,96 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_activities_privacy ON activities(privacy, date);
     CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
   `);
+
+  // ------------------------------------------------------------
+  // Migração: a tabela antiga só aceitava 6 tipos de atividade
+  // ('run','bike','strength','swim','walk','other'), enquanto a rota
+  // sempre aceitou 8 — com nomes diferentes. Gravar trilha, esteira,
+  // pedal ou natação violava o CHECK e devolvia 500 ao cliente.
+  //
+  // O SQLite não altera um CHECK: a tabela precisa ser recriada. A cópia
+  // usa as colunas que a tabela REALMENTE tem (migrações anteriores
+  // acrescentaram algumas), traduz os nomes antigos e confere a
+  // contagem de linhas antes de descartar a original.
+  // ------------------------------------------------------------
+  try {
+    const definicaoAtual = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'")
+      .get()?.sql || '';
+
+    if (definicaoAtual.includes("'bike'")) {
+      const colunas = db.prepare('PRAGMA table_info(activities)').all().map((c) => c.name);
+      const listaColunas = colunas.map((c) => `"${c}"`).join(', ');
+      const listaSelecao = colunas
+        .map((c) =>
+          c === 'type'
+            ? `CASE type WHEN 'bike' THEN 'cycling' WHEN 'swim' THEN 'swimming' ELSE type END`
+            : `"${c}"`,
+        )
+        .join(', ');
+
+      const antes = db.prepare('SELECT COUNT(*) AS total FROM activities').get().total;
+
+      db.pragma('foreign_keys = OFF');
+      const migrar = db.transaction(() => {
+        db.exec(`
+          CREATE TABLE activities_migradas (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL CHECK (type IN ('run', 'trail_run', 'treadmill', 'walk', 'cycling', 'swimming', 'strength', 'other')),
+            title TEXT DEFAULT NULL,
+            date TEXT NOT NULL,
+            distance_km REAL NOT NULL CHECK (distance_km > 0),
+            duration_seconds INTEGER NOT NULL CHECK (duration_seconds > 0),
+            avg_pace TEXT DEFAULT NULL,
+            avg_hr INTEGER DEFAULT NULL CHECK (avg_hr BETWEEN 30 AND 220 OR avg_hr IS NULL),
+            max_hr INTEGER DEFAULT NULL CHECK (max_hr BETWEEN 30 AND 220 OR max_hr IS NULL),
+            calories INTEGER DEFAULT NULL,
+            elevation_gain REAL DEFAULT NULL,
+            rpe INTEGER DEFAULT NULL CHECK (rpe BETWEEN 1 AND 10 OR rpe IS NULL),
+            hrv_status_display TEXT DEFAULT NULL,
+            description TEXT DEFAULT NULL,
+            image_url TEXT DEFAULT NULL,
+            rpe_score INTEGER DEFAULT NULL,
+            feeling_notes TEXT DEFAULT NULL,
+            workout_rating INTEGER DEFAULT NULL,
+            privacy TEXT NOT NULL DEFAULT 'public' CHECK (privacy IN ('public', 'followers', 'private')),
+            session_id TEXT REFERENCES training_sessions(id) ON DELETE SET NULL,
+            shoe_id TEXT DEFAULT NULL REFERENCES shoes(id) ON DELETE SET NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+        `);
+
+        db.exec(`INSERT INTO activities_migradas (${listaColunas}) SELECT ${listaSelecao} FROM activities;`);
+
+        const depois = db.prepare('SELECT COUNT(*) AS total FROM activities_migradas').get().total;
+        if (depois !== antes) {
+          throw new Error(`migração de activities copiou ${depois} de ${antes} linhas — abortada`);
+        }
+
+        db.exec('DROP TABLE activities;');
+        db.exec('ALTER TABLE activities_migradas RENAME TO activities;');
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_activities_user_date ON activities(user_id, date);
+          CREATE INDEX IF NOT EXISTS idx_activities_privacy ON activities(privacy, date);
+          CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
+          CREATE INDEX IF NOT EXISTS idx_activities_shoe ON activities(shoe_id);
+        `);
+      });
+
+      migrar();
+
+      const orfas = db.pragma('foreign_key_check');
+      db.pragma('foreign_keys = ON');
+      if (Array.isArray(orfas) && orfas.length > 0) {
+        console.error('⚠️  Referências órfãs após migrar activities:', orfas.length);
+      }
+      console.log(`✅ Tabela activities migrada para 8 tipos (${antes} atividades preservadas)`);
+    }
+  } catch (err) {
+    console.error('Erro ao migrar os tipos de atividade:', err.message);
+  }
 
   try {
     db.exec(`ALTER TABLE activities ADD COLUMN image_url TEXT DEFAULT NULL`);

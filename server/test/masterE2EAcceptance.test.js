@@ -609,6 +609,26 @@ async function runMasterSuite() {
     assert.ok(res404.body.error, 'Response must include structured error property');
   });
 
+  await it('R4.2b: os 8 tipos de atividade que a rota aceita são realmente graváveis', async () => {
+    // A tabela antiga só permitia 6 tipos, com nomes diferentes dos que a
+    // rota aceita: trilha, esteira, pedal e natação passavam na validação e
+    // estouravam o CHECK do banco, devolvendo 500 ao cliente.
+    const tipos = ['run', 'trail_run', 'treadmill', 'walk', 'cycling', 'swimming', 'strength', 'other'];
+
+    for (const type of tipos) {
+      const res = await request('POST', '/api/activities', {
+        type,
+        distance_km: 5,
+        duration_seconds: 1800,
+        title: `Aceitação ${type}`,
+      }, {
+        Authorization: `Bearer ${seedLoginToken}`,
+      });
+      assert.strictEqual(res.status, 201, `tipo ${type} deveria ser aceito, veio ${res.status}`);
+      assert.strictEqual(res.body.activity.type, type, `tipo ${type} não foi gravado como enviado`);
+    }
+  });
+
   await it('R4.3: Route hardening: Validation rejections across routes return 400 with structured JSON', async () => {
     // 1. Invalid HRV measurement (out-of-range RMSSD)
     const hrvBad = await request('POST', '/api/hrv/measurement', {
