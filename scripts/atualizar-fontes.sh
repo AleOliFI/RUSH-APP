@@ -30,11 +30,11 @@ SUBSETS="latin latin-ext"
 mkdir -p "$SAIDA"
 
 echo "▸ Lendo os ícones usados no código…"
-grep -rho 'material-symbols-outlined[^>]*>[^<]*<' "$RAIZ/src" --include=*.tsx --include=*.jsx \
-  | sed 's/.*>\s*//; s/\s*<//' | tr -d ' ' | grep -E '^[a-z_0-9]+$' > "$TMP/icones.txt"
-# Ícones escolhidos em tempo de execução (ternários) não aparecem no grep acima.
-printf 'lock\nlock_open\n' >> "$TMP/icones.txt"
-sort -u -o "$TMP/icones.txt" "$TMP/icones.txt"
+# A extração precisa ser multilinha: o className costuma quebrar em várias
+# linhas e o nome do ícone fica sozinho numa linha seguinte. Um grep de
+# linha única perde esses casos silenciosamente — e um ícone que falta na
+# fonte aparece na tela como o nome da ligadura em texto cru.
+RAIZ="$RAIZ" TMP="$TMP" python3 "$RAIZ/scripts/listar-icones.py" > "$TMP/icones.txt"
 echo "  $(wc -l < "$TMP/icones.txt") ícones"
 
 # Anton/Manrope/JetBrains Mono servem o design system novo; Inter e
@@ -111,5 +111,7 @@ total = sum(
 )
 print(f"  {len(blocos)} @font-face · {total // 1024} KB de fontes")
 PY
+
+cp "$TMP/icones.txt" "$SAIDA/icons.txt"
 
 echo "▸ Pronto: $SAIDA/fonts.css"

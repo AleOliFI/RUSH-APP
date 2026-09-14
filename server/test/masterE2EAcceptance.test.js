@@ -350,6 +350,37 @@ async function runMasterSuite() {
     assert.ok(htmlContent.includes('theme-color') && htmlContent.includes('#0D0D0D'), 'index.html must specify dark theme-color #0D0D0D');
   });
 
+  await it('R2.5: todo ícone usado no código existe na fonte reduzida', () => {
+    // A fonte de ícones é um SUBCONJUNTO: contém só os ícones listados em
+    // public/fonts/icons.txt. Um ícone novo que não passou por
+    // scripts/atualizar-fontes.sh não existe na fonte, e o navegador
+    // renderiza o NOME DA LIGADURA como texto cru no lugar do glifo.
+    const listaPath = path.join(rootDir, 'public', 'fonts', 'icons.txt');
+    assert.ok(fs.existsSync(listaPath), 'public/fonts/icons.txt must exist');
+
+    const naFonte = new Set(
+      fs.readFileSync(listaPath, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean),
+    );
+
+    const { execFileSync } = require('child_process');
+    const usados = execFileSync('python3', [path.join(rootDir, 'scripts', 'listar-icones.py')], {
+      encoding: 'utf8',
+      env: { ...process.env, RAIZ: rootDir },
+    })
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    assert.ok(usados.length > 0, 'icon scan must find icons in the source');
+
+    const faltando = usados.filter((icone) => !naFonte.has(icone));
+    assert.deepStrictEqual(
+      faltando,
+      [],
+      `ícones usados no código e ausentes da fonte: ${faltando.join(', ')} — rode scripts/atualizar-fontes.sh`,
+    );
+  });
+
   await it('R2.2: as duas folhas de design definem suas paletas escuras e a ordem de cascata é explícita', () => {
     assert.ok(fs.existsSync(indexCssPath), 'src/index.css must exist');
     assert.ok(fs.existsSync(legacyCssPath), 'src/styles/rush-legacy.css must exist');
