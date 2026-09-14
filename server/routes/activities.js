@@ -168,6 +168,19 @@ module.exports = function activitiesRoutes(db) {
     };
   }
 
+  /** Distância entre dois pontos GPS, em metros (fórmula de Haversine). */
+  function haversineMeters(a, b) {
+    const R = 6371000;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLon = toRad(b.lon - a.lon);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const h =
+      Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
   /** Lê o traçado gravado; devolve null quando a atividade não tem percurso. */
   function readTrack(activityId) {
     const row = db.prepare('SELECT points_json, point_count, started_at FROM activity_tracks WHERE activity_id = ?').get(activityId);
@@ -631,12 +644,16 @@ module.exports = function activitiesRoutes(db) {
 
       const track = readTrack(activity.id);
       const hr = readHrSamples(activity.id);
+      const recorte = db
+        .prepare('SELECT trim_start_seconds, trim_end_seconds, original_distance_km, original_duration_seconds FROM activity_trims WHERE activity_id = ?')
+        .get(activity.id);
 
       res.json({
         activity,
         splits,
         track: track ? track.points : null,
         hr_samples: hr ? hr.samples : null,
+        trim: recorte || null,
         zone_distribution: hr ? buildZoneDistribution(activity.user_id, hr.samples) : null,
         likes: { count: likes.length, users: likes.slice(0, 10), has_liked: !!hasLiked },
         comments: { count: comments.length, items: comments },
@@ -722,9 +739,17 @@ module.exports = function activitiesRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
       }
 
-      const { title, description, feeling_notes, image_url, privacy, rpe_score, workout_rating, shoe_id } = req.body;
+      const { title, description, feeling_notes, image_url, privacy, rpe_score, workout_rating, shoe_id, type } = req.body;
       const fields = [];
       const values = [];
+
+      // Trocar o tipo é o caso de "marquei como corrida e era esteira".
+      if (type !== undefined) {
+        if (!VALID_ACTIVITY_TYPES.includes(type)) {
+          return res.status(400).json({ error: `Tipo de atividade inválido. Valores aceitos: ${VALID_ACTIVITY_TYPES.join(', ')}` });
+        }
+        fields.push('type = ?'); values.push(type);
+      }
 
       if (title !== undefined) { fields.push('title = ?'); values.push(title ? String(title).trim().slice(0, 120) : null); }
       if (description !== undefined) { fields.push('description = ?'); values.push(description ? String(description).trim().slice(0, 2000) : null); }
@@ -779,6 +804,198 @@ module.exports = function activitiesRoutes(db) {
     } catch (err) {
       console.error('Update activity error:', err);
       res.status(500).json({ error: 'Erro ao atualizar atividade' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/activities/:id/trim — Recortar o percurso
+  // -------------------------------------------------------
+  // Para quem esqueceu de parar o relógio. A distância e a duração
+  // NÃO são digitadas: são recalculadas a partir dos pontos que
+  // sobram dentro da janela, somando Haversine entre eles. Os
+  // valores originais ficam guardados para permitir desfazer.
+  router.post('/:id/trim', authenticate, (req, res) => {
+    try {
+      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      if (!activity) {
+        return res.status(404).json({ error: 'Atividade não encontrada' });
+      }
+      if (activity.user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
+      }
+
+      const track = readTrack(activity.id);
+      if (!track) {
+        return res.status(400).json({
+          error: 'Esta atividade não tem traçado GPS: não há como recortar o percurso',
+        });
+      }
+
+      const inicio = Number(req.body?.start_seconds ?? 0);
+      const fim = Number(req.body?.end_seconds);
+      if (!isFinite(inicio) || inicio < 0) {
+        return res.status(400).json({ error: 'start_seconds deve ser um número não negativo' });
+      }
+      if (!isFinite(fim) || fim <= inicio) {
+        return res.status(400).json({ error: 'end_seconds deve ser maior que start_seconds' });
+      }
+
+      // O traçado guarda horário absoluto; a janela chega em segundos
+      // desde a largada.
+      const pontos = track.points.filter((p) => p.t != null);
+      if (pontos.length < 2) {
+        return res.status(400).json({ error: 'O traçado não tem horários suficientes para recortar' });
+      }
+      const t0 = pontos[0].t;
+
+      const dentro = pontos.filter((p) => {
+        const segundos = (p.t - t0) / 1000;
+        return segundos >= inicio && segundos <= fim;
+      });
+
+      if (dentro.length < 2) {
+        return res.status(400).json({ error: 'A janela escolhida deixa menos de dois pontos de GPS' });
+      }
+
+      // Distância refeita ponto a ponto.
+      let metros = 0;
+      for (let i = 1; i < dentro.length; i++) {
+        metros += haversineMeters(dentro[i - 1], dentro[i]);
+      }
+      const novaDistancia = +(metros / 1000).toFixed(3);
+      if (novaDistancia <= 0) {
+        return res.status(400).json({ error: 'A janela escolhida não cobre distância nenhuma' });
+      }
+
+      const novaDuracao = Math.max(1, Math.round((dentro[dentro.length - 1].t - dentro[0].t) / 1000));
+      const novoPace = formatPaceFromSeconds(novaDuracao / novaDistancia);
+
+      const hr = readHrSamples(activity.id);
+      const hrDentro = hr
+        ? hr.samples.filter((amostra) => amostra.t >= inicio && amostra.t <= fim)
+        : null;
+
+      const recortar = db.transaction(() => {
+        // Guarda o original apenas na primeira vez: recortes seguintes não
+        // podem sobrescrever o registro do que foi de fato medido.
+        const jaTemOriginal = db
+          .prepare('SELECT activity_id FROM activity_trims WHERE activity_id = ?')
+          .get(activity.id);
+
+        if (!jaTemOriginal) {
+          db.prepare(`
+            INSERT INTO activity_trims (
+              activity_id, original_distance_km, original_duration_seconds, original_avg_pace,
+              original_points_json, original_hr_samples_json, trim_start_seconds, trim_end_seconds
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            activity.id, activity.distance_km, activity.duration_seconds, activity.avg_pace,
+            JSON.stringify(track.points), hr ? JSON.stringify(hr.samples) : null,
+            Math.round(inicio), Math.round(fim),
+          );
+        } else {
+          db.prepare(`
+            UPDATE activity_trims SET trim_start_seconds = ?, trim_end_seconds = ? WHERE activity_id = ?
+          `).run(Math.round(inicio), Math.round(fim), activity.id);
+        }
+
+        db.prepare(`
+          UPDATE activities
+          SET distance_km = ?, duration_seconds = ?, avg_pace = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(novaDistancia, novaDuracao, novoPace, activity.id);
+
+        db.prepare(`
+          UPDATE activity_tracks SET points_json = ?, point_count = ? WHERE activity_id = ?
+        `).run(JSON.stringify(dentro), dentro.length, activity.id);
+
+        if (hrDentro && hrDentro.length > 0) {
+          db.prepare(`
+            UPDATE activity_hr_samples SET samples_json = ?, sample_count = ? WHERE activity_id = ?
+          `).run(JSON.stringify(hrDentro), hrDentro.length, activity.id);
+        }
+
+        // Os splits foram calculados sobre o percurso inteiro e deixam de
+        // valer: apagar é mais honesto do que manter parciais de um trecho
+        // que não existe mais.
+        db.prepare('DELETE FROM activity_splits WHERE activity_id = ?').run(activity.id);
+      });
+
+      recortar();
+
+      res.json({
+        activity: db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
+        removed: {
+          distance_km: +(activity.distance_km - novaDistancia).toFixed(3),
+          duration_seconds: activity.duration_seconds - novaDuracao,
+          points: track.points.length - dentro.length,
+        },
+        can_undo: true,
+      });
+    } catch (err) {
+      console.error('Trim activity error:', err);
+      res.status(500).json({ error: 'Erro ao recortar a atividade' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // POST /api/activities/:id/trim/undo — Desfazer o recorte
+  // -------------------------------------------------------
+  router.post('/:id/trim/undo', authenticate, (req, res) => {
+    try {
+      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      if (!activity) {
+        return res.status(404).json({ error: 'Atividade não encontrada' });
+      }
+      if (activity.user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
+      }
+
+      const original = db
+        .prepare('SELECT * FROM activity_trims WHERE activity_id = ?')
+        .get(activity.id);
+      if (!original) {
+        return res.status(404).json({ error: 'Esta atividade não foi recortada' });
+      }
+
+      const desfazer = db.transaction(() => {
+        db.prepare(`
+          UPDATE activities
+          SET distance_km = ?, duration_seconds = ?, avg_pace = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          original.original_distance_km,
+          original.original_duration_seconds,
+          original.original_avg_pace,
+          activity.id,
+        );
+
+        if (original.original_points_json) {
+          const pontos = JSON.parse(original.original_points_json);
+          db.prepare(`
+            UPDATE activity_tracks SET points_json = ?, point_count = ? WHERE activity_id = ?
+          `).run(original.original_points_json, pontos.length, activity.id);
+        }
+
+        if (original.original_hr_samples_json) {
+          const amostras = JSON.parse(original.original_hr_samples_json);
+          db.prepare(`
+            UPDATE activity_hr_samples SET samples_json = ?, sample_count = ? WHERE activity_id = ?
+          `).run(original.original_hr_samples_json, amostras.length, activity.id);
+        }
+
+        db.prepare('DELETE FROM activity_trims WHERE activity_id = ?').run(activity.id);
+      });
+
+      desfazer();
+
+      res.json({
+        activity: db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
+        restored: true,
+      });
+    } catch (err) {
+      console.error('Undo trim error:', err);
+      res.status(500).json({ error: 'Erro ao desfazer o recorte' });
     }
   });
 

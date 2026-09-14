@@ -22,6 +22,8 @@ export const ACTIVITY_LIMITS = {
 export type ActivityPrivacy = (typeof ACTIVITY_LIMITS.privacyLevels)[number];
 
 export interface ActivityEditInput {
+  /** Corrige o registro: "era esteira, marquei corrida". */
+  type?: string;
   title?: string;
   description?: string;
   feeling_notes?: string;
@@ -39,6 +41,13 @@ export interface ActivityDetailData {
   track: RouteTrackPoint[] | null;
   likes: { count: number; has_liked: boolean; users: any[] };
   comments: { count: number; items: any[] };
+  /** Presente quando a atividade já foi recortada; guarda o original. */
+  trim: {
+    trim_start_seconds: number;
+    trim_end_seconds: number;
+    original_distance_km: number;
+    original_duration_seconds: number;
+  } | null;
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
@@ -46,6 +55,9 @@ export interface ActivityDetailData {
   update: (patch: ActivityEditInput) => Promise<void>;
   remove: () => Promise<void>;
   downloadGpx: () => Promise<void>;
+  /** Recorta o percurso; distância e duração são recalculadas no servidor. */
+  trimTrack: (startSeconds: number, endSeconds: number) => Promise<any>;
+  undoTrim: () => Promise<void>;
 }
 
 export function useActivityDetail(activityId: string | null): ActivityDetailData {
@@ -123,10 +135,45 @@ export function useActivityDetail(activityId: string | null): ActivityDetailData
     }
   }, [activityId]);
 
+  const trimTrack = useCallback(
+    async (startSeconds: number, endSeconds: number) => {
+      if (!activityId) return null;
+      setIsSaving(true);
+      setError(null);
+      try {
+        const resultado = await activitiesApi.trim(activityId, startSeconds, endSeconds);
+        await reload();
+        return resultado;
+      } catch (err: any) {
+        setError(err?.message || 'Não foi possível recortar o percurso');
+        throw err;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [activityId, reload],
+  );
+
+  const undoTrim = useCallback(async () => {
+    if (!activityId) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await activitiesApi.undoTrim(activityId);
+      await reload();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível desfazer o recorte');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activityId, reload]);
+
   return {
     activity: data?.activity || null,
     splits: data?.splits || [],
     track: data?.track || null,
+    trim: data?.trim || null,
     likes: data?.likes || { count: 0, has_liked: false, users: [] },
     comments: data?.comments || { count: 0, items: [] },
     isLoading,
@@ -136,5 +183,7 @@ export function useActivityDetail(activityId: string | null): ActivityDetailData
     update,
     remove,
     downloadGpx,
+    trimTrack,
+    undoTrim,
   };
 }

@@ -237,6 +237,12 @@ export const activities = {
   stats: (days = 30) => request(`/activities/stats/summary?days=${days}`),
   records: () => request('/activities/records'),
   gpx: (id) => requestText(`/activities/${id}/gpx`),
+  trim: (id, startSeconds, endSeconds) =>
+    request(`/activities/${id}/trim`, {
+      method: 'POST',
+      body: JSON.stringify({ start_seconds: startSeconds, end_seconds: endSeconds }),
+    }),
+  undoTrim: (id) => request(`/activities/${id}/trim/undo`, { method: 'POST' }),
   trainingLoad: () => request('/activities/training-load'),
 };
 

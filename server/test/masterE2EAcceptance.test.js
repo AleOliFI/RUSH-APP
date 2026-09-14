@@ -668,6 +668,56 @@ async function runMasterSuite() {
     assert.ok(login.status >= 400, 'login deve ficar bloqueado após a exclusão');
   });
 
+  await it('R4.2d: recorte de percurso recalcula a distância a partir dos pontos e pode ser desfeito', async () => {
+    // Recortar não é digitar outro número: a distância é refeita somando
+    // Haversine entre os pontos que sobram dentro da janela.
+    const auth = { Authorization: `Bearer ${seedLoginToken}` };
+
+    // 60 pontos a cada 10 s, 0,001° de latitude entre eles (~111 m cada).
+    const t0 = Date.now() - 700000;
+    const track = [];
+    const hrSamples = [];
+    for (let i = 0; i < 60; i++) {
+      track.push({ lat: -22.97 + i * 0.001, lon: -43.18, t: t0 + i * 10000, acc: 5 });
+      hrSamples.push({ t: i * 10, bpm: 150 });
+    }
+
+    const criada = await request('POST', '/api/activities', {
+      type: 'run', title: 'Recorte de teste', distance_km: 6.6, duration_seconds: 590,
+      track, hr_samples: hrSamples,
+    }, auth);
+    assert.strictEqual(criada.status, 201);
+    const id = criada.body.activity.id;
+
+    const semJanela = await request('POST', `/api/activities/${id}/trim`, { start_seconds: 100, end_seconds: 100 }, auth);
+    assert.strictEqual(semJanela.status, 400, 'janela vazia deve ser recusada');
+
+    const cortada = await request('POST', `/api/activities/${id}/trim`, { start_seconds: 0, end_seconds: 390 }, auth);
+    assert.strictEqual(cortada.status, 200);
+
+    // 40 pontos restantes, ~111 m entre cada par: cerca de 4,34 km.
+    const distancia = cortada.body.activity.distance_km;
+    assert.ok(
+      Math.abs(distancia - 4.34) < 0.2,
+      `distância recalculada deveria ficar perto de 4,34 km, veio ${distancia}`,
+    );
+    assert.strictEqual(cortada.body.activity.duration_seconds, 390);
+
+    const detalhe = await request('GET', `/api/activities/${id}`, null, auth);
+    assert.strictEqual(detalhe.body.track.length, 40, 'o traçado deve ficar só com os pontos da janela');
+    assert.strictEqual(detalhe.body.hr_samples.length, 40, 'a série de FC acompanha o recorte');
+    assert.ok(detalhe.body.trim, 'o original precisa ficar registrado para permitir desfazer');
+
+    const desfeita = await request('POST', `/api/activities/${id}/trim/undo`, {}, auth);
+    assert.strictEqual(desfeita.status, 200);
+    assert.strictEqual(desfeita.body.activity.distance_km, 6.6, 'desfazer restaura a distância original');
+    assert.strictEqual(desfeita.body.activity.duration_seconds, 590);
+
+    const restaurada = await request('GET', `/api/activities/${id}`, null, auth);
+    assert.strictEqual(restaurada.body.track.length, 60, 'desfazer restaura o traçado inteiro');
+    assert.strictEqual(restaurada.body.trim, null, 'sem recorte pendente após desfazer');
+  });
+
   await it('R4.3: Route hardening: Validation rejections across routes return 400 with structured JSON', async () => {
     // 1. Invalid HRV measurement (out-of-range RMSSD)
     const hrvBad = await request('POST', '/api/hrv/measurement', {

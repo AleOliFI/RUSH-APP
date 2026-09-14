@@ -703,6 +703,29 @@ module.exports = function initializeDatabase(db) {
   `);
 
   // ============================================================
+  // RECORTE DE ATIVIDADE — o que havia antes do corte
+  // ------------------------------------------------------------
+  // Recortar altera dado medido (distância, duração, traçado). Os
+  // valores originais ficam guardados aqui para que o corte possa
+  // ser desfeito — sem isso, um corte errado destruiria o registro
+  // da corrida para sempre.
+  // ============================================================
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_trims (
+      activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+      original_distance_km REAL NOT NULL,
+      original_duration_seconds INTEGER NOT NULL,
+      original_avg_pace TEXT DEFAULT NULL,
+      original_points_json TEXT DEFAULT NULL,
+      original_hr_samples_json TEXT DEFAULT NULL,
+      trim_start_seconds INTEGER NOT NULL DEFAULT 0,
+      trim_end_seconds INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // ============================================================
   // AMOSTRAS DE FC — série cardíaca bruta de cada atividade
   // ------------------------------------------------------------
   // Mesma estratégia do traçado GPS: UMA linha por atividade, com

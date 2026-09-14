@@ -23,6 +23,8 @@ import { RouteMapModal } from './components/rush/RouteMapModal';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { CycleScreen } from './screens/CycleScreen';
 import { DeleteAccountScreen } from './screens/DeleteAccountScreen';
+import { ActivityDetailScreen } from './screens/ActivityDetailScreen';
+import { useActivityDetail } from './hooks/useActivityDetail';
 import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
@@ -131,6 +133,10 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   // A aba Treinos tem duas faces: a prescrição do dia e o histórico.
   const [workoutsView, setWorkoutsView] = useState<'prescricao' | 'historico'>('prescricao');
   const [historyTab, setHistoryTab] = useState<'calendario' | 'lista' | 'carga'>('calendario');
+
+  // Atividade aberta em detalhe, a partir do histórico.
+  const [openActivityId, setOpenActivityId] = useState<string | null>(null);
+  const activityDetail = useActivityDetail(openActivityId);
 
   // A aba Medição também tem duas faces: a captura de VFC e o ciclo.
   const [measureView, setMeasureView] = useState<'vfc' | 'ciclo'>('vfc');
@@ -314,7 +320,19 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
 
-            {workoutsView === 'prescricao' ? (
+            {openActivityId ? (
+              <ActivityDetailScreen
+                detail={activityDetail}
+                shoes={shoes}
+                onBack={() => setOpenActivityId(null)}
+                onDeleted={() => {
+                  setOpenActivityId(null);
+                  history.reload();
+                  reload();
+                }}
+                onViewRoute={setActiveRoute}
+              />
+            ) : workoutsView === 'prescricao' ? (
               <WorkoutsScreen
                 workout={todayWorkout}
                 upcomingSessions={upcomingSessions}
@@ -330,6 +348,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
                 activeTab={historyTab}
                 onTabChange={setHistoryTab}
                 onViewRoute={setActiveRoute}
+                onOpenActivity={setOpenActivityId}
                 onExportCsv={handleExportCsv}
               />
             )}
