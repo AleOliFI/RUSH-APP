@@ -39,7 +39,7 @@ async function test(name, fn) {
 
 async function runSuite() {
   const db = new Database(':memory:');
-  initializeDatabase(db);
+  await initializeDatabase(db);
 
   // Setup test users
   const athlete1Id = uuidv4();

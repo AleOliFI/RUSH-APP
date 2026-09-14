@@ -11,7 +11,8 @@ const usersRoutes = require('../routes/users');
 console.log('🧪 Starting Subscriptions & Apple Compliance Unit Tests...');
 
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 // 1. Seed a test user
 const bcrypt = require('bcryptjs');
@@ -90,3 +91,5 @@ assert.ok(userDeleted.deleted_at !== null, 'Account must have deleted_at timesta
 console.log('  ✅ 4. Account deletion verified');
 
 console.log('🎉 ALL SUBSCRIPTIONS & APPLE COMPLIANCE TESTS PASSED SUCCESSFULLY!');
+
+})();

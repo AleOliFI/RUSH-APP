@@ -34,7 +34,7 @@ async function it(description, fn) {
 
 async function run() {
   const db = new Database(':memory:');
-  initializeDatabase(db);
+  await initializeDatabase(db);
 
   // Setup test user
   const userId = uuidv4();

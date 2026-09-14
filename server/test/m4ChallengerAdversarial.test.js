@@ -117,7 +117,7 @@ async function runAdversarialSuite() {
   const db = new Database(':memory:');
   process.env.NODE_ENV = 'test';
   process.env.QUIET = 'true';
-  initializeDatabase(db);
+  await initializeDatabase(db);
 
   const app = express();
   app.use(express.json());

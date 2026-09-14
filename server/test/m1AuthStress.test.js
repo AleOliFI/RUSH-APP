@@ -39,7 +39,8 @@ async function test(name, fn) {
 
 // Setup in-memory test app and database
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 const app = express();
 app.use(express.json());
@@ -508,3 +509,5 @@ runSuite().catch((err) => {
   console.error('Fatal suite error:', err);
   process.exit(1);
 });
+
+})();

@@ -17,7 +17,8 @@ console.log('🧪 Starting Platform Expansion Unit & Integration Test Suite...')
 
 // Mock in-memory DB
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 // Seed a test athlete
 const bcrypt = require('bcryptjs');
@@ -153,3 +154,5 @@ assert.strictEqual(followerCount.c, 1, 'Other athlete must have 1 follower');
 console.log('  ✅ 5. Social follow and athlete profile links verified');
 
 console.log('🎉 ALL PLATFORM EXPANSION TESTS PASSED SUCCESSFULLY!');
+
+})();

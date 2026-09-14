@@ -29,7 +29,15 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const db = new Database(DB_PATH);
-initializeDatabase(db);
+
+/**
+ * O schema agora é assíncrono, porque o mesmo código precisa valer
+ * para Postgres. Guardamos a promessa e fazemos toda requisição
+ * esperá-la: numa função serverless, a primeira requisição chega
+ * junto com o arranque a frio, e servir antes das tabelas existirem
+ * daria um 500 difícil de explicar.
+ */
+const prontidao = initializeDatabase(db);
 
 // Web Push. Sem as chaves VAPID no ambiente o app segue inteiro: as
 // notificações continuam sendo gravadas e aparecem na central, apenas
@@ -41,15 +49,17 @@ if (!configurarPush()) {
 }
 
 // Auto-seed if running on Vercel or database is newly initialized
+const arranque = prontidao.then(async () => {
 try {
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-  if (!userCount || userCount.count === 0) {
+  const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (!userCount || Number(userCount.count) === 0) {
     console.log('⚡ Initializing database with seed data...');
-    seedDatabase(db);
+    await seedDatabase(db);
   }
 } catch (e) {
   console.warn('Auto-seed check warning:', e.message);
 }
+});
 
 // ============================================================
 // Initialize Express
@@ -64,6 +74,11 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Nenhuma rota é servida antes de o banco estar pronto.
+app.use((req, res, next) => {
+  arranque.then(() => next()).catch(next);
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

@@ -29,7 +29,8 @@ function it(description, fn) {
 
 // Setup in-memory SQLite database
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 // Create a mock user
 const testUserId = uuidv4();
@@ -187,3 +188,5 @@ console.log(`========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+
+})();

@@ -2,15 +2,20 @@
 // RUSH PERFORMANCE — Database Schema (SQLite)
 // ============================================================
 
-module.exports = function initializeDatabase(db) {
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+module.exports = async function initializeDatabase(db) {
+  // Postgres já impõe chave estrangeira por padrão e não tem WAL para
+  // ligar: estes dois só fazem sentido no SQLite.
+  const ehSqlite = db.dialect !== 'postgres';
+  if (ehSqlite) {
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+  }
 
   // ============================================================
   // USUÁRIOS E AUTENTICAÇÃO
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -30,17 +35,17 @@ module.exports = function initializeDatabase(db) {
   `);
 
   // Subscriptions & Auth Migrations
-  try { db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT DEFAULT NULL`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT DEFAULT NULL`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'free'`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_provider TEXT DEFAULT NULL`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_id TEXT DEFAULT NULL`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at TEXT DEFAULT NULL`); } catch (_) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN subscription_expires_at TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN reset_token TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN reset_token_expires TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'free'`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN subscription_provider TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN subscription_id TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN trial_ends_at TEXT DEFAULT NULL`); } catch (_) {}
+  try { await db.exec(`ALTER TABLE users ADD COLUMN subscription_expires_at TEXT DEFAULT NULL`); } catch (_) {}
 
   // Subscriptions history table
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -58,7 +63,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_profiles (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
@@ -85,28 +90,28 @@ module.exports = function initializeDatabase(db) {
   `);
 
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN instagram TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN instagram TEXT DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN strava TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN strava TEXT DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN pace_5k TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN pace_5k TEXT DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_max_tested INTEGER DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_max_tested INTEGER DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_rest_tested INTEGER DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN hr_rest_tested INTEGER DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN prior_hrv_rmssd REAL DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN prior_hrv_rmssd REAL DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE user_profiles ADD COLUMN custom_zones_json TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE user_profiles ADD COLUMN custom_zones_json TEXT DEFAULT NULL`);
   } catch (_) {}
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       language TEXT DEFAULT 'pt-BR',
@@ -119,7 +124,7 @@ module.exports = function initializeDatabase(db) {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_objectives (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       distance_km INTEGER NOT NULL CHECK (distance_km IN (5, 10, 21, 42)),
@@ -146,7 +151,7 @@ module.exports = function initializeDatabase(db) {
     'active_injuries TEXT DEFAULT NULL',
   ]) {
     try {
-      db.exec(`ALTER TABLE user_objectives ADD COLUMN ${coluna}`);
+      await db.exec(`ALTER TABLE user_objectives ADD COLUMN ${coluna}`);
     } catch (_) { /* coluna já existe */ }
   }
 
@@ -154,7 +159,7 @@ module.exports = function initializeDatabase(db) {
   // ASSESSORIAS (SLC)
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS academies (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -176,7 +181,7 @@ module.exports = function initializeDatabase(db) {
   // DISPOSITIVOS WEARABLE
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS wearable_devices (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -199,7 +204,7 @@ module.exports = function initializeDatabase(db) {
   // MONITORAMENTO VFC
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS hrv_measurements (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -220,17 +225,17 @@ module.exports = function initializeDatabase(db) {
 
   // Migrações dinâmicas para tabelas existentes
   try {
-    db.exec(`ALTER TABLE hrv_measurements ADD COLUMN rhr_bpm REAL DEFAULT NULL`);
+    await db.exec(`ALTER TABLE hrv_measurements ADD COLUMN rhr_bpm REAL DEFAULT NULL`);
   } catch (_) { /* coluna já existe */ }
   try {
-    db.exec(`ALTER TABLE hrv_measurements ADD COLUMN consecutive_low_days INTEGER DEFAULT 0`);
+    await db.exec(`ALTER TABLE hrv_measurements ADD COLUMN consecutive_low_days INTEGER DEFAULT 0`);
   } catch (_) { /* coluna já existe */ }
 
   // ============================================================
   // CICLO MENSTRUAL & BASELINES POR FASE (McNulty et al. 2020)
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_menstrual_profile (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       lmp_date TEXT DEFAULT NULL,
@@ -270,7 +275,7 @@ module.exports = function initializeDatabase(db) {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS wellness_scores (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -287,7 +292,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_wellness_user_date ON wellness_scores(user_id, date);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS daily_status (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -307,7 +312,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_daily_status_user_date ON daily_status(user_id, date);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS vo2max_estimates (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -326,7 +331,7 @@ module.exports = function initializeDatabase(db) {
   // PLANOS E TREINOS
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS training_plans (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -345,7 +350,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_plans_creator ON training_plans(created_by);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS training_sessions (
       id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL REFERENCES training_plans(id) ON DELETE CASCADE,
@@ -365,7 +370,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_sessions_week ON training_sessions(week_number);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS assigned_plans (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -386,7 +391,7 @@ module.exports = function initializeDatabase(db) {
   // ATIVIDADES
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS activities (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -430,12 +435,16 @@ module.exports = function initializeDatabase(db) {
   // contagem de linhas antes de descartar a original.
   // ------------------------------------------------------------
   try {
-    const definicaoAtual = db
-      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'")
-      .get()?.sql || '';
+    if (!ehSqlite) throw new Error('__pular__');
+    // Os parênteses importam: sem eles o `?.` cairia sobre a promessa,
+    // não sobre a linha, e devolveria undefined em silêncio.
+    const definicaoAtual =
+      (await db
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'activities'")
+        .get())?.sql || '';
 
     if (definicaoAtual.includes("'bike'")) {
-      const colunas = db.prepare('PRAGMA table_info(activities)').all().map((c) => c.name);
+      const colunas = (await db.prepare('PRAGMA table_info(activities)').all()).map((c) => c.name);
       const listaColunas = colunas.map((c) => `"${c}"`).join(', ');
       const listaSelecao = colunas
         .map((c) =>
@@ -445,11 +454,11 @@ module.exports = function initializeDatabase(db) {
         )
         .join(', ');
 
-      const antes = db.prepare('SELECT COUNT(*) AS total FROM activities').get().total;
+      const antes = (await db.prepare('SELECT COUNT(*) AS total FROM activities').get()).total;
 
       db.pragma('foreign_keys = OFF');
-      const migrar = db.transaction(() => {
-        db.exec(`
+      const migrar = async () => {
+        await db.exec(`
           CREATE TABLE activities_migradas (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -478,24 +487,33 @@ module.exports = function initializeDatabase(db) {
           );
         `);
 
-        db.exec(`INSERT INTO activities_migradas (${listaColunas}) SELECT ${listaSelecao} FROM activities;`);
+        await db.exec(`INSERT INTO activities_migradas (${listaColunas}) SELECT ${listaSelecao} FROM activities;`);
 
-        const depois = db.prepare('SELECT COUNT(*) AS total FROM activities_migradas').get().total;
+        const depois = (await db.prepare('SELECT COUNT(*) AS total FROM activities_migradas').get()).total;
         if (depois !== antes) {
           throw new Error(`migração de activities copiou ${depois} de ${antes} linhas — abortada`);
         }
 
-        db.exec('DROP TABLE activities;');
-        db.exec('ALTER TABLE activities_migradas RENAME TO activities;');
-        db.exec(`
+        await db.exec('DROP TABLE activities;');
+        await db.exec('ALTER TABLE activities_migradas RENAME TO activities;');
+        await db.exec(`
           CREATE INDEX IF NOT EXISTS idx_activities_user_date ON activities(user_id, date);
           CREATE INDEX IF NOT EXISTS idx_activities_privacy ON activities(privacy, date);
           CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
           CREATE INDEX IF NOT EXISTS idx_activities_shoe ON activities(shoe_id);
         `);
-      });
+      };
 
-      migrar();
+      // BEGIN/COMMIT na mão: este bloco só roda em SQLite, e precisa
+      // funcionar tanto com o adaptador quanto com o driver cru.
+      await db.exec('BEGIN');
+      try {
+        await migrar();
+        await db.exec('COMMIT');
+      } catch (erroMigracao) {
+        await db.exec('ROLLBACK');
+        throw erroMigracao;
+      }
 
       const orfas = db.pragma('foreign_key_check');
       db.pragma('foreign_keys = ON');
@@ -505,23 +523,26 @@ module.exports = function initializeDatabase(db) {
       console.log(`✅ Tabela activities migrada para 8 tipos (${antes} atividades preservadas)`);
     }
   } catch (err) {
-    console.error('Erro ao migrar os tipos de atividade:', err.message);
+    // Num banco novo (Postgres) a tabela já nasce correta: não há o que migrar.
+    if (err.message !== '__pular__') {
+      console.error('Erro ao migrar os tipos de atividade:', err.message);
+    }
   }
 
   try {
-    db.exec(`ALTER TABLE activities ADD COLUMN image_url TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE activities ADD COLUMN image_url TEXT DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE activities ADD COLUMN rpe_score INTEGER DEFAULT NULL`);
+    await db.exec(`ALTER TABLE activities ADD COLUMN rpe_score INTEGER DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE activities ADD COLUMN feeling_notes TEXT DEFAULT NULL`);
+    await db.exec(`ALTER TABLE activities ADD COLUMN feeling_notes TEXT DEFAULT NULL`);
   } catch (_) {}
   try {
-    db.exec(`ALTER TABLE activities ADD COLUMN workout_rating INTEGER DEFAULT NULL`);
+    await db.exec(`ALTER TABLE activities ADD COLUMN workout_rating INTEGER DEFAULT NULL`);
   } catch (_) {}
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS activity_splits (
       id TEXT PRIMARY KEY,
       activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
@@ -541,7 +562,7 @@ module.exports = function initializeDatabase(db) {
   // SOCIAL
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS follows (
       follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       followed_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -554,7 +575,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_follows_followed ON follows(followed_id);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS likes (
       id TEXT PRIMARY KEY,
       activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
@@ -567,7 +588,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_likes_user ON likes(user_id);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
       activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
@@ -580,7 +601,7 @@ module.exports = function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_comments_activity ON comments(activity_id);
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -615,7 +636,7 @@ module.exports = function initializeDatabase(db) {
   // CONQUISTAS E DESAFIOS
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS achievements (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -626,7 +647,7 @@ module.exports = function initializeDatabase(db) {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS user_achievements (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       achievement_id TEXT NOT NULL REFERENCES achievements(id) ON DELETE CASCADE,
@@ -636,7 +657,7 @@ module.exports = function initializeDatabase(db) {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS challenges (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -653,7 +674,7 @@ module.exports = function initializeDatabase(db) {
     );
   `);
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS challenge_participants (
       challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -669,7 +690,7 @@ module.exports = function initializeDatabase(db) {
   // PRIVACIDADE
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS privacy_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       public_activities INTEGER DEFAULT 1,
@@ -686,7 +707,7 @@ module.exports = function initializeDatabase(db) {
   // API TOKENS & REFRESH TOKENS
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -708,7 +729,7 @@ module.exports = function initializeDatabase(db) {
   // Cada ponto: { lat, lon, t (epoch ms), acc (m), alt (m|null) }.
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS activity_tracks (
       activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
       points_json TEXT NOT NULL,
@@ -727,7 +748,7 @@ module.exports = function initializeDatabase(db) {
   // da corrida para sempre.
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS activity_trims (
       activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
       original_distance_km REAL NOT NULL,
@@ -752,7 +773,7 @@ module.exports = function initializeDatabase(db) {
   // Cada amostra: { t (segundos desde a largada), bpm }.
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS activity_hr_samples (
       activity_id TEXT PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
       samples_json TEXT NOT NULL,
@@ -765,7 +786,7 @@ module.exports = function initializeDatabase(db) {
   // GEAR — Frota de calçados (Gear Garage / Aposentadoria)
   // ============================================================
 
-  db.exec(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS shoes (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -789,17 +810,17 @@ module.exports = function initializeDatabase(db) {
 
   // Vínculo atividade -> calçado (quilometragem acumula automaticamente)
   try {
-    db.exec(`ALTER TABLE activities ADD COLUMN shoe_id TEXT DEFAULT NULL REFERENCES shoes(id) ON DELETE SET NULL`);
+    await db.exec(`ALTER TABLE activities ADD COLUMN shoe_id TEXT DEFAULT NULL REFERENCES shoes(id) ON DELETE SET NULL`);
   } catch (_) {}
   try {
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_shoe ON activities(shoe_id)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_shoe ON activities(shoe_id)`);
   } catch (_) {}
 
   // ============================================================
   // SEED DATA — Achievements
   // ============================================================
 
-  const achievementCount = db.prepare('SELECT COUNT(*) as count FROM achievements').get();
+  const achievementCount = await db.prepare('SELECT COUNT(*) as count FROM achievements').get();
   if (achievementCount.count === 0) {
     const insertAchievement = db.prepare(`
       INSERT INTO achievements (id, name, description, icon, criteria_json) VALUES (?, ?, ?, ?, ?)
@@ -820,13 +841,12 @@ module.exports = function initializeDatabase(db) {
       ['ach-50wk', '50 Treinos Completos', 'Completou 50 treinos planejados!', '🏆', '{"completed_workouts": 50}'],
     ];
 
-    const insertMany = db.transaction((items) => {
-      for (const item of items) {
-        insertAchievement.run(...item);
-      }
-    });
-
-    insertMany(achievements);
+    // Sem transação de propósito: são 12 linhas no arranque, e o
+    // db.transaction() do better-sqlite3 recusa callback assíncrono —
+    // o que impediria este mesmo schema de rodar nos dois bancos.
+    for (const item of achievements) {
+      await insertAchievement.run(...item);
+    }
   }
 
   if (process.env.NODE_ENV !== 'test' && !process.env.QUIET) {

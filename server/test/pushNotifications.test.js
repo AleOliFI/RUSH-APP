@@ -96,7 +96,7 @@ function parDeChavesDoNavegador() {
   const base = `https://127.0.0.1:${servico.address().port}`;
 
   const db = new Database(CAMINHO_DB);
-  require('../database/schema.js')(db);
+  await require('../database/schema.js')(db);
   const servicoNotif = require('../services/notificacoes.js');
   const { criarNotificacao, enviarPush, configurarPush, pushDisponivel } = servicoNotif;
 

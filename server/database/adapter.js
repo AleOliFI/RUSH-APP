@@ -25,7 +25,24 @@
 // isso mexeria na leitura de todo o frontend.
 // ============================================================
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// ------------------------------------------------------------
+// O node-postgres devolve bigint como STRING, para não perder
+// precisão acima de 2^53. Só que COUNT(*) é bigint, e o app compara
+// contagens com número: `count === 0` vira `'0' === 0`, que é falso.
+// Esse é o tipo de erro que não lança — só faz o seed não rodar e
+// um `if` nunca entrar.
+//
+// Contagens deste app não chegam perto de 2^53, então ler int8 como
+// número é seguro e devolve o mesmo comportamento do SQLite.
+// ------------------------------------------------------------
+const OID_INT8 = 20;
+const OID_NUMERIC = 1700;
+types.setTypeParser(OID_INT8, (v) => (v === null ? null : Number(v)));
+// numeric também vem como string, pela mesma razão. As colunas do app
+// são REAL/INTEGER, mas AVG() e SUM() sobre elas podem devolver numeric.
+types.setTypeParser(OID_NUMERIC, (v) => (v === null ? null : Number(v)));
 
 /**
  * Troca os `?` posicionais por `$n`, sem tocar nos que estão

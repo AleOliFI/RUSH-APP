@@ -11,7 +11,8 @@ const subscriptionsRoutes = require('../routes/subscriptions');
 console.log('🧪 Starting Payment Webhooks Unit Tests...');
 
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 const testUserId = 'user-pay-webhook-1';
 const testEmail = 'assinante.webhook@rush.com';
@@ -102,3 +103,5 @@ assert.strictEqual(userAfterPix.subscription_provider, 'asaas_pix', 'Provider is
 console.log('  ✅ 4. Asaas Pix payment confirmed and user activated as RUSH PRO');
 
 console.log('🎉 ALL PAYMENT & WEBHOOK TESTS PASSED SUCCESSFULLY!');
+
+})();

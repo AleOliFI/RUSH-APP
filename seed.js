@@ -16,7 +16,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(DB_PATH);
 const initializeDatabase = require('./server/database/schema');
-initializeDatabase(db);
+(async () => { await initializeDatabase(db); })();
 
 console.log('🌱 Seeding database...\n');
 

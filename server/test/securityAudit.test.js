@@ -26,7 +26,8 @@ console.log('🛡️  ==========================================================
 
 // 1. Setup isolated database
 const db = new Database(':memory:');
-initializeDatabase(db);
+(async () => {
+await initializeDatabase(db);
 
 // Seed Accounts
 const victimAthleteId = 'sec-victim-athlete-1';
@@ -296,3 +297,5 @@ console.log(`🛡️  SECURITY AUDIT COMPLETE: ${passedCount}/${totalCount} TEST
 console.log('============================================================\n');
 
 assert.strictEqual(passedCount, totalCount, 'All security tests must pass');
+
+})();
