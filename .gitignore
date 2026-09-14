@@ -31,3 +31,11 @@ data/*.sqlite
 *.njsproj
 *.sln
 *.sw?
+
+# Segredos locais. O .env já esteve versionado num repositório público:
+# se precisar recuperar algum valor antigo, ele está no histórico do git —
+# e é justamente por isso que as chaves de então foram rotacionadas.
+.env
+.env.local
+.env.*.local
+!.env.example
