@@ -9,6 +9,7 @@ auto_stories
 badge
 bedtime
 biotech
+block
 bluetooth
 bluetooth_connected
 bluetooth_searching
@@ -28,6 +29,7 @@ download_for_offline
 ecg
 ecg_heart
 edit
+edit_calendar
 edit_note
 emoji_events
 error
@@ -50,6 +52,7 @@ login
 logout
 map
 monitoring
+opacity
 open_in_new
 pace
 pause
@@ -89,5 +92,7 @@ visibility
 visibility_off
 vital_signs
 warning
+water_drop
+waves
 workspace_premium
 zoom_in

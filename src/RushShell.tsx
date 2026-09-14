@@ -21,6 +21,8 @@ import { AthleteModal } from './components/rush/AthleteModal';
 import { ImageViewerModal } from './components/rush/ImageViewerModal';
 import { RouteMapModal } from './components/rush/RouteMapModal';
 import { HistoryScreen } from './screens/HistoryScreen';
+import { CycleScreen } from './screens/CycleScreen';
+import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
 import { useHrZones } from './hooks/useTrainingReference';
 import { DownloadToast } from './components/rush/DownloadToast';
@@ -128,6 +130,10 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [workoutsView, setWorkoutsView] = useState<'prescricao' | 'historico'>('prescricao');
   const [historyTab, setHistoryTab] = useState<'calendario' | 'lista' | 'carga'>('calendario');
 
+  // A aba Medição também tem duas faces: a captura de VFC e o ciclo.
+  const [measureView, setMeasureView] = useState<'vfc' | 'ciclo'>('vfc');
+  const cycle = useCycle(measureView === 'ciclo');
+
   // As zonas alimentam a classificação de intensidade do histórico; só são
   // buscadas quando o atleta abre essa visão.
   const { zones } = useHrZones(workoutsView === 'historico');
@@ -224,12 +230,47 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         )}
 
         {currentTab === 'medicao' && (
+          <div className="flex flex-col w-full">
+            <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
+                {([
+                  { id: 'vfc', label: 'Medição VFC' },
+                  { id: 'ciclo', label: 'Ciclo' },
+                ] as const).map((view) => (
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => setMeasureView(view.id)}
+                    aria-pressed={measureView === view.id}
+                    className={`min-h-[44px] rounded-lg font-label-caps text-[11px] uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
+                      measureView === view.id
+                        ? 'bg-[#FF5500] text-[#0D0D0D] shadow-[0_0_12px_rgba(255,85,0,0.35)]'
+                        : 'bg-[#141414] text-[#A1A1AA] hover:text-[#F7F5F3]'
+                    }`}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {measureView === 'ciclo' ? (
+              <CycleScreen
+                cycle={cycle}
+                rmssdToday={hrvStatusRaw?.measurement?.rmssd_ms ?? null}
+                readinessScore={hrvStatusRaw?.has_measured_today ? readiness.score : null}
+                hrvHistory={hrvHistory}
+                onOpenMeasurement={() => setMeasureView('vfc')}
+              />
+            ) : (
           <MeasurementScreen
             currentReadiness={readiness}
             hasMeasuredToday={!!hrvStatusRaw?.has_measured_today}
             onSubmitMeasurement={submitMeasurement}
             onBackToHome={() => goToTab('inicio')}
           />
+            )}
+          </div>
         )}
 
         {currentTab === 'treinos' && (
