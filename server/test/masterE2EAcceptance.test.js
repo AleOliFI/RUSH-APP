@@ -842,6 +842,107 @@ async function runMasterSuite() {
     assert.ok(searchRes.body.users.length > 0);
   });
 
+  await it('R4.5b: perfil público respeita as flags de privacidade do dono e não vaza dados de cálculo', async () => {
+    // O atleta novo registra uma corrida pública de 10 km.
+    const corrida = await request('POST', '/api/activities', {
+      type: 'run',
+      title: 'Dez quilômetros públicos',
+      distance_km: 10.2,
+      duration_seconds: 2700,
+      privacy: 'public',
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(corrida.status, 201);
+
+    // E outra, mais rápida, porém privada: não pode virar recorde público.
+    const privada = await request('POST', '/api/activities', {
+      type: 'run',
+      title: 'Dez quilômetros privados',
+      distance_km: 10.2,
+      duration_seconds: 2100,
+      privacy: 'private',
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(privada.status, 201);
+
+    // Com atividades e conquistas visíveis, o recorde aparece.
+    const abrindo = await request('PUT', '/api/users/privacy', {
+      public_activities: true,
+      show_achievements: true,
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(abrindo.status, 200);
+
+    const visivel = await request('GET', `/api/social/user/${newAthleteId}/profile`, null, {
+      Authorization: `Bearer ${seedLoginToken}`,
+    });
+    assert.strictEqual(visivel.status, 200);
+    const perfilVisivel = visivel.body.profile;
+    assert.ok(perfilVisivel.records, 'recordes deveriam estar visíveis');
+    assert.ok(perfilVisivel.records['10k'], 'deveria haver recorde de 10 km');
+    // 2700 s em 10.2 km, normalizado para 10 km: a corrida privada (2100 s)
+    // seria mais rápida e não pode ter sido considerada.
+    assert.strictEqual(perfilVisivel.records['10k'].duration_seconds, Math.round((2700 / 10.2) * 10));
+    assert.strictEqual(perfilVisivel.privacy.records_hidden, false);
+
+    // Peso, altura e data de nascimento são dados de cálculo, não de vitrine.
+    for (const campo of ['weight_kg', 'height_cm', 'date_of_birth', 'gender']) {
+      assert.ok(!(campo in perfilVisivel), `${campo} não pode sair no perfil público`);
+    }
+
+    // Escondendo as conquistas, os recordes somem sem esconder o perfil.
+    const fechando = await request('PUT', '/api/users/privacy', {
+      show_achievements: false,
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(fechando.status, 200);
+
+    const oculto = await request('GET', `/api/social/user/${newAthleteId}/profile`, null, {
+      Authorization: `Bearer ${seedLoginToken}`,
+    });
+    assert.strictEqual(oculto.status, 200);
+    assert.strictEqual(oculto.body.profile.records, null);
+    assert.strictEqual(oculto.body.profile.privacy.records_hidden, true);
+    assert.ok(oculto.body.profile.recent_activities.length > 0, 'atividades continuam públicas');
+
+    // Escondendo as atividades, some tudo: lista, contagem e quilometragem.
+    const privando = await request('PUT', '/api/users/privacy', {
+      public_activities: false,
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(privando.status, 200);
+
+    const fechado = await request('GET', `/api/social/user/${newAthleteId}/profile`, null, {
+      Authorization: `Bearer ${seedLoginToken}`,
+    });
+    assert.strictEqual(fechado.status, 200);
+    assert.strictEqual(fechado.body.profile.privacy.activities_hidden, true);
+    assert.deepStrictEqual(fechado.body.profile.recent_activities, []);
+    assert.strictEqual(fechado.body.profile.stats.activities, 0);
+    assert.strictEqual(fechado.body.profile.stats.total_km, 0);
+
+    // Mas o próprio dono continua vendo o que é dele.
+    const proprio = await request('GET', `/api/social/user/${newAthleteId}/profile`, null, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+    assert.strictEqual(proprio.status, 200);
+    assert.strictEqual(proprio.body.profile.is_self, true);
+    assert.ok(proprio.body.profile.stats.activities > 0, 'o dono vê as próprias atividades');
+
+    // Devolve a privacidade ao estado aberto para não contaminar os testes seguintes.
+    await request('PUT', '/api/users/privacy', {
+      public_activities: true,
+      show_achievements: true,
+    }, {
+      Authorization: `Bearer ${newAthleteToken}`,
+    });
+  });
+
   await it('R4.6: Challenges and Notifications workflows execute with try/catch and input validation', async () => {
     // 1. List challenges
     const chList = await request('GET', '/api/challenges', null, {

@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate } = require('../middleware/auth');
+const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
 
 module.exports = function socialRoutes(db) {
   const router = express.Router();
@@ -150,7 +151,7 @@ module.exports = function socialRoutes(db) {
     try {
       const userId = req.query.user_id || req.user.id;
       const followers = db.prepare(`
-        SELECT up.*, f.created_at as followed_at
+        SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, f.created_at as followed_at
         FROM follows f
         JOIN user_profiles up ON up.user_id = f.follower_id
         WHERE f.followed_id = ?
@@ -171,7 +172,7 @@ module.exports = function socialRoutes(db) {
     try {
       const userId = req.query.user_id || req.user.id;
       const following = db.prepare(`
-        SELECT up.*, f.created_at as followed_at
+        SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, f.created_at as followed_at
         FROM follows f
         JOIN user_profiles up ON up.user_id = f.followed_id
         WHERE f.follower_id = ?
@@ -318,8 +319,10 @@ module.exports = function socialRoutes(db) {
       }
 
       const cleanQ = q.trim();
+      // Só os campos de vitrine: a busca não é lugar para peso, altura
+      // ou data de nascimento de quem o atleta ainda nem segue.
       const users = db.prepare(`
-        SELECT up.*, u.role
+        SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, u.role
         FROM user_profiles up
         JOIN users u ON u.id = up.user_id
         WHERE u.deleted_at IS NULL AND (up.name LIKE ? OR up.username LIKE ?)
@@ -341,38 +344,133 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // GET /api/social/user/:userId/profile — Perfil público do atleta
   // -------------------------------------------------------
+  // O que aparece aqui é decidido pelo dono do perfil, não por quem
+  // olha: as flags de privacidade dele mandam. Peso, altura e data de
+  // nascimento nunca saem — são dados de cálculo, não de vitrine.
+  //
+  // Recordes só existem quando o atleta mantém as atividades públicas
+  // e as conquistas visíveis, e são calculados apenas sobre corridas
+  // marcadas como públicas: uma corrida privada não vira recorde.
+  const RECORD_DISTANCES = [
+    { key: '5k', officialKm: 5, maxKm: 6.5 },
+    { key: '10k', officialKm: 10, maxKm: 12.5 },
+    { key: '21k', officialKm: 21.0975, maxKm: 24 },
+    { key: '42k', officialKm: 42.195, maxKm: 47 },
+  ];
+
+  /** Mesma convenção de GET /api/activities/records, restrita ao que é público. */
+  function publicRecords(userId) {
+    const records = {};
+
+    for (const dist of RECORD_DISTANCES) {
+      const best = db.prepare(`
+        SELECT id, title, date, distance_km, duration_seconds,
+               (duration_seconds * 1.0 / distance_km) as pace_seconds_per_km
+        FROM activities
+        WHERE user_id = ? AND type = 'run' AND privacy = 'public'
+          AND distance_km >= ? AND distance_km <= ?
+        ORDER BY pace_seconds_per_km ASC
+        LIMIT 1
+      `).get(userId, dist.officialKm, dist.maxKm);
+
+      if (!best) {
+        records[dist.key] = null;
+        continue;
+      }
+
+      const normalizedSeconds = Math.round(best.pace_seconds_per_km * dist.officialKm);
+      records[dist.key] = {
+        activity_id: best.id,
+        title: best.title,
+        date: best.date,
+        distance_km: best.distance_km,
+        duration_seconds: normalizedSeconds,
+        formatted: formatDuration(normalizedSeconds),
+        avg_pace: formatPaceFromSeconds(best.pace_seconds_per_km),
+      };
+    }
+
+    return records;
+  }
+
   router.get('/user/:userId/profile', authenticate, (req, res) => {
     try {
       const targetId = req.params.userId;
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(targetId);
+      const profile = db.prepare(`
+        SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location,
+               up.instagram, up.strava, up.created_at
+        FROM user_profiles up
+        JOIN users u ON u.id = up.user_id AND u.deleted_at IS NULL
+        WHERE up.user_id = ?
+      `).get(targetId);
       if (!profile) {
         return res.status(404).json({ error: 'Atleta não encontrado' });
       }
 
+      const isSelf = targetId === req.user.id;
       const isFollowing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
+
+      // Sem linha na tabela, valem os padrões do schema.
+      const privacyRow = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(targetId) || {};
+      const flag = (campo, padrao) => {
+        const valor = privacyRow[campo];
+        return valor === undefined || valor === null ? padrao : valor === 1 || valor === true;
+      };
+      // O dono do próprio perfil vê tudo o que é dele.
+      const mostraAtividades = isSelf || flag('public_activities', true);
+      const mostraRecordes = mostraAtividades && (isSelf || flag('show_achievements', true));
+      const mostraVo2max = isSelf || flag('show_vo2max', false);
+
       const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
       const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(targetId);
-      const activityCount = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ?').get(targetId);
-      const totalKm = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(targetId);
 
-      const recentActivities = db.prepare(`
-        SELECT * FROM activities
-        WHERE user_id = ? AND privacy = 'public'
-        ORDER BY date DESC LIMIT 6
-      `).all(targetId);
+      // Contagem e quilometragem seguem o mesmo recorte da lista: se as
+      // atividades são privadas, o número não pode entregar o que a lista esconde.
+      const visibilidade = mostraAtividades ? "privacy = 'public'" : '1 = 0';
+      const resumo = db.prepare(`
+        SELECT COUNT(*) as count, COALESCE(SUM(distance_km), 0) as total
+        FROM activities WHERE user_id = ? AND ${visibilidade}
+      `).get(targetId);
+
+      const recentActivities = mostraAtividades
+        ? db.prepare(`
+            SELECT id, type, title, date, distance_km, duration_seconds, avg_pace, image_url
+            FROM activities
+            WHERE user_id = ? AND privacy = 'public'
+            ORDER BY date DESC LIMIT 6
+          `).all(targetId)
+        : [];
+
+      let vo2max = null;
+      if (mostraVo2max) {
+        const ultimo = db.prepare(`
+          SELECT vo2max_value, date FROM vo2max_estimates
+          WHERE user_id = ? ORDER BY date DESC LIMIT 1
+        `).get(targetId);
+        if (ultimo) {
+          vo2max = { value: +ultimo.vo2max_value.toFixed(1), date: ultimo.date };
+        }
+      }
 
       res.json({
         profile: {
           ...profile,
           is_following: !!isFollowing,
-          is_self: targetId === req.user.id,
+          is_self: isSelf,
           stats: {
             followers: followers.count,
             following: following.count,
-            activities: activityCount.count,
-            total_km: +totalKm.total.toFixed(1),
+            activities: resumo.count,
+            total_km: +resumo.total.toFixed(1),
           },
           recent_activities: recentActivities,
+          // null distingue "o atleta escondeu" de "ainda não tem recorde".
+          records: mostraRecordes ? publicRecords(targetId) : null,
+          vo2max,
+          privacy: {
+            activities_hidden: !mostraAtividades,
+            records_hidden: !mostraRecordes,
+          },
         }
       });
     } catch (err) {

@@ -27,8 +27,29 @@ export interface AthleteSummary {
   is_following: boolean;
 }
 
+/** Melhor marca em uma distância oficial, normalizada pelo pace médio. */
+export interface AthleteRecord {
+  activity_id: string;
+  title: string | null;
+  date: string;
+  distance_km: number;
+  duration_seconds: number;
+  formatted: string;
+  avg_pace: string | null;
+}
+
+export const RECORD_DISTANCES = [
+  { key: '5k', label: '5 km' },
+  { key: '10k', label: '10 km' },
+  { key: '21k', label: '21 km' },
+  { key: '42k', label: '42 km' },
+] as const;
+
 export interface PublicAthleteProfile extends AthleteSummary {
   is_self: boolean;
+  instagram?: string | null;
+  strava?: string | null;
+  created_at?: string | null;
   stats: {
     followers: number;
     following: number;
@@ -37,6 +58,14 @@ export interface PublicAthleteProfile extends AthleteSummary {
   };
   /** Até 6 atividades públicas. Privadas e de seguidores não vêm. */
   recent_activities: any[];
+  /**
+   * Null quando o atleta escondeu conquistas ou atividades; um objeto com
+   * valores null significa que ele simplesmente ainda não tem a marca.
+   */
+  records: Record<string, AthleteRecord | null> | null;
+  /** Só vem quando o atleta deixa o VO₂máx visível. */
+  vo2max: { value: number; date: string } | null;
+  privacy: { activities_hidden: boolean; records_hidden: boolean };
 }
 
 export interface SocialData {
@@ -138,7 +167,16 @@ export function useSocial(): SocialData {
           list.map((u) => (u.user_id === userId ? { ...u, is_following: value } : u));
         setResults(patch);
         setFollowers(patch);
-        setFollowing(patch);
+
+        // A lista "Seguindo" é a própria relação, não só um botão: quem
+        // acabou de ser seguido pela busca precisa entrar nela, e quem
+        // deixou de ser seguido precisa sair. Sem isto a aba só acerta
+        // depois de um recarregamento.
+        setFollowing((lista) => {
+          if (!value) return lista.filter((u) => u.user_id !== userId);
+          if (lista.some((u) => u.user_id === userId)) return patch(lista);
+          return known ? [{ ...known, is_following: true }, ...lista] : lista;
+        });
       };
 
       apply(!wasFollowing);

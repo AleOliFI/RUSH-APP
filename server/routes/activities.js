@@ -6,6 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
+const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
 
 module.exports = function activitiesRoutes(db) {
   const router = express.Router();
@@ -1059,27 +1060,6 @@ function checkAndAwardAchievements(db, userId, distanceKm, type) {
       }
     }
   }
-}
-
-/**
- * Formata segundos em "h:mm:ss" ou "mm:ss".
- */
-function formatDuration(totalSeconds) {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const sec = totalSeconds % 60;
-  const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
-}
-
-/**
- * Formata segundos por km em "m:ss/km".
- */
-function formatPaceFromSeconds(secondsPerKm) {
-  if (!secondsPerKm || !isFinite(secondsPerKm)) return null;
-  const m = Math.floor(secondsPerKm / 60);
-  const sec = Math.round(secondsPerKm % 60);
-  return `${m}:${sec < 10 ? '0' : ''}${sec}/km`;
 }
 
 function awardAchievement(db, userId, achievementId, achievementName) {

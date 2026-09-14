@@ -32,6 +32,13 @@ LITERAL = re.compile(r"'([a-z0-9_]{2,40})'")
 # arrastar qualquer campo chamado "icon" de outro contexto.
 PADRAO_CAMPO_ICON = re.compile(r"\bicon:\s*'([a-z0-9_]{2,40})'")
 
+# Nomes passados como propriedade para um componente que desenha o ícone:
+# <EmptyState icone="search_off" />. Sem isto o nome vira texto na tela,
+# porque a fonte reduzida não traz o glifo.
+PADRAO_PROP_ICON = re.compile(
+    r'\b(?:icon|icone|iconName|icon_name)\s*=\s*["\']([a-z0-9_]{2,40})["\']'
+)
+
 
 def main():
     icones = set()
@@ -46,6 +53,7 @@ def main():
                 icones.update(LITERAL.findall(bloco))
             if 'material-symbols-outlined' in conteudo:
                 icones.update(PADRAO_CAMPO_ICON.findall(conteudo))
+                icones.update(PADRAO_PROP_ICON.findall(conteudo))
 
     # Ícones que nenhuma heurística alcança (montados por concatenação,
     # vindos de dados, etc.) entram por esta lista mantida à mão.

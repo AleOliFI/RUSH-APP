@@ -15,6 +15,8 @@ interface FeedScreenProps {
   onOpenNewPost: () => void;
   onOpenComments: (postId: string) => void;
   onViewImage: (item: ImageViewerItem) => void;
+  /** Abre a busca de atletas — única forma de encher o canal "Seguindo". */
+  onOpenSearch: () => void;
 }
 
 const CHANNEL_EMPTY_TEXT: Record<FeedChannel, string> = {
@@ -34,6 +36,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   onOpenNewPost,
   onOpenComments,
   onViewImage,
+  onOpenSearch,
 }) => {
   const allPosts = posts;
 
@@ -84,13 +87,23 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
           ))}
         </div>
 
-        <button
-          onClick={onOpenNewPost}
-          className="min-h-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] text-xs font-headline uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer shrink-0"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          <span>Postar</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={onOpenSearch}
+            aria-label="Buscar atletas"
+            className="min-h-[44px] w-11 bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] text-[#A1A1AA] hover:text-[#F7F5F3] rounded-xl flex items-center justify-center transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[20px]">person_search</span>
+          </button>
+
+          <button
+            onClick={onOpenNewPost}
+            className="min-h-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] text-xs font-headline uppercase px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            <span>Postar</span>
+          </button>
+        </div>
       </div>
 
       {/* Quick Composer Card */}
@@ -125,6 +138,15 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             <p className="text-xs text-[#737373] mt-2 leading-relaxed max-w-xs mx-auto">
               {CHANNEL_EMPTY_TEXT[channel]}
             </p>
+            {channel === 'following' && (
+              <button
+                onClick={onOpenSearch}
+                className="mt-4 min-h-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] text-xs font-headline uppercase px-4 rounded-xl inline-flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <span className="material-symbols-outlined text-[18px]">person_search</span>
+                <span>Buscar atletas</span>
+              </button>
+            )}
           </div>
         )}
 

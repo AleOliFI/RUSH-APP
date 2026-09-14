@@ -24,7 +24,10 @@ import { HistoryScreen } from './screens/HistoryScreen';
 import { CycleScreen } from './screens/CycleScreen';
 import { DeleteAccountScreen } from './screens/DeleteAccountScreen';
 import { ActivityDetailScreen } from './screens/ActivityDetailScreen';
+import { AthleteSearchScreen } from './screens/AthleteSearchScreen';
+import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { useActivityDetail } from './hooks/useActivityDetail';
+import { useSocial, usePublicProfile } from './hooks/useSocial';
 import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
@@ -143,6 +146,15 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const cycle = useCycle(measureView === 'ciclo');
 
   // Perfil também abre a área de conta (hoje: exclusão).
+  /**
+   * A busca de atletas e o perfil público moram dentro da aba Feed: as duas
+   * só existem para alimentar o canal "Seguindo", que nasce dali.
+   */
+  const [feedView, setFeedView] = useState<'feed' | 'buscar'>('feed');
+  const [openAthleteId, setOpenAthleteId] = useState<string | null>(null);
+  const social = useSocial();
+  const publicProfile = usePublicProfile(openAthleteId);
+
   const [profileView, setProfileView] = useState<'perfil' | 'conta'>('perfil');
   const account = useAccountSettings(profileView === 'conta');
 
@@ -355,8 +367,27 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           </div>
         )}
 
-        {currentTab === 'feed' && (
+        {currentTab === 'feed' && openAthleteId && (
+          <PublicProfileScreen
+            profile={publicProfile.profile}
+            isLoading={publicProfile.isLoading}
+            error={publicProfile.error}
+            onToggleFollow={publicProfile.toggleFollow}
+            onBack={() => setOpenAthleteId(null)}
+          />
+        )}
+
+        {currentTab === 'feed' && !openAthleteId && feedView === 'buscar' && (
+          <AthleteSearchScreen
+            social={social}
+            onOpenAthlete={(userId) => setOpenAthleteId(userId)}
+            onBack={() => setFeedView('feed')}
+          />
+        )}
+
+        {currentTab === 'feed' && !openAthleteId && feedView === 'feed' && (
           <FeedScreen
+            onOpenSearch={() => setFeedView('buscar')}
             posts={feedPosts}
             channel={feedChannel}
             isLoadingFeed={isLoadingFeed}
