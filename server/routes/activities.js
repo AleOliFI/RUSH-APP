@@ -298,7 +298,7 @@ module.exports = function activitiesRoutes(db) {
           `);
 
           for (const split of splits) {
-            insertSplit.run(
+            await insertSplit.run(
               uuidv4(), id, split.split_number || 1, split.distance_km != null ? Number(split.distance_km) : null,
               split.duration_seconds != null ? Number(split.duration_seconds) : null, split.avg_pace || null,
               split.avg_hr != null ? Number(split.avg_hr) : null, split.elevation_gain != null ? Number(split.elevation_gain) : null

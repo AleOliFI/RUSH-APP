@@ -131,22 +131,37 @@ app.use('/api/gear', gearRoutes(db));
 // Health Check
 // ============================================================
 
-app.get('/api/health', (req, res) => {
-  const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
-  const activityCount = db.prepare('SELECT COUNT(*) as count FROM activities').get();
-  const hrvCount = db.prepare('SELECT COUNT(*) as count FROM hrv_measurements').get();
+// O health check é a primeira coisa que alguem olha quando o deploy
+// parece fora do ar — entao ele precisa falhar alto. Se o banco nao
+// responde, a resposta e 503 com o motivo, e nao um 200 com numeros
+// vazios que faria o monitoramento dizer que esta tudo bem.
+app.get('/api/health', async (req, res) => {
+  try {
+    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+    const activityCount = await db.prepare('SELECT COUNT(*) as count FROM activities').get();
+    const hrvCount = await db.prepare('SELECT COUNT(*) as count FROM hrv_measurements').get();
 
-  res.json({
-    status: 'healthy',
-    app: 'Rush Performance API',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    database: {
-      users: userCount.count,
-      activities: activityCount.count,
-      hrv_measurements: hrvCount.count,
-    }
-  });
+    res.json({
+      status: 'healthy',
+      app: 'Rush Performance API',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      database: {
+        users: userCount.count,
+        activities: activityCount.count,
+        hrv_measurements: hrvCount.count,
+      }
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'unhealthy',
+      app: 'Rush Performance API',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      error: 'banco de dados indisponivel',
+      detail: err.message,
+    });
+  }
 });
 
 // ============================================================

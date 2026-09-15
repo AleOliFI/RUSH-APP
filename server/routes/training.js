@@ -90,7 +90,7 @@ module.exports = function trainingRoutes(db) {
           `);
 
           for (const session of sessions) {
-            insertSession.run(
+            await insertSession.run(
               uuidv4(),
               planId,
               session.week_number || 1,
@@ -323,7 +323,7 @@ module.exports = function trainingRoutes(db) {
         for (let week = 1; week <= numWeeks; week++) {
           const weekSessions = generateWeekSessions(templates, week, numWeeks, numDist, level);
           for (const session of weekSessions) {
-            insertSession.run(
+            await insertSession.run(
               uuidv4(), planId, week, session.day_of_week,
               session.type, session.distance_km, session.duration_min,
               session.target_hr_zone, session.description, session.is_fixed ? 1 : 0
