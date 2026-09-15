@@ -27,6 +27,7 @@ import { ActivityDetailScreen } from './screens/ActivityDetailScreen';
 import { AthleteSearchScreen } from './screens/AthleteSearchScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PublicProfileScreen } from './screens/PublicProfileScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { useActivityDetail } from './hooks/useActivityDetail';
 import { useSocial, usePublicProfile } from './hooks/useSocial';
 import { useNotifications } from './hooks/useNotifications';
@@ -165,11 +166,15 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
    */
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notifications = useNotifications();
-  const push = usePushNotifications(isNotificationsOpen);
   const publicProfile = usePublicProfile(openAthleteId);
 
-  const [profileView, setProfileView] = useState<'perfil' | 'conta'>('perfil');
-  const account = useAccountSettings(profileView === 'conta');
+  const [profileView, setProfileView] = useState<'perfil' | 'conta' | 'ajustes'>('perfil');
+  // Os ajustes e a exclusao leem os mesmos dados: o hook carrega para as duas.
+  const account = useAccountSettings(profileView === 'conta' || profileView === 'ajustes');
+
+  // Depois de `profileView`: um `const` so existe a partir da linha em
+  // que e declarado, e ler antes disso lanca ReferenceError.
+  const push = usePushNotifications(isNotificationsOpen || profileView === 'ajustes');
 
   /** Exclusão confirmada: encerra a sessão e volta para o login. */
   const handleDeleteAccount = useCallback(
@@ -451,7 +456,16 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             isDeleting={account.isSaving}
             error={account.error}
             onDelete={handleDeleteAccount}
-            onCancel={() => setProfileView('perfil')}
+            onCancel={() => setProfileView('ajustes')}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'ajustes' && (
+          <SettingsScreen
+            account={account}
+            push={push}
+            onBack={() => setProfileView('perfil')}
+            onOpenDeleteAccount={() => setProfileView('conta')}
           />
         )}
 
@@ -476,7 +490,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onOpenEditProfile={() => setIsAthleteModalOpen(true)}
             onViewImage={viewImage}
             onViewRoute={setActiveRoute}
-            onOpenAccount={() => setProfileView('conta')}
+            onOpenAccount={() => setProfileView('ajustes')}
           />
         )}
       </main>

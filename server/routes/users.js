@@ -462,6 +462,88 @@ module.exports = function usersRoutes(db) {
     }
   });
 
+  // ATENCAO A ORDEM: estas rotas precisam vir ANTES de GET
+  // /:username. O Express casa na ordem de registro, e '/:username'
+  // aceita qualquer coisa — com o bloco la embaixo, uma chamada a
+  // GET /users/privacy-zone era atendida pela busca de perfil e
+  // voltava "Usuario nao encontrado". O PUT e o DELETE funcionavam
+  // (nao ha '/:username' para esses verbos), entao a zona era
+  // gravada e nunca lida de volta: a tela dizia "nenhuma zona
+  // configurada" logo depois de salvar uma.
+
+  // =======================================================
+  // ZONA DE PRIVACIDADE DO PERCURSO
+  // =======================================================
+  // Um traçado publicado começa e termina onde o atleta mora. Sem
+  // esta zona, publicar uma corrida entrega o endereço.
+
+  const RAIO_MINIMO_M = 100;
+  const RAIO_MAXIMO_M = 2000;
+
+  router.get('/privacy-zone', authenticate, async (req, res) => {
+    try {
+      const zona = await db
+        .prepare('SELECT lat, lon, radius_m, label, updated_at FROM privacy_zones WHERE user_id = ?')
+        .get(req.user.id);
+      res.json({ zone: zona || null, limits: { min_radius_m: RAIO_MINIMO_M, max_radius_m: RAIO_MAXIMO_M } });
+    } catch (err) {
+      console.error('Get privacy zone error:', err);
+      res.status(500).json({ error: 'Erro ao buscar a zona de privacidade' });
+    }
+  });
+
+  router.put('/privacy-zone', authenticate, async (req, res) => {
+    try {
+      const { lat, lon, radius_m, label } = req.body || {};
+
+      const latitude = Number(lat);
+      const longitude = Number(lon);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+        return res.status(400).json({ error: 'Latitude inválida' });
+      }
+      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        return res.status(400).json({ error: 'Longitude inválida' });
+      }
+
+      const raio = Math.round(Number(radius_m) || 500);
+      if (raio < RAIO_MINIMO_M || raio > RAIO_MAXIMO_M) {
+        return res.status(400).json({
+          error: `O raio precisa ficar entre ${RAIO_MINIMO_M} e ${RAIO_MAXIMO_M} metros`,
+        });
+      }
+
+      const rotulo = typeof label === 'string' ? label.trim().slice(0, 60) || null : null;
+
+      await db.prepare(`
+        INSERT INTO privacy_zones (user_id, lat, lon, radius_m, label)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          lat = excluded.lat, lon = excluded.lon, radius_m = excluded.radius_m,
+          label = excluded.label, updated_at = datetime('now')
+      `).run(req.user.id, latitude, longitude, raio, rotulo);
+
+      const zona = await db
+        .prepare('SELECT lat, lon, radius_m, label, updated_at FROM privacy_zones WHERE user_id = ?')
+        .get(req.user.id);
+      res.json({ zone: zona });
+    } catch (err) {
+      console.error('Save privacy zone error:', err);
+      res.status(500).json({ error: 'Erro ao salvar a zona de privacidade' });
+    }
+  });
+
+  // Remover a zona volta a publicar o percurso inteiro — a tela
+  // precisa deixar isso claro antes de chamar.
+  router.delete('/privacy-zone', authenticate, async (req, res) => {
+    try {
+      await db.prepare('DELETE FROM privacy_zones WHERE user_id = ?').run(req.user.id);
+      res.json({ zone: null });
+    } catch (err) {
+      console.error('Delete privacy zone error:', err);
+      res.status(500).json({ error: 'Erro ao remover a zona de privacidade' });
+    }
+  });
+
   // -------------------------------------------------------
   // GET /api/users/:username
   // -------------------------------------------------------
@@ -481,7 +563,12 @@ module.exports = function usersRoutes(db) {
       // Stats
       const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(profile.user_id);
       const following = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(profile.user_id);
-      const activities = await db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND privacy = "public"').get(profile.user_id);
+      // privacy = 'public' com aspas SIMPLES: em SQL, aspas duplas sao
+      // identificador, nao texto. Com "public" o banco procurava uma
+      // COLUNA chamada public, nao achava, e esta rota devolvia 500 para
+      // qualquer perfil — o Postgres faria o mesmo, e de forma ainda
+      // mais estrita.
+      const activities = await db.prepare("SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND privacy = 'public'").get(profile.user_id);
       const totalDistance = await db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(profile.user_id);
 
       // Is following?
@@ -625,79 +712,6 @@ module.exports = function usersRoutes(db) {
     } catch (err) {
       console.error('Delete account error:', err);
       res.status(500).json({ error: 'Erro ao excluir conta' });
-    }
-  });
-
-  // =======================================================
-  // ZONA DE PRIVACIDADE DO PERCURSO
-  // =======================================================
-  // Um traçado publicado começa e termina onde o atleta mora. Sem
-  // esta zona, publicar uma corrida entrega o endereço.
-
-  const RAIO_MINIMO_M = 100;
-  const RAIO_MAXIMO_M = 2000;
-
-  router.get('/privacy-zone', authenticate, async (req, res) => {
-    try {
-      const zona = await db
-        .prepare('SELECT lat, lon, radius_m, label, updated_at FROM privacy_zones WHERE user_id = ?')
-        .get(req.user.id);
-      res.json({ zone: zona || null, limits: { min_radius_m: RAIO_MINIMO_M, max_radius_m: RAIO_MAXIMO_M } });
-    } catch (err) {
-      console.error('Get privacy zone error:', err);
-      res.status(500).json({ error: 'Erro ao buscar a zona de privacidade' });
-    }
-  });
-
-  router.put('/privacy-zone', authenticate, async (req, res) => {
-    try {
-      const { lat, lon, radius_m, label } = req.body || {};
-
-      const latitude = Number(lat);
-      const longitude = Number(lon);
-      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-        return res.status(400).json({ error: 'Latitude inválida' });
-      }
-      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-        return res.status(400).json({ error: 'Longitude inválida' });
-      }
-
-      const raio = Math.round(Number(radius_m) || 500);
-      if (raio < RAIO_MINIMO_M || raio > RAIO_MAXIMO_M) {
-        return res.status(400).json({
-          error: `O raio precisa ficar entre ${RAIO_MINIMO_M} e ${RAIO_MAXIMO_M} metros`,
-        });
-      }
-
-      const rotulo = typeof label === 'string' ? label.trim().slice(0, 60) || null : null;
-
-      await db.prepare(`
-        INSERT INTO privacy_zones (user_id, lat, lon, radius_m, label)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-          lat = excluded.lat, lon = excluded.lon, radius_m = excluded.radius_m,
-          label = excluded.label, updated_at = datetime('now')
-      `).run(req.user.id, latitude, longitude, raio, rotulo);
-
-      const zona = await db
-        .prepare('SELECT lat, lon, radius_m, label, updated_at FROM privacy_zones WHERE user_id = ?')
-        .get(req.user.id);
-      res.json({ zone: zona });
-    } catch (err) {
-      console.error('Save privacy zone error:', err);
-      res.status(500).json({ error: 'Erro ao salvar a zona de privacidade' });
-    }
-  });
-
-  // Remover a zona volta a publicar o percurso inteiro — a tela
-  // precisa deixar isso claro antes de chamar.
-  router.delete('/privacy-zone', authenticate, async (req, res) => {
-    try {
-      await db.prepare('DELETE FROM privacy_zones WHERE user_id = ?').run(req.user.id);
-      res.json({ zone: null });
-    } catch (err) {
-      console.error('Delete privacy zone error:', err);
-      res.status(500).json({ error: 'Erro ao remover a zona de privacidade' });
     }
   });
 

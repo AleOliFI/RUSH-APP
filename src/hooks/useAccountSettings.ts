@@ -29,6 +29,25 @@ export interface PrivacySettings {
   allow_messages: boolean;
 }
 
+/**
+ * Zona de privacidade do percurso: o ponto e o raio que são apagados
+ * das pontas do traçado antes de ele sair para outra pessoa.
+ * `null` significa que o atleta não configurou nenhuma — e então o
+ * percurso inteiro é publicado, começo e fim inclusive.
+ */
+export interface PrivacyZone {
+  lat: number;
+  lon: number;
+  radius_m: number;
+  label: string | null;
+  updated_at?: string | null;
+}
+
+export interface ZoneLimits {
+  min_radius_m: number;
+  max_radius_m: number;
+}
+
 export interface AccountSettingsData {
   settings: UserSettings | null;
   privacy: PrivacySettings | null;
@@ -39,6 +58,13 @@ export interface AccountSettingsData {
   /** Envia apenas os campos informados; um objeto vazio é recusado pelo backend. */
   updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
   updatePrivacy: (patch: Partial<PrivacySettings>) => Promise<void>;
+  /** Zona de privacidade do percurso, ou null se não houver. */
+  zone: PrivacyZone | null;
+  /** Faixa de raio aceita pelo backend; a tela não deve deixar sair dela. */
+  zoneLimits: ZoneLimits;
+  saveZone: (zone: { lat: number; lon: number; radius_m: number; label?: string | null }) => Promise<void>;
+  /** Remover volta a publicar o percurso inteiro. */
+  removeZone: () => Promise<void>;
   /** Exige a senha: exclusão é irreversível e não pode depender só do token. */
   deleteAccount: (password: string) => Promise<void>;
 }
@@ -70,9 +96,25 @@ function normalizePrivacy(raw: any): PrivacySettings | null {
   };
 }
 
+function normalizeZone(raw: any): PrivacyZone | null {
+  if (!raw) return null;
+  return {
+    lat: Number(raw.lat),
+    lon: Number(raw.lon),
+    radius_m: Number(raw.radius_m),
+    label: raw.label ?? null,
+    updated_at: raw.updated_at ?? null,
+  };
+}
+
+/** Mesmos limites do backend, usados até a primeira resposta chegar. */
+const LIMITES_PADRAO: ZoneLimits = { min_radius_m: 100, max_radius_m: 2000 };
+
 export function useAccountSettings(enabled = true): AccountSettingsData {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [privacy, setPrivacy] = useState<PrivacySettings | null>(null);
+  const [zone, setZone] = useState<PrivacyZone | null>(null);
+  const [zoneLimits, setZoneLimits] = useState<ZoneLimits>(LIMITES_PADRAO);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +123,13 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     setIsLoading(true);
     setError(null);
     try {
-      const me = await users.me();
+      // A zona vem de outra rota: /me nao a devolve. As duas saem
+      // juntas para a tela abrir de uma vez so.
+      const [me, zona] = await Promise.all([users.me(), users.privacyZone()]);
       setSettings(normalizeSettings(me?.settings));
       setPrivacy(normalizePrivacy(me?.privacy));
+      setZone(normalizeZone(zona?.zone));
+      if (zona?.limits) setZoneLimits(zona.limits);
     } catch (err: any) {
       setError(err?.message || 'Erro ao carregar as preferências');
     } finally {
@@ -125,6 +171,37 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     }
   }, []);
 
+  const saveZone = useCallback(
+    async (nova: { lat: number; lon: number; radius_m: number; label?: string | null }) => {
+      setIsSaving(true);
+      setError(null);
+      try {
+        const resposta = await users.savePrivacyZone(nova);
+        setZone(normalizeZone(resposta?.zone));
+      } catch (err: any) {
+        setError(err?.message || 'Não foi possível salvar a zona de privacidade');
+        throw err;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [],
+  );
+
+  const removeZone = useCallback(async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await users.removePrivacyZone();
+      setZone(null);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível remover a zona de privacidade');
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
   /**
    * Exclusão definitiva. Quem chama é responsável por confirmar com o
    * atleta antes e por encerrar a sessão depois — o backend marca a conta
@@ -152,6 +229,10 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     reload,
     updateSettings,
     updatePrivacy,
+    zone,
+    zoneLimits,
+    saveZone,
+    removeZone,
     deleteAccount,
   };
 }

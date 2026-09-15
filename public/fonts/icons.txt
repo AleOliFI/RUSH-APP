@@ -64,6 +64,7 @@ logout
 manage_accounts
 map
 monitoring
+my_location
 notifications
 notifications_active
 notifications_off
@@ -97,6 +98,7 @@ send
 sensors
 share
 shield
+shield_with_heart
 speed
 sports_martial_arts
 stacked_line_chart
