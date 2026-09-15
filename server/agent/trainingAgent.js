@@ -152,14 +152,32 @@ function classifyHrvStatus(lnrmssdToday, meanBaseline, sdBaseline, wellnessScore
 
 /**
  * Calcula a FC Máxima individualizada usando a Equação de Gellish et al. (2007)
+ * Uma FCmax MEDIDA num teste de campo vence qualquer estimativa. A
+ * formula por idade e uma media populacional: ela erra por individuo,
+ * e quem fez o teste ja tem o numero de verdade. Prescrever em cima da
+ * estimativa nesse caso joga o atleta na zona errada — com uma FCmax
+ * real de 201 e uma estimada de 188, o treino de limiar sairia 11 bpm
+ * abaixo do limiar dele, ou seja, em Z3 com nome de Z4.
+ *
+ * A precedencia mora AQUI, e nao em cada chamador, para que nenhuma
+ * tela use a estimativa por esquecimento.
+ *
  * @param {Object} params
  * @param {number} params.age - Idade em anos
  * @param {string} [params.gender] - 'male' | 'female'
  * @param {number} [params.weightKg] - Peso em kg
  * @param {number} [params.heightCm] - Altura em cm
- * @returns {number} FCmax estimada em bpm
+ * @param {number} [params.hrMaxTested] - FCmax medida (user_profiles.hr_max_tested)
+ * @returns {number} FCmax medida, quando houver; senao estimada, em bpm
  */
-function calculateMaxHr({ age, gender = 'male', weightKg = null, heightCm = null } = {}) {
+function calculateMaxHr({ age, gender = 'male', weightKg = null, heightCm = null, hrMaxTested = null } = {}) {
+  // A mesma faixa que o CHECK da tabela aceita: um valor fora dela nao
+  // e uma medida, e a estimativa e melhor do que um numero impossivel.
+  const medida = Number(hrMaxTested);
+  if (Number.isFinite(medida) && medida >= 120 && medida <= 220) {
+    return Math.round(medida);
+  }
+
   const safeAge = typeof age === 'number' && age > 0 ? age : 30;
   let bmi = 23.0;
   if (weightKg && heightCm && heightCm > 0) {
@@ -648,6 +666,8 @@ function generateTrainingSuggestion({
 
   // Cálculo de Zonas individualizadas
   const maxHr = calculateMaxHr(userProfile || { age: 30, gender: 'male' });
+  // `userProfile` carrega hrMaxTested quando a rota o preenche; a
+  // precedencia esta dentro de calculateMaxHr.
   const hrZones = calculateHrZones(maxHr);
 
   const suggestIceBath = shouldSuggestIceBath(periodizationPhase);

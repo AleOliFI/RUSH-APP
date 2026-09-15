@@ -128,6 +128,9 @@ module.exports = function activitiesRoutes(db) {
       gender: profile?.gender || 'male',
       weightKg: profile?.weight_kg,
       heightCm: profile?.height_cm,
+      // Senao a distribuicao por zona de cada treino sairia medida
+      // contra uma FCmax que nao e a do atleta.
+      hrMaxTested: profile?.hr_max_tested,
     });
     const zones = calculateHrZones(maxHr);
 

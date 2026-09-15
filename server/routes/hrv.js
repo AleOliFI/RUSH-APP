@@ -149,6 +149,8 @@ module.exports = function hrvRoutes(db) {
       gender: profile.gender || 'male',
       weightKg: profile.weight_kg,
       heightCm: profile.height_cm,
+      // A FCmax medida no teste de campo vence a estimativa por idade.
+      hrMaxTested: profile.hr_max_tested,
     } : { age: 30, gender: 'male' };
 
     const suggestion = generateTrainingSuggestion({
@@ -470,13 +472,25 @@ module.exports = function hrvRoutes(db) {
         gender: profile.gender || 'male',
         weightKg: profile.weight_kg,
         heightCm: profile.height_cm,
+        hrMaxTested: profile.hr_max_tested,
       } : { age: 30, gender: 'male' };
 
       const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
       const maxHr = calculateMaxHr(userProfileData);
       const zones = calculateHrZones(maxHr);
 
-      res.json({ max_hr: maxHr, zones });
+      // A tela precisa dizer de onde veio o numero. Uma FCmax estimada
+      // por idade e uma media populacional, e o atleta merece saber que
+      // as faixas dele sao um chute razoavel ate ele fazer o teste — e
+      // nao um dado medido nele.
+      const medida = Number(userProfileData.hrMaxTested);
+      const veioDeTeste = Number.isFinite(medida) && medida >= 120 && medida <= 220;
+
+      res.json({
+        max_hr: maxHr,
+        max_hr_source: veioDeTeste ? 'field_test' : 'age_estimate',
+        zones,
+      });
     } catch (err) {
       console.error('Zones calculation error:', err);
       res.status(500).json({ error: 'Erro ao calcular zonas de FC' });
