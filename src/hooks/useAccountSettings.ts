@@ -123,13 +123,34 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     setIsLoading(true);
     setError(null);
     try {
-      // A zona vem de outra rota: /me nao a devolve. As duas saem
-      // juntas para a tela abrir de uma vez so.
-      const [me, zona] = await Promise.all([users.me(), users.privacyZone()]);
+      // A zona vem de outra rota: /me não a devolve. As duas saem
+      // juntas para a tela abrir de uma vez só — mas com
+      // allSettled, e não all.
+      //
+      // Com `all`, uma falha na rota da zona derrubaria a promessa
+      // inteira e a tela ficaria SEM NENHUM interruptor: a pessoa
+      // perderia o acesso às preferências de notificação e
+      // privacidade por causa de um recurso secundário. Um backend
+      // antigo sem a tabela, ou uma falha de rede, bastaria.
+      const [respostaMe, respostaZona] = await Promise.allSettled([
+        users.me(),
+        users.privacyZone(),
+      ]);
+
+      if (respostaMe.status === 'rejected') throw respostaMe.reason;
+
+      const me = respostaMe.value;
       setSettings(normalizeSettings(me?.settings));
       setPrivacy(normalizePrivacy(me?.privacy));
-      setZone(normalizeZone(zona?.zone));
-      if (zona?.limits) setZoneLimits(zona.limits);
+
+      if (respostaZona.status === 'fulfilled') {
+        setZone(normalizeZone(respostaZona.value?.zone));
+        if (respostaZona.value?.limits) setZoneLimits(respostaZona.value.limits);
+      } else {
+        // Sem zona legível, o bloco da zona aparece como "nenhuma
+        // configurada". O resto da tela continua utilizável.
+        setZone(null);
+      }
     } catch (err: any) {
       setError(err?.message || 'Erro ao carregar as preferências');
     } finally {
