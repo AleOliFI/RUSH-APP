@@ -691,6 +691,24 @@ module.exports = async function initializeDatabase(db) {
   // ============================================================
 
   await db.exec(`
+    -- Zona de privacidade: um ponto e um raio. O traçado que cai
+    -- dentro dele é apagado antes de sair para qualquer outra pessoa.
+    -- Sem isso, publicar uma corrida que sai de casa entrega o
+    -- endereço de quem correu.
+    --
+    -- O dado bruto continua guardado: é do atleta, e ele precisa dele
+    -- para ver a própria corrida inteira. O recorte acontece na
+    -- leitura, para quem não é o dono.
+    CREATE TABLE IF NOT EXISTS privacy_zones (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      lat REAL NOT NULL CHECK (lat BETWEEN -90 AND 90),
+      lon REAL NOT NULL CHECK (lon BETWEEN -180 AND 180),
+      radius_m INTEGER NOT NULL DEFAULT 500 CHECK (radius_m BETWEEN 100 AND 2000),
+      label TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS privacy_settings (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       public_activities INTEGER DEFAULT 1,

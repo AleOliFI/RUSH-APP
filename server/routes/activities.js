@@ -8,6 +8,7 @@ const { authenticate, optionalAuth } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
+const { aplicarZona } = require('../services/zonaPrivacidade');
 
 module.exports = function activitiesRoutes(db) {
   const router = express.Router();
@@ -644,7 +645,18 @@ module.exports = function activitiesRoutes(db) {
 
       const hasLiked = await db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(activity.id, req.user.id);
 
-      const track = await readTrack(activity.id);
+      const trackBruto = await readTrack(activity.id);
+      // A zona de privacidade só age sobre quem NÃO é o dono. Esta é a
+      // única rota que entrega o traçado a terceiros — o GPX e o
+      // recorte já são restritos ao dono por 403.
+      const zonaAplicada = trackBruto
+        ? await aplicarZona(db, {
+            donoId: activity.user_id,
+            leitorId: req.user.id,
+            pontos: trackBruto.points,
+          })
+        : null;
+
       const hr = await readHrSamples(activity.id);
       const recorte = await db
         .prepare('SELECT trim_start_seconds, trim_end_seconds, original_distance_km, original_duration_seconds FROM activity_trims WHERE activity_id = ?')
@@ -653,7 +665,11 @@ module.exports = function activitiesRoutes(db) {
       res.json({
         activity,
         splits,
-        track: track ? track.points : null,
+        track: zonaAplicada ? zonaAplicada.points : null,
+        // A tela avisa que o começo e o fim foram escondidos, em vez
+        // de mostrar um percurso truncado sem explicação.
+        privacy_zone_applied: zonaAplicada ? zonaAplicada.trimmed : false,
+        privacy_zone_hid_all: zonaAplicada ? zonaAplicada.fully_hidden : false,
         hr_samples: hr ? hr.samples : null,
         trim: recorte || null,
         zone_distribution: hr ? await buildZoneDistribution(activity.user_id, hr.samples) : null,
