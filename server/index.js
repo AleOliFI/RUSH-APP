@@ -56,17 +56,51 @@ if (!configurarPush()) {
   console.warn('⚠️  Web Push desligado: defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY.');
 }
 
-// Auto-seed if running on Vercel or database is newly initialized
+// ============================================================
+// Semeadura automática — só onde ela é inofensiva
+// ------------------------------------------------------------
+// O seed não apenas insere: ele COMEÇA APAGANDO cerca de 20
+// tabelas, porque precisa de um estado conhecido para montar os
+// atletas de demonstração. Isso é exatamente o que se quer num
+// banco de desenvolvimento e exatamente o que não se pode fazer
+// num banco de produção.
+//
+// A condição antiga era só "não há usuários". Mas um Postgres
+// vazio é o estado NORMAL de um banco novo em produção, momentos
+// antes de alguém se cadastrar — e também o estado de um banco
+// que perdeu os usuários por outro motivo. Em qualquer dos casos,
+// semear sozinho destrói o que estiver nas outras tabelas.
+//
+// Então: em SQLite (desenvolvimento) o seed continua automático.
+// Em Postgres ele só roda se alguém pedir explicitamente, com
+// RUSH_SEED=1 — uma decisão, e não um efeito colateral do deploy.
+// ============================================================
+
+const ehPostgres = db.dialect === 'postgres';
+const seedPedidoExplicitamente = process.env.RUSH_SEED === '1';
+
 const arranque = prontidao.then(async () => {
-try {
-  const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
-  if (!userCount || Number(userCount.count) === 0) {
+  try {
+    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+    const bancoVazio = !userCount || Number(userCount.count) === 0;
+
+    if (!bancoVazio) return;
+
+    if (ehPostgres && !seedPedidoExplicitamente) {
+      console.warn(
+        '⚠️  Banco Postgres sem usuários, e a semeadura NÃO foi executada.\n' +
+        '    O seed apaga cerca de 20 tabelas antes de inserir, então em Postgres\n' +
+        '    ele exige uma decisão explícita. Para semear, rode o deploy uma vez\n' +
+        '    com RUSH_SEED=1 — e só faça isso num banco que possa ser apagado.',
+      );
+      return;
+    }
+
     console.log('⚡ Initializing database with seed data...');
     await seedDatabase(db);
+  } catch (e) {
+    console.warn('Auto-seed check warning:', e.message);
   }
-} catch (e) {
-  console.warn('Auto-seed check warning:', e.message);
-}
 });
 
 // ============================================================
