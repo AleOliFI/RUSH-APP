@@ -17,9 +17,15 @@ const initializeDatabase = require('./database/schema');
 
 const seedDatabase = require('./database/seedData');
 
-const DB_PATH = process.env.VERCEL
-  ? path.join('/tmp', 'rush_performance.db')
-  : path.join(__dirname, '..', 'data', 'rush_performance.db');
+// RUSH_DB_PATH existe para os testes: sem ela nao ha como subir o
+// servidor apontando para um arquivo descartavel, e um teste acabaria
+// escrevendo no banco de desenvolvimento — ou, com DATABASE_URL
+// definida, no Postgres de producao, que o seed limpa.
+const DB_PATH = process.env.RUSH_DB_PATH
+  ? path.resolve(process.env.RUSH_DB_PATH)
+  : process.env.VERCEL
+    ? path.join('/tmp', 'rush_performance.db')
+    : path.join(__dirname, '..', 'data', 'rush_performance.db');
 
 // Ensure data directory exists
 const fs = require('fs');

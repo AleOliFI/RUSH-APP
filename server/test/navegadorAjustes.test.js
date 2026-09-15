@@ -87,16 +87,40 @@ function esperarPorta(url, tentativas = 40) {
         if (n >= tentativas) return resolve(false);
         setTimeout(tentar, 500);
       });
-      req.setTimeout(2000, () => req.destroy());
+      // destroy() sozinho nao emite 'error' em toda versao do Node: sem
+      // este resolve/retry explicito, uma conexao aceita mas lenta (vite
+      // subindo a frio) penduraria a espera para sempre.
+      req.setTimeout(2000, () => {
+        req.destroy();
+        if (n >= tentativas) resolve(false);
+        else setTimeout(tentar, 500);
+      });
     };
     tentar();
   });
 }
 
 const processos = [];
+
+/**
+ * Encerra o GRUPO de processos, e nao so o filho direto.
+ *
+ * `npx vite` e um processo pai que lanca o vite de verdade. Matar so o
+ * pai deixa o vite orfao segurando a porta, e a proxima execucao falha
+ * com --strictPort dizendo "os servidores nao subiram" — um erro que
+ * nao tem nada a ver com o codigo em teste.
+ *
+ * `detached: true` no spawn poe cada filho no proprio grupo, e o PID
+ * negativo manda o sinal para o grupo inteiro. SIGTERM primeiro, para
+ * o vite conseguir liberar a porta.
+ */
 function encerrarTudo() {
   for (const p of processos) {
-    try { p.kill('SIGKILL'); } catch (_) {}
+    for (const sinal of ['SIGTERM', 'SIGKILL']) {
+      try { process.kill(-p.pid, sinal); } catch (_) {
+        try { p.kill(sinal); } catch (_) {}
+      }
+    }
   }
 }
 
@@ -125,10 +149,27 @@ function encerrarTudo() {
     process.exit(0);
   }
 
+  // O servidor precisa receber o banco descartavel EXPLICITAMENTE.
+  // Ele carrega o .env sozinho, e se houver DATABASE_URL la o app sobe
+  // em Postgres — que e onde roda a producao. O seed comeca apagando
+  // ~20 tabelas, entao rodar este teste com DATABASE_URL herdada
+  // destruiria dados reais. DATABASE_URL vai vazia de proposito.
+  const ambienteApi = {
+    ...process.env,
+    PORT: String(PORTA_API),
+    JWT_SECRET: 'teste-navegador',
+    QUIET: 'true',
+    RUSH_DB_PATH: dbTeste,
+    DATABASE_URL: '',
+  };
+  delete ambienteApi.POSTGRES_URL;
+  delete ambienteApi.VERCEL;
+
   const api = spawn('node', [path.join(RAIZ, 'server', 'index.js')], {
     cwd: RAIZ,
-    env: { ...process.env, PORT: String(PORTA_API), JWT_SECRET: 'teste-navegador', QUIET: 'true' },
+    env: ambienteApi,
     stdio: 'ignore',
+    detached: true,
   });
   processos.push(api);
 
@@ -139,6 +180,7 @@ function encerrarTudo() {
       cwd: RAIZ,
       env: process.env,
       stdio: 'ignore',
+      detached: true,
     },
   );
   processos.push(web);
@@ -152,8 +194,19 @@ function encerrarTudo() {
     process.exit(1);
   }
 
+  // Sem executablePath, o Playwright usa o navegador que ele mesmo
+  // instalou — o caso normal. O caminho fixo so entra quando existe de
+  // fato (este ambiente traz o Chromium fora do lugar padrao): cravá-lo
+  // sempre quebraria uma instalacao comum com ENOENT.
+  const fsMod = require('fs');
+  const candidatos = [
+    process.env.CHROMIUM_PATH,
+    '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  ].filter(Boolean);
+  const executavel = candidatos.find((c) => { try { return fsMod.existsSync(c); } catch (_) { return false; } });
+
   const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    ...(executavel ? { executablePath: executavel } : {}),
     args: ['--no-sandbox'],
   });
   const ctx = await browser.newContext({

@@ -141,7 +141,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onBack,
   onOpenDeleteAccount,
 }) => {
-  const { settings, privacy, zone, zoneLimits, isLoading, error } = account;
+  const { settings, privacy, zone, zoneUnavailable, zoneLimits, isLoading, error } = account;
 
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');
@@ -167,6 +167,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   // dentro de um <span> ternario para descobrir o nome do glifo, e uma
   // comparacao ali dentro faria 'ligado' ser tratado como icone.
   const pushInscrito = push.status === 'ligado';
+
+  // Montado fora do JSX: o extrator de ícones lê os literais de dentro
+  // de um <span> ternário, e expressões ali dentro viram falsos ícones.
+  const estadoDaZona = zoneUnavailable
+    ? {
+        icone: 'help',
+        titulo: 'Não foi possível verificar',
+        detalhe:
+          'A configuração da zona não pôde ser lida agora. Se você já tinha uma, ela continua valendo no servidor — recarregue para conferir.',
+      }
+    : zone
+      ? {
+          icone: 'shield',
+          titulo: 'Zona ativa',
+          detalhe: `${zone.label ? `${zone.label} — ` : ''}raio de ${zone.radius_m} m. O que cair dentro some das pontas do traçado.`,
+        }
+      : {
+          icone: 'shield_with_heart',
+          titulo: 'Nenhuma zona configurada',
+          detalhe: 'Seus percursos são publicados inteiros, com o ponto de partida e de chegada.',
+        };
 
   const definirSetting = (campo: keyof UserSettings) => async (valor: boolean) => {
     await account.updateSettings({ [campo]: valor } as Partial<UserSettings>);
@@ -447,27 +468,38 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             traçado antes de ele sair para outra pessoa — você continua vendo a sua corrida inteira.
           </p>
 
+          {/* Três estados, e não dois. Quando a leitura da zona falha,
+              `zone` é null — mas isso significa "não sei", e não "não
+              existe". Dizer a alguém que o percurso dela é publicado
+              inteiro quando a zona pode estar ativa é uma afirmação
+              falsa sobre a privacidade dela, e a errada para arriscar. */}
           <div
-            className={`rounded-xl p-3 border ${
-              zone ? 'bg-[#101010] border-[#22C55E]' : 'bg-[#101010] border-[#EF4444]'
+            className={`rounded-xl p-3 border bg-[#101010] ${
+              zoneUnavailable
+                ? 'border-[#F59E0B]'
+                : zone
+                  ? 'border-[#22C55E]'
+                  : 'border-[#EF4444]'
             }`}
           >
             <div className="flex items-start gap-2">
               <span
                 className={`material-symbols-outlined text-[18px] ${
-                  zone ? 'text-[#22C55E]' : 'text-[#EF4444]'
+                  zoneUnavailable
+                    ? 'text-[#F59E0B]'
+                    : zone
+                      ? 'text-[#22C55E]'
+                      : 'text-[#EF4444]'
                 }`}
               >
-                {zone ? 'shield' : 'shield_with_heart'}
+                {estadoDaZona.icone}
               </span>
               <div className="flex-1 min-w-0">
                 <span className="text-xs font-bold text-[#F7F5F3] block">
-                  {zone ? 'Zona ativa' : 'Nenhuma zona configurada'}
+                  {estadoDaZona.titulo}
                 </span>
                 <span className="text-[10px] text-[#A1A1AA] leading-relaxed block mt-0.5">
-                  {zone
-                    ? `${zone.label ? `${zone.label} — ` : ''}raio de ${zone.radius_m} m. O que cair dentro some das pontas do traçado.`
-                    : 'Seus percursos são publicados inteiros, com o ponto de partida e de chegada.'}
+                  {estadoDaZona.detalhe}
                 </span>
               </div>
             </div>

@@ -60,6 +60,16 @@ export interface AccountSettingsData {
   updatePrivacy: (patch: Partial<PrivacySettings>) => Promise<void>;
   /** Zona de privacidade do percurso, ou null se não houver. */
   zone: PrivacyZone | null;
+  /**
+   * A leitura da zona falhou, então `zone: null` aqui significa
+   * "não sei", e NÃO "não existe".
+   *
+   * A tela precisa da diferença: afirmar "seus percursos são
+   * publicados inteiros" quando a zona pode estar ativa é uma
+   * afirmação falsa sobre a privacidade de alguém — e a errada
+   * para se arriscar.
+   */
+  zoneUnavailable: boolean;
   /** Faixa de raio aceita pelo backend; a tela não deve deixar sair dela. */
   zoneLimits: ZoneLimits;
   saveZone: (zone: { lat: number; lon: number; radius_m: number; label?: string | null }) => Promise<void>;
@@ -114,6 +124,7 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [privacy, setPrivacy] = useState<PrivacySettings | null>(null);
   const [zone, setZone] = useState<PrivacyZone | null>(null);
+  const [zoneUnavailable, setZoneUnavailable] = useState(false);
   const [zoneLimits, setZoneLimits] = useState<ZoneLimits>(LIMITES_PADRAO);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -145,11 +156,13 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
 
       if (respostaZona.status === 'fulfilled') {
         setZone(normalizeZone(respostaZona.value?.zone));
+        setZoneUnavailable(false);
         if (respostaZona.value?.limits) setZoneLimits(respostaZona.value.limits);
       } else {
-        // Sem zona legível, o bloco da zona aparece como "nenhuma
-        // configurada". O resto da tela continua utilizável.
+        // Não dá para dizer que não há zona: dá para dizer que não
+        // foi possível ler. O resto da tela continua utilizável.
         setZone(null);
+        setZoneUnavailable(true);
       }
     } catch (err: any) {
       setError(err?.message || 'Erro ao carregar as preferências');
@@ -199,6 +212,7 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
       try {
         const resposta = await users.savePrivacyZone(nova);
         setZone(normalizeZone(resposta?.zone));
+        setZoneUnavailable(false);
       } catch (err: any) {
         setError(err?.message || 'Não foi possível salvar a zona de privacidade');
         throw err;
@@ -215,6 +229,7 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     try {
       await users.removePrivacyZone();
       setZone(null);
+      setZoneUnavailable(false);
     } catch (err: any) {
       setError(err?.message || 'Não foi possível remover a zona de privacidade');
       throw err;
@@ -251,6 +266,7 @@ export function useAccountSettings(enabled = true): AccountSettingsData {
     updateSettings,
     updatePrivacy,
     zone,
+    zoneUnavailable,
     zoneLimits,
     saveZone,
     removeZone,

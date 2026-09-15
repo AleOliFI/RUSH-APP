@@ -49,6 +49,7 @@ gps_off
 group
 groups
 healing
+help
 history
 how_to_reg
 image
