@@ -6,7 +6,9 @@
 const assert = require('assert');
 const http = require('http');
 const express = require('express');
-const Database = require('better-sqlite3');
+// Adaptador em vez do driver cru: as rotas agora usam transação
+// assíncrona, que o better-sqlite3 recusa.
+const { Database } = require('../database/sqlite');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
@@ -161,33 +163,33 @@ async function runAdversarialSuite() {
   const PEER_ATHLETE_ID = '00000000-0000-4000-8000-000000000004';
   const UNLINKED_COACH_ID = '00000000-0000-4000-8000-000000000005';
 
-  db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(OWNER_ID, 'owner@rush.com', passwordHash, 'owner', ACADEMY_ID);
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(OWNER_ID, 'Academy Owner', 'academy_owner');
-  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(OWNER_ID);
-  db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(OWNER_ID);
+  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(OWNER_ID, 'owner@rush.com', passwordHash, 'owner', ACADEMY_ID);
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(OWNER_ID, 'Academy Owner', 'academy_owner');
+  await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(OWNER_ID);
+  await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(OWNER_ID);
 
-  db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(COACH_ID, 'coach@rush.com', passwordHash, 'coach', ACADEMY_ID);
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(COACH_ID, 'Carlos Coach', 'coach_carlos');
-  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(COACH_ID);
-  db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(COACH_ID);
+  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(COACH_ID, 'coach@rush.com', passwordHash, 'coach', ACADEMY_ID);
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(COACH_ID, 'Carlos Coach', 'coach_carlos');
+  await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(COACH_ID);
+  await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(COACH_ID);
 
-  db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(UNLINKED_COACH_ID, 'unlinked_coach@rush.com', passwordHash, 'coach', null);
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(UNLINKED_COACH_ID, 'Unlinked Coach', 'unlinked_coach');
-  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
-  db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
+  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(UNLINKED_COACH_ID, 'unlinked_coach@rush.com', passwordHash, 'coach', null);
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(UNLINKED_COACH_ID, 'Unlinked Coach', 'unlinked_coach');
+  await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
+  await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
 
-  db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(ATHLETE_ID, 'athlete@rush.com', passwordHash, 'athlete', ACADEMY_ID);
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(ATHLETE_ID, 'Alessandro Atleta', 'alessandro_runner');
-  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(ATHLETE_ID);
-  db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(ATHLETE_ID);
-  db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(ATHLETE_ID, 21, 'intermediate');
+  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(ATHLETE_ID, 'athlete@rush.com', passwordHash, 'athlete', ACADEMY_ID);
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(ATHLETE_ID, 'Alessandro Atleta', 'alessandro_runner');
+  await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(ATHLETE_ID);
+  await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(ATHLETE_ID);
+  await db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(ATHLETE_ID, 21, 'intermediate');
 
-  db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(PEER_ATHLETE_ID, 'peer@rush.com', passwordHash, 'athlete', null);
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(PEER_ATHLETE_ID, 'Peer Runner', 'peer_runner');
-  db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(PEER_ATHLETE_ID);
-  db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(PEER_ATHLETE_ID);
+  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(PEER_ATHLETE_ID, 'peer@rush.com', passwordHash, 'athlete', null);
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(PEER_ATHLETE_ID, 'Peer Runner', 'peer_runner');
+  await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(PEER_ATHLETE_ID);
+  await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(PEER_ATHLETE_ID);
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO academies (id, name, owner_id, plan_type, max_athletes)
     VALUES (?, ?, ?, 'pro', 150)
   `).run(ACADEMY_ID, 'Rush Elite Academy', OWNER_ID);

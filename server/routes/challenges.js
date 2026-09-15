@@ -15,14 +15,14 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/challenges — Listar desafios
   // -------------------------------------------------------
-  router.get('/', authenticate, (req, res) => {
+  router.get('/', authenticate, async (req, res) => {
     try {
       const { status = 'active' } = req.query;
       const today = new Date().toISOString().split('T')[0];
 
       let challenges;
       if (status === 'active') {
-        challenges = db.prepare(`
+        challenges = await db.prepare(`
           SELECT c.*, up.name as creator_name,
             (SELECT COUNT(*) FROM challenge_participants WHERE challenge_id = c.id) as participants_count
           FROM challenges c
@@ -31,7 +31,7 @@ module.exports = function challengesRoutes(db) {
           ORDER BY c.start_date DESC
         `).all(today);
       } else {
-        challenges = db.prepare(`
+        challenges = await db.prepare(`
           SELECT c.*, up.name as creator_name,
             (SELECT COUNT(*) FROM challenge_participants WHERE challenge_id = c.id) as participants_count
           FROM challenges c
@@ -42,8 +42,8 @@ module.exports = function challengesRoutes(db) {
       }
 
       // Check participation
-      const enriched = challenges.map(c => {
-        const participation = db.prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(c.id, req.user.id);
+      const enriched = await Promise.all(challenges.map(async (c) => {
+        const participation = await db.prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(c.id, req.user.id);
         return {
           ...c,
           is_participating: !!participation,
@@ -51,7 +51,7 @@ module.exports = function challengesRoutes(db) {
           my_status: participation?.status || null,
           progress_pct: (participation && c.target_value > 0) ? +((participation.progress_value / c.target_value) * 100).toFixed(1) : 0,
         };
-      });
+      }));
 
       res.json({ challenges: enriched });
     } catch (err) {
@@ -63,7 +63,7 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/challenges — Criar desafio
   // -------------------------------------------------------
-  router.post('/', authenticate, authorize('coach', 'owner', 'admin'), (req, res) => {
+  router.post('/', authenticate, authorize('coach', 'owner', 'admin'), async (req, res) => {
     try {
       const { name, description, type, target_value, target_unit, start_date, end_date } = req.body;
 
@@ -94,12 +94,12 @@ module.exports = function challengesRoutes(db) {
       const formattedStartDate = startDateObj.toISOString().split('T')[0];
       const formattedEndDate = endDateObj.toISOString().split('T')[0];
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO challenges (id, name, description, type, target_value, target_unit, start_date, end_date, academy_id, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, String(name).trim(), description ? String(description).trim() : '', type, numTarget, String(target_unit).trim(), formattedStartDate, formattedEndDate, req.user.academy_id || null, req.user.id);
 
-      const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(id);
+      const challenge = await db.prepare('SELECT * FROM challenges WHERE id = ?').get(id);
       res.status(201).json(challenge);
     } catch (err) {
       console.error('Create challenge error:', err);
@@ -110,14 +110,14 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/challenges/:id/join — Participar
   // -------------------------------------------------------
-  router.post('/:id/join', authenticate, (req, res) => {
+  router.post('/:id/join', authenticate, async (req, res) => {
     try {
       const challengeId = req.params.id;
       if (!challengeId) {
         return res.status(400).json({ error: 'ID do desafio obrigatório' });
       }
 
-      const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
+      const challenge = await db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
       if (!challenge) {
         return res.status(404).json({ error: 'Desafio não encontrado' });
       }
@@ -127,12 +127,12 @@ module.exports = function challengesRoutes(db) {
         return res.status(400).json({ error: 'Este desafio já encerrou' });
       }
 
-      const existing = db.prepare('SELECT 1 FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(challenge.id, req.user.id);
+      const existing = await db.prepare('SELECT 1 FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(challenge.id, req.user.id);
       if (existing) {
         return res.status(409).json({ error: 'Você já participa deste desafio' });
       }
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO challenge_participants (challenge_id, user_id, progress_value, status)
         VALUES (?, ?, 0, 'active')
       `).run(challenge.id, req.user.id);
@@ -147,19 +147,19 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/challenges/:id/leaderboard — Ranking
   // -------------------------------------------------------
-  router.get('/:id/leaderboard', authenticate, (req, res) => {
+  router.get('/:id/leaderboard', authenticate, async (req, res) => {
     try {
       const challengeId = req.params.id;
       if (!challengeId) {
         return res.status(400).json({ error: 'ID do desafio obrigatório' });
       }
 
-      const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
+      const challenge = await db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
       if (!challenge) {
         return res.status(404).json({ error: 'Desafio não encontrado' });
       }
 
-      const leaderboard = db.prepare(`
+      const leaderboard = await db.prepare(`
         SELECT cp.*, up.name, up.username, up.avatar_url
         FROM challenge_participants cp
         JOIN user_profiles up ON up.user_id = cp.user_id
@@ -184,7 +184,7 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/challenges/:id/update-progress — Atualizar progresso
   // -------------------------------------------------------
-  router.post('/:id/update-progress', authenticate, (req, res) => {
+  router.post('/:id/update-progress', authenticate, async (req, res) => {
     try {
       const { progress_value } = req.body;
       const challengeId = req.params.id;
@@ -202,12 +202,12 @@ module.exports = function challengesRoutes(db) {
         return res.status(400).json({ error: 'progress_value deve ser um número não-negativo' });
       }
 
-      const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
+      const challenge = await db.prepare('SELECT * FROM challenges WHERE id = ?').get(challengeId);
       if (!challenge) {
         return res.status(404).json({ error: 'Desafio não encontrado' });
       }
 
-      const participant = db.prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(challengeId, req.user.id);
+      const participant = await db.prepare('SELECT * FROM challenge_participants WHERE challenge_id = ? AND user_id = ?').get(challengeId, req.user.id);
       if (!participant) {
         return res.status(403).json({ error: 'Você não participa deste desafio' });
       }
@@ -215,13 +215,13 @@ module.exports = function challengesRoutes(db) {
       const newStatus = numProgress >= challenge.target_value ? 'completed' : 'active';
       const completedAt = newStatus === 'completed' ? new Date().toISOString() : null;
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE challenge_participants SET progress_value = ?, status = ?, completed_at = ?
         WHERE challenge_id = ? AND user_id = ?
       `).run(numProgress, newStatus, completedAt, challengeId, req.user.id);
 
       if (newStatus === 'completed' && participant.status !== 'completed') {
-        criarNotificacao(db, {
+        await criarNotificacao(db, {
           userId: req.user.id,
           type: 'challenge',
           message: `🎉 Parabéns! Você completou o desafio "${challenge.name}"!`,
@@ -238,9 +238,9 @@ module.exports = function challengesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/challenges/achievements/my — Conquistas do usuário
   // -------------------------------------------------------
-  router.get('/achievements/my', authenticate, (req, res) => {
+  router.get('/achievements/my', authenticate, async (req, res) => {
     try {
-      const earned = db.prepare(`
+      const earned = await db.prepare(`
         SELECT a.*, ua.earned_at, ua.is_viewed
         FROM user_achievements ua
         JOIN achievements a ON a.id = ua.achievement_id
@@ -248,10 +248,10 @@ module.exports = function challengesRoutes(db) {
         ORDER BY ua.earned_at DESC
       `).all(req.user.id);
 
-      const allAchievements = db.prepare('SELECT * FROM achievements').all();
+      const allAchievements = await db.prepare('SELECT * FROM achievements').all();
 
       // Mark as viewed
-      db.prepare("UPDATE user_achievements SET is_viewed = 1 WHERE user_id = ? AND is_viewed = 0").run(req.user.id);
+      await db.prepare("UPDATE user_achievements SET is_viewed = 1 WHERE user_id = ? AND is_viewed = 0").run(req.user.id);
 
       res.json({
         earned,

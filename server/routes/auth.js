@@ -11,7 +11,7 @@ const jwt = require('jsonwebtoken');
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-z0-9_]{3,30}$/i;
 
-function generateUniqueRefreshToken(user) {
+async function generateUniqueRefreshToken(user) {
   return jwt.sign(
     { id: user.id, type: 'refresh', jti: uuidv4() },
     JWT_SECRET,
@@ -52,12 +52,12 @@ module.exports = function authRoutes(db) {
       const role = 'athlete';
 
       // Check existing user
-      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
+      const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail);
       if (existing) {
         return res.status(409).json({ error: 'Email já cadastrado' });
       }
 
-      const existingUsername = db.prepare('SELECT user_id FROM user_profiles WHERE username = ?').get(normalizedUsername);
+      const existingUsername = await db.prepare('SELECT user_id FROM user_profiles WHERE username = ?').get(normalizedUsername);
       if (existingUsername) {
         return res.status(409).json({ error: 'Username já em uso' });
       }
@@ -69,30 +69,30 @@ module.exports = function authRoutes(db) {
       const hasOnboarding = !!(distance_km && level && [5, 10, 21, 42].includes(Number(distance_km)));
 
       // Transaction: create user + profile + settings + privacy + optional objectives
-      const createUser = db.transaction(() => {
-        db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(userId, normalizedEmail, passwordHash, role);
+      const createUser = db.transaction(async () => {
+        await db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(userId, normalizedEmail, passwordHash, role);
 
-        db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(userId, name.trim(), normalizedUsername);
+        await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(userId, name.trim(), normalizedUsername);
 
-        db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(userId);
+        await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(userId);
 
-        db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(userId);
+        await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(userId);
 
         if (hasOnboarding) {
-          db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(userId, Number(distance_km), level);
+          await db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(userId, Number(distance_km), level);
         }
       });
 
-      createUser();
+      await createUser();
 
       const userPayload = { id: userId, email: normalizedEmail, role, academy_id: null };
       const accessToken = generateAccessToken(userPayload);
-      const refreshToken = generateUniqueRefreshToken(userPayload);
+      const refreshToken = await generateUniqueRefreshToken(userPayload);
 
       // Store refresh token
       const refreshId = uuidv4();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, userId, refreshToken, expiresAt);
+      await db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, userId, refreshToken, expiresAt);
 
       const userResponse = {
         id: userId,
@@ -131,7 +131,7 @@ module.exports = function authRoutes(db) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const user = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+      const user = await db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
       if (!user) {
         return res.status(401).json({ error: 'Email ou senha incorretos' });
       }
@@ -141,19 +141,19 @@ module.exports = function authRoutes(db) {
         return res.status(401).json({ error: 'Email ou senha incorretos' });
       }
 
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(user.id);
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(user.id);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(user.id);
 
       const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
 
       const tokenPayload = { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id };
       const accessToken = generateAccessToken(tokenPayload);
-      const refreshToken = generateUniqueRefreshToken(tokenPayload);
+      const refreshToken = await generateUniqueRefreshToken(tokenPayload);
 
       // Store refresh token
       const refreshId = uuidv4();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, user.id, refreshToken, expiresAt);
+      await db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, user.id, refreshToken, expiresAt);
 
       const userResponse = {
         id: user.id,
@@ -184,7 +184,7 @@ module.exports = function authRoutes(db) {
   // -------------------------------------------------------
   // POST /api/auth/refresh
   // -------------------------------------------------------
-  router.post('/refresh', (req, res) => {
+  router.post('/refresh', async (req, res) => {
     try {
       const { refresh_token, refreshToken } = req.body;
       const tokenToVerify = refresh_token || refreshToken;
@@ -202,19 +202,19 @@ module.exports = function authRoutes(db) {
       }
 
       // Check if token exists in DB
-      const stored = db.prepare('SELECT * FROM refresh_tokens WHERE token = ? AND user_id = ?').get(tokenToVerify, decoded.id);
+      const stored = await db.prepare('SELECT * FROM refresh_tokens WHERE token = ? AND user_id = ?').get(tokenToVerify, decoded.id);
       if (!stored) {
         return res.status(401).json({ error: 'Refresh token não encontrado ou já revogado' });
       }
 
       // Check expiration
       if (new Date(stored.expires_at) < new Date()) {
-        db.prepare('DELETE FROM refresh_tokens WHERE id = ?').run(stored.id);
+        await db.prepare('DELETE FROM refresh_tokens WHERE id = ?').run(stored.id);
         return res.status(401).json({ error: 'Refresh token expirado' });
       }
 
       // Get user
-      const user = db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(decoded.id);
+      const user = await db.prepare('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL').get(decoded.id);
       if (!user) {
         return res.status(401).json({ error: 'Usuário não encontrado' });
       }
@@ -222,16 +222,16 @@ module.exports = function authRoutes(db) {
       // Generate new unique tokens
       const tokenPayload = { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id };
       const newAccessToken = generateAccessToken(tokenPayload);
-      const newRefreshToken = generateUniqueRefreshToken(tokenPayload);
+      const newRefreshToken = await generateUniqueRefreshToken(tokenPayload);
 
       // Rotate refresh token atomically: remove consumed token, insert fresh rotated token
-      const rotateToken = db.transaction(() => {
-        db.prepare('DELETE FROM refresh_tokens WHERE id = ?').run(stored.id);
+      const rotateToken = db.transaction(async () => {
+        await db.prepare('DELETE FROM refresh_tokens WHERE id = ?').run(stored.id);
         const refreshId = uuidv4();
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, user.id, newRefreshToken, expiresAt);
+        await db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(refreshId, user.id, newRefreshToken, expiresAt);
       });
-      rotateToken();
+      await rotateToken();
 
       res.json({
         token: newAccessToken,
@@ -248,9 +248,9 @@ module.exports = function authRoutes(db) {
   // -------------------------------------------------------
   // POST /api/auth/logout
   // -------------------------------------------------------
-  router.post('/logout', authenticate, (req, res) => {
+  router.post('/logout', authenticate, async (req, res) => {
     try {
-      db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(req.user.id);
+      await db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(req.user.id);
       res.json({ message: 'Logout realizado com sucesso' });
     } catch (err) {
       console.error('Logout error:', err);
@@ -261,16 +261,16 @@ module.exports = function authRoutes(db) {
   // -------------------------------------------------------
   // GET /api/auth/me
   // -------------------------------------------------------
-  router.get('/me', authenticate, (req, res) => {
+  router.get('/me', authenticate, async (req, res) => {
     try {
-      const user = db.prepare('SELECT id, email, role, academy_id, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
+      const user = await db.prepare('SELECT id, email, role, academy_id, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
-      const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
-      const privacy = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
+      const settings = await db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
+      const privacy = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
 
       const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
 
@@ -314,7 +314,7 @@ module.exports = function authRoutes(db) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const user = db.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+      const user = await db.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
 
       if (!user) {
         return res.status(404).json({ error: 'Nenhum usuário cadastrado com este email' });
@@ -324,7 +324,7 @@ module.exports = function authRoutes(db) {
       const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora
 
-      db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(resetCode, expiresAt, user.id);
+      await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(resetCode, expiresAt, user.id);
 
       res.json({
         success: true,
@@ -353,7 +353,7 @@ module.exports = function authRoutes(db) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      const user = db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
+      const user = await db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
 
       if (!user) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -368,15 +368,15 @@ module.exports = function authRoutes(db) {
       }
 
       const passwordHash = await bcrypt.hash(new_password, 10);
-      db.prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?').run(passwordHash, user.id);
+      await db.prepare('UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?').run(passwordHash, user.id);
 
       // Auto login: generate fresh tokens
       const userPayload = { id: user.id, email: user.email, role: user.role, academy_id: user.academy_id };
       const accessToken = generateAccessToken(userPayload);
-      const refreshToken = generateUniqueRefreshToken(userPayload);
+      const refreshToken = await generateUniqueRefreshToken(userPayload);
 
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(user.id);
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(user.id);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(user.id);
       const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
 
       res.json({

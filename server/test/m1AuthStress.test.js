@@ -6,7 +6,9 @@
 const assert = require('assert');
 const http = require('http');
 const express = require('express');
-const Database = require('better-sqlite3');
+// Adaptador em vez do driver cru: as rotas agora usam transação
+// assíncrona, que o better-sqlite3 recusa.
+const { Database } = require('../database/sqlite');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
@@ -195,7 +197,7 @@ async function runSuite() {
     assert.strictEqual(res.body.user.role, 'athlete');
 
     // Direct DB check
-    const dbUser = db.prepare('SELECT role FROM users WHERE email = ?').get('hacker_owner@rush.com');
+    const dbUser = await db.prepare('SELECT role FROM users WHERE email = ?').get('hacker_owner@rush.com');
     assert.strictEqual(dbUser.role, 'athlete');
   });
 
@@ -210,7 +212,7 @@ async function runSuite() {
     assert.strictEqual(res.status, 201);
     assert.strictEqual(res.body.user.role, 'athlete');
 
-    const dbUser = db.prepare('SELECT role FROM users WHERE email = ?').get('hacker_admin@rush.com');
+    const dbUser = await db.prepare('SELECT role FROM users WHERE email = ?').get('hacker_admin@rush.com');
     assert.strictEqual(dbUser.role, 'athlete');
   });
 
@@ -421,9 +423,9 @@ async function runSuite() {
   // Insert seed-like users into test db
   const seedPasswordHash = require('bcryptjs').hashSync('123456', 10);
   const alessandroId = '00000000-0000-4000-8000-000000000001';
-  db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(alessandroId, 'alessandro@rush.com', seedPasswordHash, 'owner');
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(alessandroId, 'Alessandro', 'alessandro_rush');
-  db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(alessandroId, 42, 'advanced');
+  await db.prepare('INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)').run(alessandroId, 'alessandro@rush.com', seedPasswordHash, 'owner');
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(alessandroId, 'Alessandro', 'alessandro_rush');
+  await db.prepare('INSERT INTO user_objectives (user_id, distance_km, level) VALUES (?, ?, ?)').run(alessandroId, 42, 'advanced');
 
   await test('Seed account alessandro@rush.com logs in with 123456 and has_onboarding: true', async () => {
     const res = await makeRequest('POST', '/api/auth/login', {

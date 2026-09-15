@@ -24,7 +24,9 @@ const os = require('os');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+// Adaptador em vez do driver cru: as rotas agora usam transação
+// assíncrona, que o better-sqlite3 recusa.
+const { Database } = require('../database/sqlite');
 const webpush = require('web-push');
 
 const CAMINHO_DB = path.join(__dirname, '..', '..', 'data', `push-test-${process.pid}.db`);
@@ -101,8 +103,8 @@ function parDeChavesDoNavegador() {
   const { criarNotificacao, enviarPush, configurarPush, pushDisponivel } = servicoNotif;
 
   const uid = crypto.randomUUID();
-  db.prepare('INSERT INTO users (id, email, password_hash) VALUES (?,?,?)').run(uid, `push-${uid}@t.test`, 'x');
-  db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?,?,?)').run(uid, 'Push Tester', `push_${uid.slice(0, 8)}`);
+  await db.prepare('INSERT INTO users (id, email, password_hash) VALUES (?,?,?)').run(uid, `push-${uid}@t.test`, 'x');
+  await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?,?,?)').run(uid, 'Push Tester', `push_${uid.slice(0, 8)}`);
 
   await teste('P1: configurarPush liga com as chaves VAPID no ambiente', () => {
     assert.strictEqual(configurarPush(), true);
@@ -111,9 +113,9 @@ function parDeChavesDoNavegador() {
 
   const viva = parDeChavesDoNavegador();
   const morta = parDeChavesDoNavegador();
-  db.prepare('INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth) VALUES (?,?,?,?)')
+  await db.prepare('INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth) VALUES (?,?,?,?)')
     .run(`${base}/viva`, uid, viva.p256dh, viva.auth);
-  db.prepare('INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth) VALUES (?,?,?,?)')
+  await db.prepare('INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth) VALUES (?,?,?,?)')
     .run(`${base}/morta`, uid, morta.p256dh, morta.auth);
 
   await teste('P2: entrega na inscrição viva e apaga a que respondeu 410', async () => {
@@ -121,7 +123,7 @@ function parDeChavesDoNavegador() {
     assert.strictEqual(r.enviados, 1, 'a inscrição viva deveria receber');
     assert.strictEqual(r.removidos, 1, 'a inscrição de endpoint morto deveria sair do banco');
 
-    const restantes = db.prepare('SELECT endpoint FROM push_subscriptions WHERE user_id = ?').all(uid);
+    const restantes = await db.prepare('SELECT endpoint FROM push_subscriptions WHERE user_id = ?').all(uid);
     assert.strictEqual(restantes.length, 1);
     assert.ok(restantes[0].endpoint.endsWith('/viva'));
   });
@@ -137,7 +139,7 @@ function parDeChavesDoNavegador() {
   });
 
   await teste('P4: push desligado nas preferências não envia nada', async () => {
-    db.prepare('INSERT INTO user_settings (user_id, push_notifications) VALUES (?, 0)').run(uid);
+    await db.prepare('INSERT INTO user_settings (user_id, push_notifications) VALUES (?, 0)').run(uid);
     const antes = recebidas.length;
     const r = await enviarPush(db, uid, { id: 'n2', type: 'like', message: 'não deveria sair' });
     assert.strictEqual(r.enviados, 0);
@@ -145,7 +147,7 @@ function parDeChavesDoNavegador() {
   });
 
   await teste('P5: notifications_enabled desligado silencia o push inteiro', async () => {
-    db.prepare('UPDATE user_settings SET push_notifications = 1, notifications_enabled = 0 WHERE user_id = ?').run(uid);
+    await db.prepare('UPDATE user_settings SET push_notifications = 1, notifications_enabled = 0 WHERE user_id = ?').run(uid);
     const antes = recebidas.length;
     const r = await enviarPush(db, uid, { id: 'n3', type: 'like', message: 'também não' });
     assert.strictEqual(r.enviados, 0);
@@ -153,13 +155,13 @@ function parDeChavesDoNavegador() {
   });
 
   await teste('P6: criarNotificacao grava a linha e dispara o push', async () => {
-    db.prepare('UPDATE user_settings SET notifications_enabled = 1 WHERE user_id = ?').run(uid);
+    await db.prepare('UPDATE user_settings SET notifications_enabled = 1 WHERE user_id = ?').run(uid);
     const antes = recebidas.length;
 
-    const id = criarNotificacao(db, { userId: uid, type: 'follow', message: 'Alguém começou a seguir você' });
+    const id = await criarNotificacao(db, { userId: uid, type: 'follow', message: 'Alguém começou a seguir você' });
     assert.ok(id, 'deveria devolver o id da notificação');
 
-    const linha = db.prepare('SELECT * FROM notifications WHERE id = ?').get(id);
+    const linha = await db.prepare('SELECT * FROM notifications WHERE id = ?').get(id);
     assert.strictEqual(linha.type, 'follow');
     assert.strictEqual(linha.read, 0);
 
@@ -168,15 +170,15 @@ function parDeChavesDoNavegador() {
   });
 
   await teste('P7: serviço de push fora do ar não impede a notificação nem apaga a inscrição', async () => {
-    db.prepare('UPDATE push_subscriptions SET endpoint = ? WHERE user_id = ?')
+    await db.prepare('UPDATE push_subscriptions SET endpoint = ? WHERE user_id = ?')
       .run('https://127.0.0.1:1/inexistente', uid);
 
-    const id = criarNotificacao(db, { userId: uid, type: 'comment', message: 'com o serviço fora do ar' });
+    const id = await criarNotificacao(db, { userId: uid, type: 'comment', message: 'com o serviço fora do ar' });
     assert.ok(id, 'a notificação precisa ser gravada mesmo com o push falhando');
-    assert.ok(db.prepare('SELECT 1 FROM notifications WHERE id = ?').get(id));
+    assert.ok(await db.prepare('SELECT 1 FROM notifications WHERE id = ?').get(id));
 
     await new Promise((r) => setTimeout(r, 1500));
-    const sobreviveu = db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = ?').get(uid);
+    const sobreviveu = await db.prepare('SELECT COUNT(*) c FROM push_subscriptions WHERE user_id = ?').get(uid);
     assert.strictEqual(sobreviveu.c, 1, 'falha de rede é temporária e não pode apagar a inscrição');
   });
 
@@ -186,10 +188,10 @@ function parDeChavesDoNavegador() {
     assert.strictEqual(configurarPush(), false);
     assert.strictEqual(pushDisponivel(), false);
 
-    db.prepare('UPDATE push_subscriptions SET endpoint = ? WHERE user_id = ?').run(`${base}/viva2`, uid);
+    await db.prepare('UPDATE push_subscriptions SET endpoint = ? WHERE user_id = ?').run(`${base}/viva2`, uid);
     const antes = recebidas.length;
 
-    const id = criarNotificacao(db, { userId: uid, type: 'achievement', message: 'Conquista sem push' });
+    const id = await criarNotificacao(db, { userId: uid, type: 'achievement', message: 'Conquista sem push' });
     assert.ok(id, 'a central precisa continuar recebendo a linha');
     await new Promise((r) => setTimeout(r, 600));
     assert.strictEqual(recebidas.length, antes, 'sem chaves, nada pode sair pela rede');

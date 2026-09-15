@@ -51,8 +51,8 @@ module.exports = function gearRoutes(db) {
    * Monta o objeto de calçado no formato consumido pelo app,
    * somando a quilometragem das atividades vinculadas.
    */
-  function buildShoe(shoe) {
-    const usage = db.prepare(`
+  async function buildShoe(shoe) {
+    const usage = await db.prepare(`
       SELECT
         COUNT(*) as sessions_count,
         COALESCE(SUM(distance_km), 0) as distance_km,
@@ -91,9 +91,9 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // GET /api/gear/shoes — Frota completa + resumo agregado
   // -------------------------------------------------------
-  router.get('/shoes', authenticate, (req, res) => {
+  router.get('/shoes', authenticate, async (req, res) => {
     try {
-      const rows = db.prepare(`
+      const rows = await db.prepare(`
         SELECT * FROM shoes WHERE user_id = ?
         ORDER BY retired_at IS NOT NULL, is_default DESC, created_at ASC
       `).all(req.user.id);
@@ -128,7 +128,7 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // POST /api/gear/shoes — Cadastrar novo par
   // -------------------------------------------------------
-  router.post('/shoes', authenticate, (req, res) => {
+  router.post('/shoes', authenticate, async (req, res) => {
     try {
       const {
         name,
@@ -159,11 +159,11 @@ module.exports = function gearRoutes(db) {
       const id = uuidv4();
       const makeDefault = is_default ? 1 : 0;
 
-      const insert = db.transaction(() => {
+      const insert = db.transaction(async () => {
         if (makeDefault) {
-          db.prepare('UPDATE shoes SET is_default = 0 WHERE user_id = ?').run(req.user.id);
+          await db.prepare('UPDATE shoes SET is_default = 0 WHERE user_id = ?').run(req.user.id);
         }
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO shoes (id, user_id, name, model_type, colorway, plate_technology,
                              image_url, initial_km, max_km, is_default, purchased_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -181,10 +181,10 @@ module.exports = function gearRoutes(db) {
           purchased_at || null,
         );
       });
-      insert();
+      await insert();
 
-      const created = db.prepare('SELECT * FROM shoes WHERE id = ?').get(id);
-      res.status(201).json(buildShoe(created));
+      const created = await db.prepare('SELECT * FROM shoes WHERE id = ?').get(id);
+      res.status(201).json(await buildShoe(created));
     } catch (err) {
       console.error('Create shoe error:', err);
       res.status(500).json({ error: 'Erro ao cadastrar calçado' });
@@ -194,9 +194,9 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/gear/shoes/:id — Editar par
   // -------------------------------------------------------
-  router.put('/shoes/:id', authenticate, (req, res) => {
+  router.put('/shoes/:id', authenticate, async (req, res) => {
     try {
-      const shoe = db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+      const shoe = await db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
       if (!shoe) {
         return res.status(404).json({ error: 'Calçado não encontrado' });
       }
@@ -221,9 +221,9 @@ module.exports = function gearRoutes(db) {
         fields.push('max_km = ?'); values.push(numMax);
       }
 
-      const apply = db.transaction(() => {
+      const apply = db.transaction(async () => {
         if (is_default !== undefined && is_default) {
-          db.prepare('UPDATE shoes SET is_default = 0 WHERE user_id = ?').run(req.user.id);
+          await db.prepare('UPDATE shoes SET is_default = 0 WHERE user_id = ?').run(req.user.id);
           fields.push('is_default = ?'); values.push(1);
         } else if (is_default !== undefined) {
           fields.push('is_default = ?'); values.push(0);
@@ -231,13 +231,13 @@ module.exports = function gearRoutes(db) {
 
         if (fields.length) {
           values.push(req.params.id);
-          db.prepare(`UPDATE shoes SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
+          await db.prepare(`UPDATE shoes SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
         }
       });
-      apply();
+      await apply();
 
-      const updated = db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
-      res.json(buildShoe(updated));
+      const updated = await db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
+      res.json(await buildShoe(updated));
     } catch (err) {
       console.error('Update shoe error:', err);
       res.status(500).json({ error: 'Erro ao atualizar calçado' });
@@ -247,9 +247,9 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // POST /api/gear/shoes/:id/retire — Aposentar par
   // -------------------------------------------------------
-  router.post('/shoes/:id/retire', authenticate, (req, res) => {
+  router.post('/shoes/:id/retire', authenticate, async (req, res) => {
     try {
-      const shoe = db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+      const shoe = await db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
       if (!shoe) {
         return res.status(404).json({ error: 'Calçado não encontrado' });
       }
@@ -257,13 +257,13 @@ module.exports = function gearRoutes(db) {
         return res.status(400).json({ error: 'Calçado já está aposentado' });
       }
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE shoes SET retired_at = datetime('now'), is_default = 0, updated_at = datetime('now')
         WHERE id = ?
       `).run(req.params.id);
 
-      const updated = db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
-      res.json(buildShoe(updated));
+      const updated = await db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
+      res.json(await buildShoe(updated));
     } catch (err) {
       console.error('Retire shoe error:', err);
       res.status(500).json({ error: 'Erro ao aposentar calçado' });
@@ -273,16 +273,16 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // POST /api/gear/shoes/:id/reactivate — Voltar à rotação
   // -------------------------------------------------------
-  router.post('/shoes/:id/reactivate', authenticate, (req, res) => {
+  router.post('/shoes/:id/reactivate', authenticate, async (req, res) => {
     try {
-      const shoe = db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+      const shoe = await db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
       if (!shoe) {
         return res.status(404).json({ error: 'Calçado não encontrado' });
       }
 
-      db.prepare("UPDATE shoes SET retired_at = NULL, updated_at = datetime('now') WHERE id = ?").run(req.params.id);
-      const updated = db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
-      res.json(buildShoe(updated));
+      await db.prepare("UPDATE shoes SET retired_at = NULL, updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+      const updated = await db.prepare('SELECT * FROM shoes WHERE id = ?').get(req.params.id);
+      res.json(await buildShoe(updated));
     } catch (err) {
       console.error('Reactivate shoe error:', err);
       res.status(500).json({ error: 'Erro ao reativar calçado' });
@@ -292,14 +292,14 @@ module.exports = function gearRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/gear/shoes/:id — Remover par da frota
   // -------------------------------------------------------
-  router.delete('/shoes/:id', authenticate, (req, res) => {
+  router.delete('/shoes/:id', authenticate, async (req, res) => {
     try {
-      const shoe = db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+      const shoe = await db.prepare('SELECT * FROM shoes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
       if (!shoe) {
         return res.status(404).json({ error: 'Calçado não encontrado' });
       }
 
-      db.prepare('DELETE FROM shoes WHERE id = ?').run(req.params.id);
+      await db.prepare('DELETE FROM shoes WHERE id = ?').run(req.params.id);
       res.json({ success: true, id: req.params.id });
     } catch (err) {
       console.error('Delete shoe error:', err);

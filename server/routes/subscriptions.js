@@ -14,9 +14,9 @@ module.exports = function subscriptionsRoutes(db) {
   // -------------------------------------------------------
   // GET /api/subscriptions/status — Retorna status da assinatura
   // -------------------------------------------------------
-  router.get('/status', authenticate, (req, res) => {
+  router.get('/status', authenticate, async (req, res) => {
     try {
-      const user = db.prepare(`
+      const user = await db.prepare(`
         SELECT id, email, role, subscription_tier, subscription_status,
                subscription_provider, trial_ends_at, subscription_expires_at
         FROM users WHERE id = ?
@@ -64,9 +64,9 @@ module.exports = function subscriptionsRoutes(db) {
   // -------------------------------------------------------
   // POST /api/subscriptions/start-trial — Iniciar 7 dias de teste grátis
   // -------------------------------------------------------
-  router.post('/start-trial', authenticate, (req, res) => {
+  router.post('/start-trial', authenticate, async (req, res) => {
     try {
-      const user = db.prepare('SELECT subscription_status, trial_ends_at FROM users WHERE id = ?').get(req.user.id);
+      const user = await db.prepare('SELECT subscription_status, trial_ends_at FROM users WHERE id = ?').get(req.user.id);
       
       if (user && user.trial_ends_at) {
         return res.status(400).json({ error: 'Você já utilizou seu período de teste grátis.' });
@@ -74,7 +74,7 @@ module.exports = function subscriptionsRoutes(db) {
 
       const trialEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE users SET
           subscription_tier = 'pro',
           subscription_status = 'trial',
@@ -84,7 +84,7 @@ module.exports = function subscriptionsRoutes(db) {
       `).run(trialEndsAt, req.user.id);
 
       // Notification
-      criarNotificacao(db, {
+      await criarNotificacao(db, {
         userId: req.user.id,
         type: 'system',
         message: 'Parabéns! Seus 7 dias de teste do RUSH PRO foram ativados com sucesso.',
@@ -108,7 +108,7 @@ module.exports = function subscriptionsRoutes(db) {
   // -------------------------------------------------------
   // POST /api/subscriptions/activate — Ativar assinatura RUSH PRO
   // -------------------------------------------------------
-  router.post('/activate', authenticate, (req, res) => {
+  router.post('/activate', authenticate, async (req, res) => {
     try {
       const { plan_type = 'monthly', provider = 'in_app' } = req.body;
       const days = plan_type === 'yearly' ? 365 : 30;
@@ -116,8 +116,8 @@ module.exports = function subscriptionsRoutes(db) {
       const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
       const subId = uuidv4();
 
-      db.transaction(() => {
-        db.prepare(`
+      db.transaction(async () => {
+        await db.prepare(`
           UPDATE users SET
             subscription_tier = 'pro',
             subscription_status = 'active',
@@ -127,12 +127,12 @@ module.exports = function subscriptionsRoutes(db) {
           WHERE id = ?
         `).run(provider, expiresAt, req.user.id);
 
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, current_period_end)
           VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
         `).run(subId, req.user.id, amountCents, provider, expiresAt);
 
-        criarNotificacao(db, {
+        await criarNotificacao(db, {
           userId: req.user.id,
           type: 'system',
           message: 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.',
@@ -156,16 +156,16 @@ module.exports = function subscriptionsRoutes(db) {
   // -------------------------------------------------------
   // POST /api/subscriptions/cancel — Cancelar renovação automática
   // -------------------------------------------------------
-  router.post('/cancel', authenticate, (req, res) => {
+  router.post('/cancel', authenticate, async (req, res) => {
     try {
-      db.prepare(`
+      await db.prepare(`
         UPDATE users SET
           subscription_status = 'canceled',
           updated_at = datetime('now')
         WHERE id = ?
       `).run(req.user.id);
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE subscriptions SET
           status = 'canceled',
           canceled_at = datetime('now')
@@ -186,7 +186,7 @@ module.exports = function subscriptionsRoutes(db) {
   // POST /api/subscriptions/webhook — Webhook Universal de Pagamentos
   // Suporta: RevenueCat (Apple Store / Google Play), Stripe e Asaas (Pix)
   // -------------------------------------------------------
-  router.post('/webhook', (req, res) => {
+  router.post('/webhook', async (req, res) => {
     try {
       const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || 'rush_webhook_secret_2026';
       const authHeader = req.headers.authorization || req.headers['x-webhook-token'];
@@ -209,13 +209,13 @@ module.exports = function subscriptionsRoutes(db) {
         const priceInCents = Math.round((event.price || 29.90) * 100);
         const store = event.store === 'APP_STORE' ? 'apple_in_app' : event.store === 'PLAY_STORE' ? 'google_play' : 'revenuecat';
 
-        const user = db.prepare('SELECT id FROM users WHERE id = ? OR email = ?').get(appUserId, appUserId);
+        const user = await db.prepare('SELECT id FROM users WHERE id = ? OR email = ?').get(appUserId, appUserId);
         if (user) {
           const expiresAt = expirationMs ? new Date(expirationMs).toISOString() : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
           if (type === 'INITIAL_PURCHASE' || type === 'RENEWAL' || type === 'NON_RENEWING_PURCHASE') {
-            db.transaction(() => {
-              db.prepare(`
+            db.transaction(async () => {
+              await db.prepare(`
                 UPDATE users SET
                   subscription_tier = 'pro',
                   subscription_status = 'active',
@@ -225,15 +225,15 @@ module.exports = function subscriptionsRoutes(db) {
                 WHERE id = ?
               `).run(store, expiresAt, user.id);
 
-              db.prepare(`
+              await db.prepare(`
                 INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, current_period_end)
                 VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
               `).run(uuidv4(), user.id, priceInCents, store, expiresAt);
             })();
           } else if (type === 'CANCELLATION') {
-            db.prepare("UPDATE users SET subscription_status = 'canceled', updated_at = datetime('now') WHERE id = ?").run(user.id);
+            await db.prepare("UPDATE users SET subscription_status = 'canceled', updated_at = datetime('now') WHERE id = ?").run(user.id);
           } else if (type === 'EXPIRATION') {
-            db.prepare("UPDATE users SET subscription_tier = 'free', subscription_status = 'expired', updated_at = datetime('now') WHERE id = ?").run(user.id);
+            await db.prepare("UPDATE users SET subscription_tier = 'free', subscription_status = 'expired', updated_at = datetime('now') WHERE id = ?").run(user.id);
           }
         }
 
@@ -246,11 +246,11 @@ module.exports = function subscriptionsRoutes(db) {
       if (body.event === 'PAYMENT_RECEIVED' || body.event === 'PAYMENT_CONFIRMED') {
         const payment = body.payment || {};
         const customerEmail = payment.customer?.email || payment.email;
-        const user = db.prepare('SELECT id FROM users WHERE email = ?').get(customerEmail);
+        const user = await db.prepare('SELECT id FROM users WHERE email = ?').get(customerEmail);
 
         if (user) {
           const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-          db.prepare(`
+          await db.prepare(`
             UPDATE users SET
               subscription_tier = 'pro',
               subscription_status = 'active',

@@ -8,7 +8,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { abrirBanco } = require('./database');
 const initializeDatabase = require('./database/schema');
 
 // ============================================================
@@ -28,7 +28,9 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database(DB_PATH);
+// Com DATABASE_URL apontando para um Postgres, o app usa Postgres;
+// sem ela, o arquivo SQLite de sempre. É a única chave da virada.
+const db = abrirBanco(DB_PATH);
 
 /**
  * O schema agora é assíncrono, porque o mesmo código precisa valer

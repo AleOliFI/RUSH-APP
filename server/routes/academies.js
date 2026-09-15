@@ -15,7 +15,7 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/academies — Criar assessoria
   // -------------------------------------------------------
-  router.post('/', authenticate, (req, res) => {
+  router.post('/', authenticate, async (req, res) => {
     try {
       const { name, cnpj, description, location, plan_type = 'basic' } = req.body;
 
@@ -27,19 +27,19 @@ module.exports = function academiesRoutes(db) {
       const maxAthletes = { basic: 50, pro: 150, elite: 500 }[planType] || 50;
       const id = uuidv4();
 
-      const createAcademy = db.transaction(() => {
-        db.prepare(`
+      const createAcademy = db.transaction(async () => {
+        await db.prepare(`
           INSERT INTO academies (id, name, cnpj, description, location, owner_id, plan_type, max_athletes)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(id, name.trim(), cnpj ? String(cnpj).trim() : null, description ? String(description).trim() : null, location ? String(location).trim() : null, req.user.id, planType, maxAthletes);
 
         // Update user role and academy
-        db.prepare("UPDATE users SET role = 'owner', academy_id = ?, updated_at = datetime('now') WHERE id = ?").run(id, req.user.id);
+        await db.prepare("UPDATE users SET role = 'owner', academy_id = ?, updated_at = datetime('now') WHERE id = ?").run(id, req.user.id);
       });
 
-      createAcademy();
+      await createAcademy();
 
-      const academy = db.prepare('SELECT * FROM academies WHERE id = ?').get(id);
+      const academy = await db.prepare('SELECT * FROM academies WHERE id = ?').get(id);
       res.status(201).json(academy);
     } catch (err) {
       console.error('Create academy error:', err);
@@ -50,18 +50,18 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/academies/my — Minha assessoria
   // -------------------------------------------------------
-  router.get('/my', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+  router.get('/my', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       if (!req.user.academy_id) {
         return res.status(404).json({ error: 'Assessoria não encontrada' });
       }
 
-      const academy = db.prepare('SELECT * FROM academies WHERE id = ?').get(req.user.academy_id);
+      const academy = await db.prepare('SELECT * FROM academies WHERE id = ?').get(req.user.academy_id);
       if (!academy) {
         return res.status(404).json({ error: 'Assessoria não encontrada' });
       }
 
-      const athletes = db.prepare(`
+      const athletes = await db.prepare(`
         SELECT u.id, u.email, u.role, u.created_at as joined_at,
           up.name, up.username, up.avatar_url
         FROM users u
@@ -70,7 +70,7 @@ module.exports = function academiesRoutes(db) {
         ORDER BY up.name
       `).all(academy.id);
 
-      const coaches = db.prepare(`
+      const coaches = await db.prepare(`
         SELECT u.id, u.email, u.role,
           up.name, up.username
         FROM users u
@@ -96,7 +96,7 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/academies/dashboard — Dashboard da assessoria
   // -------------------------------------------------------
-  router.get('/dashboard', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+  router.get('/dashboard', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       if (!req.user.academy_id) {
         return res.status(400).json({ error: 'Usuário não vinculado a uma assessoria' });
@@ -106,7 +106,7 @@ module.exports = function academiesRoutes(db) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       // Athletes with today's status
-      const athleteStatuses = db.prepare(`
+      const athleteStatuses = await db.prepare(`
         SELECT u.id, up.name, up.username, up.avatar_url,
           ds.status, ds.lnrmssd, ds.suggested_action, ds.explanation_text
         FROM users u
@@ -123,7 +123,7 @@ module.exports = function academiesRoutes(db) {
       `).all(today, req.user.academy_id);
 
       // Stats
-      const statusCounts = db.prepare(`
+      const statusCounts = await db.prepare(`
         SELECT ds.status, COUNT(*) as count
         FROM daily_status ds
         JOIN users u ON u.id = ds.user_id
@@ -131,15 +131,15 @@ module.exports = function academiesRoutes(db) {
         GROUP BY ds.status
       `).all(req.user.academy_id, today);
 
-      const activitiesLast30d = db.prepare(`
+      const activitiesLast30d = await db.prepare(`
         SELECT COUNT(*) as count, COALESCE(SUM(a.distance_km), 0) as total_km
         FROM activities a
         JOIN users u ON u.id = a.user_id
         WHERE u.academy_id = ? AND a.date >= ?
       `).get(req.user.academy_id, thirtyDaysAgo);
 
-      const totalAthletes = db.prepare("SELECT COUNT(*) as count FROM users WHERE academy_id = ? AND role = 'athlete' AND deleted_at IS NULL").get(req.user.academy_id);
-      const measuredToday = db.prepare(`
+      const totalAthletes = await db.prepare("SELECT COUNT(*) as count FROM users WHERE academy_id = ? AND role = 'athlete' AND deleted_at IS NULL").get(req.user.academy_id);
+      const measuredToday = await db.prepare(`
         SELECT COUNT(DISTINCT ds.user_id) as count
         FROM daily_status ds
         JOIN users u ON u.id = ds.user_id
@@ -169,7 +169,7 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/academies/invite — Convidar atleta
   // -------------------------------------------------------
-  router.post('/invite', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+  router.post('/invite', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -187,18 +187,18 @@ module.exports = function academiesRoutes(db) {
       }
 
       // Check limit
-      const academy = db.prepare('SELECT * FROM academies WHERE id = ?').get(req.user.academy_id);
+      const academy = await db.prepare('SELECT * FROM academies WHERE id = ?').get(req.user.academy_id);
       if (!academy) {
         return res.status(404).json({ error: 'Assessoria não encontrada' });
       }
 
-      const currentCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE academy_id = ? AND role = 'athlete' AND deleted_at IS NULL").get(req.user.academy_id);
+      const currentCount = await db.prepare("SELECT COUNT(*) as count FROM users WHERE academy_id = ? AND role = 'athlete' AND deleted_at IS NULL").get(req.user.academy_id);
 
       if (currentCount && currentCount.count >= academy.max_athletes) {
         return res.status(403).json({ error: `Limite de ${academy.max_athletes} atletas atingido. Faça upgrade do plano.` });
       }
 
-      const user = db.prepare('SELECT id, academy_id FROM users WHERE email = ? AND deleted_at IS NULL').get(cleanEmail);
+      const user = await db.prepare('SELECT id, academy_id FROM users WHERE email = ? AND deleted_at IS NULL').get(cleanEmail);
 
       if (!user) {
         return res.json({ status: 'pending', message: 'Usuário não encontrado. Um convite será enviado quando ele se cadastrar.' });
@@ -209,10 +209,10 @@ module.exports = function academiesRoutes(db) {
       }
 
       // Link athlete to academy
-      db.prepare("UPDATE users SET academy_id = ?, role = 'athlete', updated_at = datetime('now') WHERE id = ?").run(req.user.academy_id, user.id);
+      await db.prepare("UPDATE users SET academy_id = ?, role = 'athlete', updated_at = datetime('now') WHERE id = ?").run(req.user.academy_id, user.id);
 
       // Notify
-      criarNotificacao(db, {
+      await criarNotificacao(db, {
         userId: user.id,
         type: 'system',
         sourceUserId: req.user.id,
@@ -229,7 +229,7 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/academies/athlete/:id — Detalhes do atleta (coach view)
   // -------------------------------------------------------
-  router.get('/athlete/:id', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+  router.get('/athlete/:id', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       const athleteId = req.params.id;
       if (!athleteId) {
@@ -240,7 +240,7 @@ module.exports = function academiesRoutes(db) {
         return res.status(400).json({ error: 'Você não está vinculado a uma assessoria' });
       }
 
-      const athlete = db.prepare(`
+      const athlete = await db.prepare(`
         SELECT u.id, u.email, u.created_at, up.*, uo.*
         FROM users u
         JOIN user_profiles up ON up.user_id = u.id
@@ -254,12 +254,12 @@ module.exports = function academiesRoutes(db) {
 
       // HRV history (last 30 days)
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const hrvHistory = db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date >= ? ORDER BY date DESC').all(athleteId, thirtyDaysAgo);
-      const recentActivities = db.prepare('SELECT * FROM activities WHERE user_id = ? ORDER BY date DESC LIMIT 10').all(athleteId);
-      const vo2max = db.prepare('SELECT * FROM vo2max_estimates WHERE user_id = ? ORDER BY date DESC LIMIT 5').all(athleteId);
+      const hrvHistory = await db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date >= ? ORDER BY date DESC').all(athleteId, thirtyDaysAgo);
+      const recentActivities = await db.prepare('SELECT * FROM activities WHERE user_id = ? ORDER BY date DESC LIMIT 10').all(athleteId);
+      const vo2max = await db.prepare('SELECT * FROM vo2max_estimates WHERE user_id = ? ORDER BY date DESC LIMIT 5').all(athleteId);
 
       // Current plan
-      const plan = db.prepare(`
+      const plan = await db.prepare(`
         SELECT ap.*, tp.name as plan_name, tp.distance_km, tp.level
         FROM assigned_plans ap
         JOIN training_plans tp ON tp.id = ap.plan_id
@@ -295,7 +295,7 @@ module.exports = function academiesRoutes(db) {
       const cleanUsername = username ? username.trim().toLowerCase() : cleanEmail.split('@')[0] + Math.floor(Math.random() * 900 + 100);
 
       // Check if user already exists
-      const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+      const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
       if (existing) {
         return res.status(409).json({ error: 'Email já cadastrado na plataforma' });
       }
@@ -311,27 +311,27 @@ module.exports = function academiesRoutes(db) {
       const targetDist = Number(distance_km) || 5;
       const targetLevel = ['beginner', 'intermediate', 'advanced'].includes(level) ? level : 'beginner';
 
-      const createAthleteTransaction = db.transaction(() => {
-        db.prepare(`
+      const createAthleteTransaction = db.transaction(async () => {
+        await db.prepare(`
           INSERT INTO users (id, email, password_hash, role, academy_id)
           VALUES (?, ?, ?, 'athlete', ?)
         `).run(athleteId, cleanEmail, passwordHash, req.user.academy_id);
 
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO user_profiles (user_id, name, username, weight_kg, gender)
           VALUES (?, ?, ?, ?, ?)
         `).run(athleteId, name.trim(), cleanUsername, weight_kg ? Number(weight_kg) : null, gender || null);
 
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO user_objectives (user_id, distance_km, level)
           VALUES (?, ?, ?)
         `).run(athleteId, targetDist, targetLevel);
 
-        db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(athleteId);
-        db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(athleteId);
+        await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(athleteId);
+        await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(athleteId);
       });
 
-      createAthleteTransaction();
+      await createAthleteTransaction();
 
       res.status(201).json({
         success: true,
@@ -355,7 +355,7 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/academies/athlete/:id/prescribe — Prescrever treino para o atleta
   // -------------------------------------------------------
-  router.post('/athlete/:id/prescribe', authenticate, authorize('owner', 'coach', 'admin'), (req, res) => {
+  router.post('/athlete/:id/prescribe', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       const athleteId = req.params.id;
       const { title, type, distance_km, duration_min, target_pace, target_hr_zone, description, notes } = req.body;
@@ -365,14 +365,14 @@ module.exports = function academiesRoutes(db) {
       }
 
       // Check if athlete belongs to coach's academy
-      const athlete = db.prepare('SELECT id FROM users WHERE id = ? AND academy_id = ? AND deleted_at IS NULL').get(athleteId, req.user.academy_id);
+      const athlete = await db.prepare('SELECT id FROM users WHERE id = ? AND academy_id = ? AND deleted_at IS NULL').get(athleteId, req.user.academy_id);
       if (!athlete) {
         return res.status(404).json({ error: 'Atleta não encontrado na sua assessoria' });
       }
 
       // Notify athlete of coach's prescription
-      const coachProfile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      criarNotificacao(db, {
+      const coachProfile = await db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      await criarNotificacao(db, {
         userId: athleteId,
         type: 'plan_assigned',
         sourceUserId: req.user.id,

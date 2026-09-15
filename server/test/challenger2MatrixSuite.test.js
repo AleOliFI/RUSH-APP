@@ -6,7 +6,9 @@
 
 const assert = require('assert');
 const express = require('express');
-const Database = require('better-sqlite3');
+// Adaptador em vez do driver cru: as rotas agora usam transação
+// assíncrona, que o better-sqlite3 recusa.
+const { Database } = require('../database/sqlite');
 const { v4: uuidv4 } = require('uuid');
 
 const initializeDatabase = require('../database/schema');
@@ -45,12 +47,12 @@ async function runSuite() {
   const athlete1Id = uuidv4();
   const athlete1Token = generateAccessToken({ id: athlete1Id, email: 'athlete1@rush.com', role: 'athlete', academy_id: null });
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO users (id, email, password_hash, role)
     VALUES (?, 'athlete1@rush.com', 'dummy_hash', 'athlete')
   `).run(athlete1Id);
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO user_profiles (user_id, name, username)
     VALUES (?, 'Athlete One', 'athlete_one')
   `).run(athlete1Id);
@@ -58,12 +60,12 @@ async function runSuite() {
   const coachId = uuidv4();
   const coachToken = generateAccessToken({ id: coachId, email: 'coach@rush.com', role: 'coach', academy_id: null });
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO users (id, email, password_hash, role)
     VALUES (?, 'coach@rush.com', 'dummy_hash', 'coach')
   `).run(coachId);
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO user_profiles (user_id, name, username)
     VALUES (?, 'Coach One', 'coach_one')
   `).run(coachId);
@@ -225,8 +227,8 @@ async function runSuite() {
       const freshUserId = uuidv4();
       const freshUserToken = generateAccessToken({ id: freshUserId, email: 'fresh2@rush.com', role: 'athlete', academy_id: null });
 
-      db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'fresh2@rush.com', 'hash', 'athlete')").run(freshUserId);
-      db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Fresh Two', 'fresh_two')").run(freshUserId);
+      await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'fresh2@rush.com', 'hash', 'athlete')").run(freshUserId);
+      await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Fresh Two', 'fresh_two')").run(freshUserId);
 
       // Post wellness first with severe exhaustion
       const wRes = await fetch(`${baseUrl}/api/hrv/wellness`, {
@@ -344,8 +346,8 @@ async function runSuite() {
           const userForPlanId = uuidv4();
           const tokenForPlan = generateAccessToken({ id: userForPlanId, email: `matrix_${dist}_${lvl}@rush.com`, role: 'athlete', academy_id: null });
 
-          db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, 'hash', 'athlete')").run(userForPlanId, `matrix_${dist}_${lvl}@rush.com`);
-          db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Matrix User', ?)").run(userForPlanId, `matrix_${dist}_${lvl}`);
+          await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, 'hash', 'athlete')").run(userForPlanId, `matrix_${dist}_${lvl}@rush.com`);
+          await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Matrix User', ?)").run(userForPlanId, `matrix_${dist}_${lvl}`);
 
           const res = await fetch(`${baseUrl}/api/training/generate-plan`, {
             method: 'POST',
@@ -449,8 +451,8 @@ async function runSuite() {
       await test(`3.1 Periodization Duration: 21K Intermediate with ${edgeDur} weeks`, async () => {
         const uid = uuidv4();
         const tok = generateAccessToken({ id: uid, email: `dur_${edgeDur}@rush.com`, role: 'athlete', academy_id: null });
-        db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, 'hash', 'athlete')").run(uid, `dur_${edgeDur}@rush.com`);
-        db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Dur User', ?)").run(uid, `dur_${edgeDur}`);
+        await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, 'hash', 'athlete')").run(uid, `dur_${edgeDur}@rush.com`);
+        await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Dur User', ?)").run(uid, `dur_${edgeDur}`);
 
         const res = await fetch(`${baseUrl}/api/training/generate-plan`, {
           method: 'POST',
@@ -531,8 +533,8 @@ async function runSuite() {
     await test('4.2 Athlete without assigned plan receives has_plan: false from GET /api/training/my-plan', async () => {
       const freshAthleteId = uuidv4();
       const freshAthleteToken = generateAccessToken({ id: freshAthleteId, email: 'no_plan@rush.com', role: 'athlete', academy_id: null });
-      db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'no_plan@rush.com', 'hash', 'athlete')").run(freshAthleteId);
-      db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'No Plan', 'no_plan')").run(freshAthleteId);
+      await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'no_plan@rush.com', 'hash', 'athlete')").run(freshAthleteId);
+      await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'No Plan', 'no_plan')").run(freshAthleteId);
 
       const res = await fetch(`${baseUrl}/api/training/my-plan`, { headers: headers(freshAthleteToken) });
       assert.strictEqual(res.status, 200);
@@ -599,8 +601,8 @@ async function runSuite() {
       // Rest days are Mon (1), Wed (3), Fri (5), Sun (7)
       const u = uuidv4();
       const tok = generateAccessToken({ id: u, email: 'rest_beg@rush.com', role: 'athlete', academy_id: null });
-      db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'rest_beg@rush.com', 'hash', 'athlete')").run(u);
-      db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Rest Beg', 'rest_beg')").run(u);
+      await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'rest_beg@rush.com', 'hash', 'athlete')").run(u);
+      await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Rest Beg', 'rest_beg')").run(u);
 
       const res = await fetch(`${baseUrl}/api/training/generate-plan`, {
         method: 'POST', headers: headers(tok),
@@ -621,8 +623,8 @@ async function runSuite() {
       // Day 1: easy_run, Day 2: interval/tempo, Day 3: easy_run, Day 4: REST, Day 5: easy_run, Day 6: long_run, Day 7: REST
       const u = uuidv4();
       const tok = generateAccessToken({ id: u, email: 'rest_adv@rush.com', role: 'athlete', academy_id: null });
-      db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'rest_adv@rush.com', 'hash', 'athlete')").run(u);
-      db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Rest Adv', 'rest_adv')").run(u);
+      await db.prepare("INSERT INTO users (id, email, password_hash, role) VALUES (?, 'rest_adv@rush.com', 'hash', 'athlete')").run(u);
+      await db.prepare("INSERT INTO user_profiles (user_id, name, username) VALUES (?, 'Rest Adv', 'rest_adv')").run(u);
 
       const res = await fetch(`${baseUrl}/api/training/generate-plan`, {
         method: 'POST', headers: headers(tok),

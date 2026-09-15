@@ -22,11 +22,11 @@ module.exports = function hrvRoutes(db) {
   /**
    * Helper function to recalculate and persist daily status for a given user and date.
    */
-  function recalculateDailyStatus(userId, todayDate) {
+  async function recalculateDailyStatus(userId, todayDate) {
     const todayStr = todayDate || new Date().toISOString().split('T')[0];
 
     // Find today's latest measurement
-    const measurement = db.prepare(`
+    const measurement = await db.prepare(`
       SELECT * FROM hrv_measurements
       WHERE user_id = ? AND timestamp >= ?
       ORDER BY timestamp DESC LIMIT 1
@@ -36,7 +36,7 @@ module.exports = function hrvRoutes(db) {
 
     // Calculate 28-day rolling baseline (excluding today) (Plews et al. 2013, Buchheit 2014)
     const twentyEightDaysAgo = new Date(new Date(todayStr).getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const recent28dMeasurements = db.prepare(`
+    const recent28dMeasurements = await db.prepare(`
       SELECT lnrmssd, hr_rest_bpm, rhr_bpm FROM hrv_measurements
       WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
       ORDER BY timestamp DESC
@@ -60,7 +60,7 @@ module.exports = function hrvRoutes(db) {
 
     // Calculate 7-day rolling baseline for comparison
     const sevenDaysAgo = new Date(new Date(todayStr).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const recent7d = db.prepare(`
+    const recent7d = await db.prepare(`
       SELECT lnrmssd FROM hrv_measurements
       WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
       ORDER BY timestamp DESC
@@ -70,7 +70,7 @@ module.exports = function hrvRoutes(db) {
 
     // Calculate consecutive low days (SWC threshold)
     const swc = Math.max((stats28.sd || 0.08) * 0.5, 0.05);
-    const pastMeasurements = db.prepare(`
+    const pastMeasurements = await db.prepare(`
       SELECT lnrmssd FROM hrv_measurements
       WHERE user_id = ? AND timestamp < ?
       ORDER BY timestamp DESC LIMIT 14
@@ -89,17 +89,17 @@ module.exports = function hrvRoutes(db) {
 
     // Update consecutive_low_days on measurement
     try {
-      db.prepare('UPDATE hrv_measurements SET consecutive_low_days = ? WHERE id = ?').run(consecutiveLowDays, measurement.id);
+      await db.prepare('UPDATE hrv_measurements SET consecutive_low_days = ? WHERE id = ?').run(consecutiveLowDays, measurement.id);
     } catch (_) {}
 
     // Today's wellness scores
-    const wellness = db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(userId, todayStr);
+    const wellness = await db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(userId, todayStr);
     const wellnessData = wellness
       ? { sleep: wellness.sleep, fatigue: wellness.fatigue, soreness: wellness.soreness, stress: wellness.stress, readiness: wellness.readiness }
       : { sleep: 3, fatigue: 3, soreness: 3, stress: 3, readiness: 3 };
 
     // Today's active plan & session
-    const assignedPlan = db.prepare(`
+    const assignedPlan = await db.prepare(`
       SELECT ap.*, tp.duration_weeks FROM assigned_plans ap
       JOIN training_plans tp ON tp.id = ap.plan_id
       WHERE ap.user_id = ? AND ap.status = 'active'
@@ -111,12 +111,12 @@ module.exports = function hrvRoutes(db) {
 
     if (assignedPlan) {
       const dayOfWeek = new Date(todayStr).getDay() || 7; // 1=Mon, 7=Sun
-      plannedSession = db.prepare(`
+      plannedSession = await db.prepare(`
         SELECT * FROM training_sessions
         WHERE plan_id = ? AND week_number = ? AND day_of_week = ?
       `).get(assignedPlan.plan_id, assignedPlan.current_week, dayOfWeek);
 
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(userId);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(userId);
       if (objectives?.target_race_date) {
         const raceDate = new Date(objectives.target_race_date);
         const todayDateObj = new Date(todayStr);
@@ -131,13 +131,13 @@ module.exports = function hrvRoutes(db) {
     };
 
     // Check Menstrual Profile for female athletes
-    const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+    const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
     let menstrualData = null;
     if (profile?.gender === 'female') {
-      const menstrualProf = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
+      const menstrualProf = await db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
       if (menstrualProf?.lmp_date) {
         const phase = getCyclePhase(menstrualProf.lmp_date, menstrualProf.cycle_length_days, todayStr);
-        const todayTracking = db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, todayStr);
+        const todayTracking = await db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, todayStr);
         const symptomScore = calcMenstrualSymptomScore(todayTracking);
         menstrualData = { phase, symptomScore };
       }
@@ -169,7 +169,7 @@ module.exports = function hrvRoutes(db) {
     });
 
     const statusId = uuidv4();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO daily_status (id, user_id, date, status, lnrmssd, lnrmssd_7d_mean, lnrmssd_7d_sd, wellness_summary, reason_code, suggested_action, explanation_text)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, date) DO UPDATE SET
@@ -201,7 +201,7 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // POST /api/hrv/measurement — Registrar medição de VFC
   // -------------------------------------------------------
-  router.post('/measurement', authenticate, (req, res) => {
+  router.post('/measurement', authenticate, async (req, res) => {
     try {
       const { rmssd_ms, hr_rest_bpm, rhr_bpm, duration_seconds, device_id, timestamp } = req.body;
       const effectiveRhr = rhr_bpm != null ? rhr_bpm : hr_rest_bpm;
@@ -236,7 +236,7 @@ module.exports = function hrvRoutes(db) {
       // violar a chave estrangeira e derrubar a medição.
       let effectiveDeviceId = null;
       if (device_id) {
-        const ownsDevice = db
+        const ownsDevice = await db
           .prepare('SELECT id FROM wearable_devices WHERE id = ? AND user_id = ?')
           .get(device_id, req.user.id);
         effectiveDeviceId = ownsDevice ? device_id : null;
@@ -247,13 +247,13 @@ module.exports = function hrvRoutes(db) {
       const ts = timestamp || new Date().toISOString();
       const today = ts.split('T')[0];
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO hrv_measurements (id, user_id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, rhr_bpm, device_id, duration_seconds)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, req.user.id, ts, numRmssd, lnrmssd, numHrRest, numHrRest, effectiveDeviceId, numDuration);
 
       // Recalculate daily status
-      const statusCalculation = recalculateDailyStatus(req.user.id, today);
+      const statusCalculation = await recalculateDailyStatus(req.user.id, today);
 
       res.status(201).json({
         measurement: {
@@ -292,7 +292,7 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // POST /api/hrv/wellness — Registrar bem-estar
   // -------------------------------------------------------
-  router.post('/wellness', authenticate, (req, res) => {
+  router.post('/wellness', authenticate, async (req, res) => {
     try {
       const { sleep, fatigue, soreness, stress, readiness, date } = req.body;
 
@@ -314,7 +314,7 @@ module.exports = function hrvRoutes(db) {
       const today = date || new Date().toISOString().split('T')[0];
       const id = uuidv4();
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO wellness_scores (id, user_id, date, sleep, fatigue, soreness, stress, readiness)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, date) DO UPDATE SET
@@ -326,9 +326,9 @@ module.exports = function hrvRoutes(db) {
       `).run(id, req.user.id, today, numSleep, numFatigue, numSoreness, numStress, numReadiness);
 
       // If a measurement exists today, update daily status dynamically
-      recalculateDailyStatus(req.user.id, today);
+      await recalculateDailyStatus(req.user.id, today);
 
-      const score = db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(req.user.id, today);
+      const score = await db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(req.user.id, today);
 
       res.status(201).json(score);
     } catch (err) {
@@ -340,20 +340,20 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // GET /api/hrv/status — Status do dia com métricas e zonas
   // -------------------------------------------------------
-  router.get('/status', authenticate, (req, res) => {
+  router.get('/status', authenticate, async (req, res) => {
     try {
       const today = req.query.date || new Date().toISOString().split('T')[0];
 
-      let status = db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, today);
-      const wellness = db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(req.user.id, today);
-      const measurement = db.prepare(`
+      let status = await db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, today);
+      const wellness = await db.prepare('SELECT * FROM wellness_scores WHERE user_id = ? AND date = ?').get(req.user.id, today);
+      const measurement = await db.prepare(`
         SELECT * FROM hrv_measurements WHERE user_id = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 1
       `).get(req.user.id, today);
 
       let calculation = null;
       if (measurement) {
-        calculation = recalculateDailyStatus(req.user.id, today);
-        status = db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, today);
+        calculation = await recalculateDailyStatus(req.user.id, today);
+        status = await db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, today);
       }
 
       res.json({
@@ -374,26 +374,26 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // GET /api/hrv/history — Histórico de VFC (7, 28, 60 dias)
   // -------------------------------------------------------
-  router.get('/history', authenticate, (req, res) => {
+  router.get('/history', authenticate, async (req, res) => {
     try {
       const days = Math.min(90, Math.max(7, Number(req.query.days) || 28));
       const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-      const measurements = db.prepare(`
+      const measurements = await db.prepare(`
         SELECT id, timestamp, rmssd_ms, lnrmssd, hr_rest_bpm, rhr_bpm, consecutive_low_days, quality_score
         FROM hrv_measurements
         WHERE user_id = ? AND timestamp >= ?
         ORDER BY timestamp ASC
       `).all(req.user.id, startDate);
 
-      const wellness = db.prepare(`
+      const wellness = await db.prepare(`
         SELECT date, sleep, fatigue, soreness, stress, readiness
         FROM wellness_scores
         WHERE user_id = ? AND date >= ?
         ORDER BY date ASC
       `).all(req.user.id, startDate.split('T')[0]);
 
-      const statuses = db.prepare(`
+      const statuses = await db.prepare(`
         SELECT date, status, lnrmssd, lnrmssd_7d_mean, reason_code, suggested_action
         FROM daily_status
         WHERE user_id = ? AND date >= ?
@@ -420,16 +420,16 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // GET /api/hrv/vo2max — Última estimativa de VO2max + histórico
   // -------------------------------------------------------
-  router.get('/vo2max', authenticate, (req, res) => {
+  router.get('/vo2max', authenticate, async (req, res) => {
     try {
-      const latest = db.prepare(`
+      const latest = await db.prepare(`
         SELECT id, date, vo2max_value, method, notes
         FROM vo2max_estimates
         WHERE user_id = ?
         ORDER BY date DESC LIMIT 1
       `).get(req.user.id);
 
-      const history = db.prepare(`
+      const history = await db.prepare(`
         SELECT date, vo2max_value, method
         FROM vo2max_estimates
         WHERE user_id = ?
@@ -462,9 +462,9 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // GET /api/hrv/zones — Zonas de FC calculadas (Z1-Z5)
   // -------------------------------------------------------
-  router.get('/zones', authenticate, (req, res) => {
+  router.get('/zones', authenticate, async (req, res) => {
     try {
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
       const userProfileData = profile ? {
         age: profile.date_of_birth ? Math.max(15, new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear()) : 30,
         gender: profile.gender || 'male',

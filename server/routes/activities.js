@@ -94,8 +94,8 @@ module.exports = function activitiesRoutes(db) {
   }
 
   /** Lê a série cardíaca gravada; null quando a atividade não tem uma. */
-  function readHrSamples(activityId) {
-    const row = db
+  async function readHrSamples(activityId) {
+    const row = await db
       .prepare('SELECT samples_json, sample_count FROM activity_hr_samples WHERE activity_id = ?')
       .get(activityId);
     if (!row) return null;
@@ -116,10 +116,10 @@ module.exports = function activitiesRoutes(db) {
    * Devolve null quando não há zonas ou série — a interface deve dizer que
    * o treino não teve cinta, não desenhar um gráfico vazio.
    */
-  function buildZoneDistribution(userId, samples) {
+  async function buildZoneDistribution(userId, samples) {
     if (!samples || samples.length < 2) return null;
 
-    const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
+    const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(userId);
     const maxHr = calculateMaxHr({
       age: profile?.date_of_birth
         ? Math.max(15, new Date().getFullYear() - new Date(profile.date_of_birth).getFullYear())
@@ -184,8 +184,8 @@ module.exports = function activitiesRoutes(db) {
   }
 
   /** Lê o traçado gravado; devolve null quando a atividade não tem percurso. */
-  function readTrack(activityId) {
-    const row = db.prepare('SELECT points_json, point_count, started_at FROM activity_tracks WHERE activity_id = ?').get(activityId);
+  async function readTrack(activityId) {
+    const row = await db.prepare('SELECT points_json, point_count, started_at FROM activity_tracks WHERE activity_id = ?').get(activityId);
     if (!row) return null;
     try {
       const points = JSON.parse(row.points_json);
@@ -199,7 +199,7 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/activities — Criar atividade
   // -------------------------------------------------------
-  router.post('/', authenticate, (req, res) => {
+  router.post('/', authenticate, async (req, res) => {
     try {
       const {
         type, title, date, distance_km, duration_seconds,
@@ -256,7 +256,7 @@ module.exports = function activitiesRoutes(db) {
       // Calçado utilizado (opcional) — precisa pertencer ao próprio atleta
       let effectiveShoeId = null;
       if (shoe_id) {
-        const ownsShoe = db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
+        const ownsShoe = await db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
         if (!ownsShoe) {
           return res.status(400).json({ error: 'shoe_id inválido ou não pertence ao usuário' });
         }
@@ -268,10 +268,10 @@ module.exports = function activitiesRoutes(db) {
 
       // Get daily status for display
       const todayStr = activityDate.split('T')[0];
-      const dailyStatus = db.prepare('SELECT status FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, todayStr);
+      const dailyStatus = await db.prepare('SELECT status FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, todayStr);
 
-      const createActivity = db.transaction(() => {
-        db.prepare(`
+      const createActivity = db.transaction(async () => {
+        await db.prepare(`
           INSERT INTO activities (
             id, user_id, type, title, date, distance_km, duration_seconds,
             avg_pace, avg_hr, max_hr, calories, elevation_gain, rpe, rpe_score,
@@ -309,7 +309,7 @@ module.exports = function activitiesRoutes(db) {
         // cinta BLE; sem gravá-las não há curva de FC nem zonas do treino.
         const cleanHrSamples = sanitizeHrSamples(hr_samples);
         if (cleanHrSamples) {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO activity_hr_samples (activity_id, samples_json, sample_count)
             VALUES (?, ?, ?)
           `).run(id, JSON.stringify(cleanHrSamples), cleanHrSamples.length);
@@ -319,7 +319,7 @@ module.exports = function activitiesRoutes(db) {
         const trackPoints = sanitizeTrack(track);
         if (trackPoints) {
           const firstTimestamp = trackPoints.find((p) => p.t != null)?.t ?? null;
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO activity_tracks (activity_id, points_json, point_count, started_at)
             VALUES (?, ?, ?, ?)
           `).run(
@@ -331,20 +331,20 @@ module.exports = function activitiesRoutes(db) {
         }
 
         // Check achievements
-        checkAndAwardAchievements(db, req.user.id, numDist, type);
+        await checkAndAwardAchievements(db, req.user.id, numDist, type);
       });
 
-      createActivity();
+      await createActivity();
 
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(id);
-      const activitySplits = db.prepare('SELECT * FROM activity_splits WHERE activity_id = ? ORDER BY split_number').all(id);
-      const savedTrack = readTrack(id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(id);
+      const activitySplits = await db.prepare('SELECT * FROM activity_splits WHERE activity_id = ? ORDER BY split_number').all(id);
+      const savedTrack = await readTrack(id);
 
       res.status(201).json({
         activity,
         splits: activitySplits,
         track_point_count: savedTrack ? savedTrack.point_count : 0,
-        hr_sample_count: readHrSamples(id)?.sample_count || 0,
+        hr_sample_count: await readHrSamples(id)?.sample_count || 0,
       });
     } catch (err) {
       console.error('Create activity error:', err);
@@ -355,7 +355,7 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/activities — Listar atividades do usuário
   // -------------------------------------------------------
-  router.get('/', authenticate, (req, res) => {
+  router.get('/', authenticate, async (req, res) => {
     try {
       const { page = 1, limit = 20, type, from, to } = req.query;
       const parsedPage = Math.max(1, parseInt(page, 10) || 1);
@@ -384,20 +384,20 @@ module.exports = function activitiesRoutes(db) {
       query += ' ORDER BY date DESC LIMIT ? OFFSET ?';
       params.push(parsedLimit, offset);
 
-      const activities = db.prepare(query).all(...params);
+      const activities = await db.prepare(query).all(...params);
       let countQuery = 'SELECT COUNT(*) as count FROM activities WHERE user_id = ?';
       const countParams = [req.user.id];
       if (type) { countQuery += ' AND type = ?'; countParams.push(type); }
       if (from) { countQuery += ' AND date >= ?'; countParams.push(String(from)); }
       if (to) { countQuery += ' AND date <= ?'; countParams.push(String(to)); }
-      const total = db.prepare(countQuery).get(...countParams);
+      const total = await db.prepare(countQuery).get(...countParams);
 
       // Get likes/comments count for each
-      const enriched = activities.map(a => {
-        const likes = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
-        const comments = db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
-        const trackRow = db.prepare('SELECT point_count FROM activity_tracks WHERE activity_id = ?').get(a.id);
-        const hrRow = db.prepare('SELECT sample_count FROM activity_hr_samples WHERE activity_id = ?').get(a.id);
+      const enriched = await Promise.all(activities.map(async (a) => {
+        const likes = await db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
+        const comments = await db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
+        const trackRow = await db.prepare('SELECT point_count FROM activity_tracks WHERE activity_id = ?').get(a.id);
+        const hrRow = await db.prepare('SELECT sample_count FROM activity_hr_samples WHERE activity_id = ?').get(a.id);
         return {
           ...a,
           likes_count: likes.count,
@@ -407,7 +407,7 @@ module.exports = function activitiesRoutes(db) {
           has_hr_series: !!hrRow,
           hr_sample_count: hrRow ? hrRow.sample_count : 0,
         };
-      });
+      }));
 
       res.json({
         activities: enriched,
@@ -429,13 +429,13 @@ module.exports = function activitiesRoutes(db) {
   // (MUST be defined BEFORE /:id to avoid Express matching
   //  "stats" as an :id parameter)
   // -------------------------------------------------------
-  router.get('/stats/summary', authenticate, (req, res) => {
+  router.get('/stats/summary', authenticate, async (req, res) => {
     try {
       const parsedDays = parseInt(req.query.days, 10);
       const days = (!isNaN(parsedDays) && parsedDays > 0 && parsedDays <= 365) ? parsedDays : 30;
       const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-      const stats = db.prepare(`
+      const stats = await db.prepare(`
         SELECT
           COUNT(*) as total_activities,
           COALESCE(SUM(distance_km), 0) as total_distance_km,
@@ -448,14 +448,14 @@ module.exports = function activitiesRoutes(db) {
         WHERE user_id = ? AND date >= ?
       `).get(req.user.id, startDate);
 
-      const byType = db.prepare(`
+      const byType = await db.prepare(`
         SELECT type, COUNT(*) as count, SUM(distance_km) as total_km
         FROM activities
         WHERE user_id = ? AND date >= ?
         GROUP BY type
       `).all(req.user.id, startDate);
 
-      const weeklyDistances = db.prepare(`
+      const weeklyDistances = await db.prepare(`
         SELECT
           strftime('%Y-W%W', date) as week,
           SUM(distance_km) as total_km,
@@ -492,14 +492,14 @@ module.exports = function activitiesRoutes(db) {
   // registrou RPE, a sessão entra apenas pela duração (equivalente a RPE 1),
   // e a resposta sinaliza quantas sessões estão nessa condição para que a
   // interface não apresente o número como se fosse completo.
-  router.get('/training-load', authenticate, (req, res) => {
+  router.get('/training-load', authenticate, async (req, res) => {
     try {
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;
       const acuteStart = new Date(now - 7 * dayMs).toISOString();
       const chronicStart = new Date(now - 28 * dayMs).toISOString();
 
-      const rows = db.prepare(`
+      const rows = await db.prepare(`
         SELECT date, duration_seconds, rpe_score, rpe
         FROM activities
         WHERE user_id = ? AND date >= ?
@@ -555,7 +555,7 @@ module.exports = function activitiesRoutes(db) {
   // menos aquela distância, com tolerância superior (ex.: 21.10 km conta
   // como meia-maratona; 25 km não). O tempo é normalizado para a distância
   // oficial pelo pace médio, que é a convenção usada por apps de corrida.
-  router.get('/records', authenticate, (req, res) => {
+  router.get('/records', authenticate, async (req, res) => {
     try {
       const DISTANCES = [
         { key: '5k', officialKm: 5, maxKm: 6.5 },
@@ -567,7 +567,7 @@ module.exports = function activitiesRoutes(db) {
       const records = {};
 
       for (const dist of DISTANCES) {
-        const best = db.prepare(`
+        const best = await db.prepare(`
           SELECT id, title, date, distance_km, duration_seconds,
                  (duration_seconds * 1.0 / distance_km) as pace_seconds_per_km
           FROM activities
@@ -604,9 +604,9 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // GET /api/activities/:id — Detalhes da atividade
   // -------------------------------------------------------
-  router.get('/:id', authenticate, (req, res) => {
+  router.get('/:id', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare(`
+      const activity = await db.prepare(`
         SELECT a.*, up.name as user_name, up.username, up.avatar_url
         FROM activities a
         JOIN user_profiles up ON up.user_id = a.user_id
@@ -623,30 +623,30 @@ module.exports = function activitiesRoutes(db) {
       }
 
       if (activity.user_id !== req.user.id && activity.privacy === 'followers') {
-        const isFollower = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, activity.user_id);
+        const isFollower = await db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, activity.user_id);
         if (!isFollower) {
           return res.status(403).json({ error: 'Apenas seguidores podem ver esta atividade' });
         }
       }
 
-      const splits = db.prepare('SELECT * FROM activity_splits WHERE activity_id = ? ORDER BY split_number').all(activity.id);
-      const likes = db.prepare(`
+      const splits = await db.prepare('SELECT * FROM activity_splits WHERE activity_id = ? ORDER BY split_number').all(activity.id);
+      const likes = await db.prepare(`
         SELECT l.*, up.name, up.username FROM likes l
         JOIN user_profiles up ON up.user_id = l.user_id
         WHERE l.activity_id = ?
       `).all(activity.id);
-      const comments = db.prepare(`
+      const comments = await db.prepare(`
         SELECT c.*, up.name, up.username, up.avatar_url FROM comments c
         JOIN user_profiles up ON up.user_id = c.user_id
         WHERE c.activity_id = ?
         ORDER BY c.created_at ASC
       `).all(activity.id);
 
-      const hasLiked = db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(activity.id, req.user.id);
+      const hasLiked = await db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(activity.id, req.user.id);
 
-      const track = readTrack(activity.id);
-      const hr = readHrSamples(activity.id);
-      const recorte = db
+      const track = await readTrack(activity.id);
+      const hr = await readHrSamples(activity.id);
+      const recorte = await db
         .prepare('SELECT trim_start_seconds, trim_end_seconds, original_distance_km, original_duration_seconds FROM activity_trims WHERE activity_id = ?')
         .get(activity.id);
 
@@ -656,7 +656,7 @@ module.exports = function activitiesRoutes(db) {
         track: track ? track.points : null,
         hr_samples: hr ? hr.samples : null,
         trim: recorte || null,
-        zone_distribution: hr ? buildZoneDistribution(activity.user_id, hr.samples) : null,
+        zone_distribution: hr ? await buildZoneDistribution(activity.user_id, hr.samples) : null,
         likes: { count: likes.length, users: likes.slice(0, 10), has_liked: !!hasLiked },
         comments: { count: comments.length, items: comments },
       });
@@ -671,9 +671,9 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // Só exporta o que foi realmente medido: pontos sem altitude saem sem
   // <ele>, e pontos sem horário saem sem <time>. Nada é interpolado.
-  router.get('/:id/gpx', authenticate, (req, res) => {
+  router.get('/:id/gpx', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
@@ -681,7 +681,7 @@ module.exports = function activitiesRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para exportar esta atividade' });
       }
 
-      const track = readTrack(activity.id);
+      const track = await readTrack(activity.id);
       if (!track) {
         return res.status(404).json({ error: 'Esta atividade não tem traçado GPS gravado' });
       }
@@ -731,9 +731,9 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/activities/:id — Editar atividade (legenda, foto, privacidade)
   // -------------------------------------------------------
-  router.put('/:id', authenticate, (req, res) => {
+  router.put('/:id', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
@@ -786,7 +786,7 @@ module.exports = function activitiesRoutes(db) {
         if (shoe_id === null || shoe_id === '') {
           fields.push('shoe_id = ?'); values.push(null);
         } else {
-          const ownsShoe = db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
+          const ownsShoe = await db.prepare('SELECT id FROM shoes WHERE id = ? AND user_id = ?').get(shoe_id, req.user.id);
           if (!ownsShoe) {
             return res.status(400).json({ error: 'shoe_id inválido ou não pertence ao usuário' });
           }
@@ -799,9 +799,9 @@ module.exports = function activitiesRoutes(db) {
       }
 
       values.push(req.params.id);
-      db.prepare(`UPDATE activities SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
+      await db.prepare(`UPDATE activities SET ${fields.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...values);
 
-      const updated = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const updated = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       res.json({ activity: updated });
     } catch (err) {
       console.error('Update activity error:', err);
@@ -816,9 +816,9 @@ module.exports = function activitiesRoutes(db) {
   // NÃO são digitadas: são recalculadas a partir dos pontos que
   // sobram dentro da janela, somando Haversine entre eles. Os
   // valores originais ficam guardados para permitir desfazer.
-  router.post('/:id/trim', authenticate, (req, res) => {
+  router.post('/:id/trim', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
@@ -826,7 +826,7 @@ module.exports = function activitiesRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
       }
 
-      const track = readTrack(activity.id);
+      const track = await readTrack(activity.id);
       if (!track) {
         return res.status(400).json({
           error: 'Esta atividade não tem traçado GPS: não há como recortar o percurso',
@@ -872,20 +872,20 @@ module.exports = function activitiesRoutes(db) {
       const novaDuracao = Math.max(1, Math.round((dentro[dentro.length - 1].t - dentro[0].t) / 1000));
       const novoPace = formatPaceFromSeconds(novaDuracao / novaDistancia);
 
-      const hr = readHrSamples(activity.id);
+      const hr = await readHrSamples(activity.id);
       const hrDentro = hr
         ? hr.samples.filter((amostra) => amostra.t >= inicio && amostra.t <= fim)
         : null;
 
-      const recortar = db.transaction(() => {
+      const recortar = db.transaction(async () => {
         // Guarda o original apenas na primeira vez: recortes seguintes não
         // podem sobrescrever o registro do que foi de fato medido.
-        const jaTemOriginal = db
+        const jaTemOriginal = await db
           .prepare('SELECT activity_id FROM activity_trims WHERE activity_id = ?')
           .get(activity.id);
 
         if (!jaTemOriginal) {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO activity_trims (
               activity_id, original_distance_km, original_duration_seconds, original_avg_pace,
               original_points_json, original_hr_samples_json, trim_start_seconds, trim_end_seconds
@@ -896,23 +896,23 @@ module.exports = function activitiesRoutes(db) {
             Math.round(inicio), Math.round(fim),
           );
         } else {
-          db.prepare(`
+          await db.prepare(`
             UPDATE activity_trims SET trim_start_seconds = ?, trim_end_seconds = ? WHERE activity_id = ?
           `).run(Math.round(inicio), Math.round(fim), activity.id);
         }
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE activities
           SET distance_km = ?, duration_seconds = ?, avg_pace = ?, updated_at = datetime('now')
           WHERE id = ?
         `).run(novaDistancia, novaDuracao, novoPace, activity.id);
 
-        db.prepare(`
+        await db.prepare(`
           UPDATE activity_tracks SET points_json = ?, point_count = ? WHERE activity_id = ?
         `).run(JSON.stringify(dentro), dentro.length, activity.id);
 
         if (hrDentro && hrDentro.length > 0) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE activity_hr_samples SET samples_json = ?, sample_count = ? WHERE activity_id = ?
           `).run(JSON.stringify(hrDentro), hrDentro.length, activity.id);
         }
@@ -920,13 +920,13 @@ module.exports = function activitiesRoutes(db) {
         // Os splits foram calculados sobre o percurso inteiro e deixam de
         // valer: apagar é mais honesto do que manter parciais de um trecho
         // que não existe mais.
-        db.prepare('DELETE FROM activity_splits WHERE activity_id = ?').run(activity.id);
+        await db.prepare('DELETE FROM activity_splits WHERE activity_id = ?').run(activity.id);
       });
 
-      recortar();
+      await recortar();
 
       res.json({
-        activity: db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
+        activity: await db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
         removed: {
           distance_km: +(activity.distance_km - novaDistancia).toFixed(3),
           duration_seconds: activity.duration_seconds - novaDuracao,
@@ -943,9 +943,9 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/activities/:id/trim/undo — Desfazer o recorte
   // -------------------------------------------------------
-  router.post('/:id/trim/undo', authenticate, (req, res) => {
+  router.post('/:id/trim/undo', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
@@ -953,15 +953,15 @@ module.exports = function activitiesRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para editar esta atividade' });
       }
 
-      const original = db
+      const original = await db
         .prepare('SELECT * FROM activity_trims WHERE activity_id = ?')
         .get(activity.id);
       if (!original) {
         return res.status(404).json({ error: 'Esta atividade não foi recortada' });
       }
 
-      const desfazer = db.transaction(() => {
-        db.prepare(`
+      const desfazer = db.transaction(async () => {
+        await db.prepare(`
           UPDATE activities
           SET distance_km = ?, duration_seconds = ?, avg_pace = ?, updated_at = datetime('now')
           WHERE id = ?
@@ -974,25 +974,25 @@ module.exports = function activitiesRoutes(db) {
 
         if (original.original_points_json) {
           const pontos = JSON.parse(original.original_points_json);
-          db.prepare(`
+          await db.prepare(`
             UPDATE activity_tracks SET points_json = ?, point_count = ? WHERE activity_id = ?
           `).run(original.original_points_json, pontos.length, activity.id);
         }
 
         if (original.original_hr_samples_json) {
           const amostras = JSON.parse(original.original_hr_samples_json);
-          db.prepare(`
+          await db.prepare(`
             UPDATE activity_hr_samples SET samples_json = ?, sample_count = ? WHERE activity_id = ?
           `).run(original.original_hr_samples_json, amostras.length, activity.id);
         }
 
-        db.prepare('DELETE FROM activity_trims WHERE activity_id = ?').run(activity.id);
+        await db.prepare('DELETE FROM activity_trims WHERE activity_id = ?').run(activity.id);
       });
 
-      desfazer();
+      await desfazer();
 
       res.json({
-        activity: db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
+        activity: await db.prepare('SELECT * FROM activities WHERE id = ?').get(activity.id),
         restored: true,
       });
     } catch (err) {
@@ -1004,9 +1004,9 @@ module.exports = function activitiesRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/activities/:id
   // -------------------------------------------------------
-  router.delete('/:id', authenticate, (req, res) => {
+  router.delete('/:id', authenticate, async (req, res) => {
     try {
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(req.params.id);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
@@ -1015,7 +1015,7 @@ module.exports = function activitiesRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para remover esta atividade' });
       }
 
-      db.prepare('DELETE FROM activities WHERE id = ?').run(req.params.id);
+      await db.prepare('DELETE FROM activities WHERE id = ?').run(req.params.id);
       res.json({ message: 'Atividade removida com sucesso' });
     } catch (err) {
       console.error('Delete activity error:', err);
@@ -1029,9 +1029,9 @@ module.exports = function activitiesRoutes(db) {
 // ============================================================
 // Helper: Check and award achievements
 // ============================================================
-function checkAndAwardAchievements(db, userId, distanceKm, type) {
-  const achievements = db.prepare('SELECT * FROM achievements').all();
-  const earned = db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id = ?').all(userId);
+async function checkAndAwardAchievements(db, userId, distanceKm, type) {
+  const achievements = await db.prepare('SELECT * FROM achievements').all();
+  const earned = await db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id = ?').all(userId);
   const earnedIds = new Set(earned.map(e => e.achievement_id));
 
   for (const ach of achievements) {
@@ -1041,32 +1041,32 @@ function checkAndAwardAchievements(db, userId, distanceKm, type) {
 
     // Single distance achievement
     if (criteria.distance_km && distanceKm >= criteria.distance_km) {
-      awardAchievement(db, userId, ach.id, ach.name);
+      await awardAchievement(db, userId, ach.id, ach.name);
     }
 
     // Accumulated distance (30 days)
     if (criteria.distance_km_30d) {
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const total = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ? AND date >= ?').get(userId, startDate);
+      const total = await db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ? AND date >= ?').get(userId, startDate);
       if (total.total >= criteria.distance_km_30d) {
-        awardAchievement(db, userId, ach.id, ach.name);
+        await awardAchievement(db, userId, ach.id, ach.name);
       }
     }
 
     // Completed workouts
     if (criteria.completed_workouts) {
-      const count = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND session_id IS NOT NULL').get(userId);
+      const count = await db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND session_id IS NOT NULL').get(userId);
       if (count.count >= criteria.completed_workouts) {
-        awardAchievement(db, userId, ach.id, ach.name);
+        await awardAchievement(db, userId, ach.id, ach.name);
       }
     }
   }
 }
 
-function awardAchievement(db, userId, achievementId, achievementName) {
+async function awardAchievement(db, userId, achievementId, achievementName) {
   try {
-    db.prepare('INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)').run(userId, achievementId);
-    criarNotificacao(db, {
+    await db.prepare('INSERT INTO user_achievements (user_id, achievement_id) VALUES (?, ?)').run(userId, achievementId);
+    await criarNotificacao(db, {
       userId,
       type: 'achievement',
       message: `🏆 Nova conquista desbloqueada: ${achievementName}!`,

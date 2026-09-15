@@ -4,7 +4,9 @@
 
 const assert = require('assert');
 const express = require('express');
-const Database = require('better-sqlite3');
+// Adaptador em vez do driver cru: as rotas agora usam transação
+// assíncrona, que o better-sqlite3 recusa.
+const { Database } = require('../database/sqlite');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
@@ -40,12 +42,12 @@ async function run() {
   const userId = uuidv4();
   const token = generateAccessToken({ id: userId, email: 'e2e@rush.com', role: 'athlete', academy_id: null });
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO users (id, email, password_hash, role)
     VALUES (?, 'e2e@rush.com', 'hash', 'athlete')
   `).run(userId);
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO user_profiles (user_id, name, username)
     VALUES (?, 'E2E Athlete', 'e2e_athlete')
   `).run(userId);

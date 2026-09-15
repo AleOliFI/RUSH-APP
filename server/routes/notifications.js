@@ -12,14 +12,14 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // GET /api/notifications — Listar notificações
   // -------------------------------------------------------
-  router.get('/', authenticate, (req, res) => {
+  router.get('/', authenticate, async (req, res) => {
     try {
       const { page = 1, limit = 30 } = req.query;
       const parsedPage = Math.max(1, parseInt(page, 10) || 1);
       const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
       const offset = (parsedPage - 1) * parsedLimit;
 
-      const notifications = db.prepare(`
+      const notifications = await db.prepare(`
         SELECT n.*, up.name as source_name, up.username as source_username, up.avatar_url as source_avatar
         FROM notifications n
         LEFT JOIN user_profiles up ON up.user_id = n.source_user_id
@@ -28,7 +28,7 @@ module.exports = function notificationsRoutes(db) {
         LIMIT ? OFFSET ?
       `).all(req.user.id, parsedLimit, offset);
 
-      const unreadCount = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(req.user.id);
+      const unreadCount = await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(req.user.id);
 
       res.json({
         notifications,
@@ -45,9 +45,9 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/notifications/read-all — Marcar todas como lidas
   // -------------------------------------------------------
-  router.put('/read-all', authenticate, (req, res) => {
+  router.put('/read-all', authenticate, async (req, res) => {
     try {
-      db.prepare("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0").run(req.user.id);
+      await db.prepare("UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0").run(req.user.id);
       res.json({ message: 'Todas as notificações marcadas como lidas' });
     } catch (err) {
       console.error('Read-all notifications error:', err);
@@ -58,14 +58,14 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/notifications/:id/read — Marcar como lida
   // -------------------------------------------------------
-  router.put('/:id/read', authenticate, (req, res) => {
+  router.put('/:id/read', authenticate, async (req, res) => {
     try {
       const notificationId = req.params.id;
       if (!notificationId) {
         return res.status(400).json({ error: 'ID da notificação obrigatório' });
       }
 
-      const result = db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?').run(notificationId, req.user.id);
+      const result = await db.prepare('UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?').run(notificationId, req.user.id);
       if (result.changes === 0) {
         return res.status(404).json({ error: 'Notificação não encontrada' });
       }
@@ -80,9 +80,9 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // GET /api/notifications/unread-count
   // -------------------------------------------------------
-  router.get('/unread-count', authenticate, (req, res) => {
+  router.get('/unread-count', authenticate, async (req, res) => {
     try {
-      const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(req.user.id);
+      const count = await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0').get(req.user.id);
       res.json({ unread_count: count ? count.count : 0 });
     } catch (err) {
       console.error('Get unread count error:', err);
@@ -101,7 +101,7 @@ module.exports = function notificationsRoutes(db) {
   // a privada nunca sai do servidor. `enabled: false` diz à tela que
   // o deploy não cadastrou as chaves, em vez de deixá-la oferecer um
   // botão que nunca funcionaria.
-  router.get('/push/key', authenticate, (req, res) => {
+  router.get('/push/key', authenticate, async (req, res) => {
     res.json({
       enabled: pushDisponivel(),
       public_key: pushDisponivel() ? process.env.VAPID_PUBLIC_KEY : null,
@@ -111,7 +111,7 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // POST /api/notifications/push/subscribe — Registrar aparelho
   // -------------------------------------------------------
-  router.post('/push/subscribe', authenticate, (req, res) => {
+  router.post('/push/subscribe', authenticate, async (req, res) => {
     try {
       const { endpoint, keys } = req.body || {};
 
@@ -130,7 +130,7 @@ module.exports = function notificationsRoutes(db) {
       // atleta que está logado agora — é o que acontece num aparelho
       // compartilhado, e manter o dono antigo mandaria a notificação
       // dele para a tela de outra pessoa.
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth, user_agent)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(endpoint) DO UPDATE SET
@@ -150,7 +150,7 @@ module.exports = function notificationsRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/notifications/push/subscribe — Remover aparelho
   // -------------------------------------------------------
-  router.delete('/push/subscribe', authenticate, (req, res) => {
+  router.delete('/push/subscribe', authenticate, async (req, res) => {
     try {
       const { endpoint } = req.body || {};
       if (!endpoint || typeof endpoint !== 'string') {
@@ -159,7 +159,7 @@ module.exports = function notificationsRoutes(db) {
 
       // Só apaga a própria inscrição: conhecer um endpoint alheio não
       // pode bastar para calar as notificações de outra pessoa.
-      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, req.user.id);
+      await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, req.user.id);
       res.json({ subscribed: false });
     } catch (err) {
       console.error('Push unsubscribe error:', err);
@@ -178,7 +178,7 @@ module.exports = function notificationsRoutes(db) {
         return res.status(503).json({ error: 'Push não está configurado neste servidor' });
       }
 
-      const inscricoes = db
+      const inscricoes = await db
         .prepare('SELECT COUNT(*) as count FROM push_subscriptions WHERE user_id = ?')
         .get(req.user.id);
       if (!inscricoes.count) {

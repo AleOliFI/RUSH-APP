@@ -14,16 +14,16 @@ module.exports = function usersRoutes(db) {
   // GET /api/users/me — Authenticated current user profile & state
   // MUST be defined before /:username to avoid route param collision
   // -------------------------------------------------------
-  router.get('/me', authenticate, (req, res) => {
+  router.get('/me', authenticate, async (req, res) => {
     try {
-      const user = db.prepare('SELECT id, email, role, academy_id, subscription_tier, subscription_status, trial_ends_at, subscription_expires_at, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
+      const user = await db.prepare('SELECT id, email, role, academy_id, subscription_tier, subscription_status, trial_ends_at, subscription_expires_at, created_at FROM users WHERE id = ? AND deleted_at IS NULL').get(req.user.id);
       if (!user) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
-      const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
-      const privacy = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
+      const settings = await db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
+      const privacy = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
 
       const isPro = ['coach', 'owner', 'admin'].includes(user.role) || 
                     user.subscription_tier === 'pro' || 
@@ -75,19 +75,19 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // GET /api/users/profile
   // -------------------------------------------------------
-  router.get('/profile', authenticate, (req, res) => {
+  router.get('/profile', authenticate, async (req, res) => {
     try {
-      const profile = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const profile = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
       if (!profile) {
         return res.status(404).json({ error: 'Perfil não encontrado' });
       }
 
       // Count followers, following, activities
-      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(req.user.id);
-      const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(req.user.id);
-      const activities = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ?').get(req.user.id);
-      const totalDistance = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(req.user.id);
-      const achievements = db.prepare('SELECT COUNT(*) as count FROM user_achievements WHERE user_id = ?').get(req.user.id);
+      const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(req.user.id);
+      const following = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(req.user.id);
+      const activities = await db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ?').get(req.user.id);
+      const totalDistance = await db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(req.user.id);
+      const achievements = await db.prepare('SELECT COUNT(*) as count FROM user_achievements WHERE user_id = ?').get(req.user.id);
 
       res.json({
         ...profile,
@@ -108,7 +108,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/users/profile
   // -------------------------------------------------------
-  router.put('/profile', authenticate, (req, res) => {
+  router.put('/profile', authenticate, async (req, res) => {
     try {
       const { name, username, bio, location, date_of_birth, gender, weight_kg, height_cm, avatar_url } = req.body;
 
@@ -118,7 +118,7 @@ module.exports = function usersRoutes(db) {
         if (!/^[a-z0-9_]{3,30}$/i.test(cleanUsername)) {
           return res.status(400).json({ error: 'Username deve conter de 3 a 30 caracteres alfanuméricos ou _' });
         }
-        const existing = db.prepare('SELECT user_id FROM user_profiles WHERE username = ? AND user_id != ?').get(cleanUsername, req.user.id);
+        const existing = await db.prepare('SELECT user_id FROM user_profiles WHERE username = ? AND user_id != ?').get(cleanUsername, req.user.id);
         if (existing) {
           return res.status(409).json({ error: 'Username já em uso' });
         }
@@ -169,9 +169,9 @@ module.exports = function usersRoutes(db) {
       fields.push("updated_at = datetime('now')");
       values.push(req.user.id);
 
-      db.prepare(`UPDATE user_profiles SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
+      await db.prepare(`UPDATE user_profiles SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
 
-      const updated = db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      const updated = await db.prepare('SELECT * FROM user_profiles WHERE user_id = ?').get(req.user.id);
       res.json(updated);
     } catch (err) {
       console.error('Users update profile error:', err);
@@ -182,9 +182,9 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // GET /api/users/devices — Sensores BLE pareados
   // -------------------------------------------------------
-  router.get('/devices', authenticate, (req, res) => {
+  router.get('/devices', authenticate, async (req, res) => {
     try {
-      const devices = db.prepare(`
+      const devices = await db.prepare(`
         SELECT id, brand, device_id, device_type, is_active, created_at, updated_at
         FROM wearable_devices
         WHERE user_id = ?
@@ -203,7 +203,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   const VALID_DEVICE_TYPES = ['heart_rate', 'footpod', 'power', 'watch', 'other'];
 
-  router.post('/devices', authenticate, (req, res) => {
+  router.post('/devices', authenticate, async (req, res) => {
     try {
       const { brand, device_id, device_type = 'heart_rate' } = req.body;
 
@@ -218,26 +218,26 @@ module.exports = function usersRoutes(db) {
       }
 
       const cleanDeviceId = String(device_id).trim().slice(0, 120);
-      const existing = db.prepare('SELECT id FROM wearable_devices WHERE user_id = ? AND device_id = ?')
+      const existing = await db.prepare('SELECT id FROM wearable_devices WHERE user_id = ? AND device_id = ?')
         .get(req.user.id, cleanDeviceId);
 
       if (existing) {
-        db.prepare(`
+        await db.prepare(`
           UPDATE wearable_devices
           SET brand = ?, device_type = ?, is_active = 1, updated_at = datetime('now')
           WHERE id = ?
         `).run(String(brand).trim().slice(0, 80), device_type, existing.id);
-        const updated = db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(existing.id);
+        const updated = await db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(existing.id);
         return res.json(updated);
       }
 
       const id = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO wearable_devices (id, user_id, brand, device_id, device_type, is_active)
         VALUES (?, ?, ?, ?, ?, 1)
       `).run(id, req.user.id, String(brand).trim().slice(0, 80), cleanDeviceId, device_type);
 
-      const created = db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(id);
+      const created = await db.prepare('SELECT id, brand, device_id, device_type, is_active FROM wearable_devices WHERE id = ?').get(id);
       res.status(201).json(created);
     } catch (err) {
       console.error('Register device error:', err);
@@ -248,15 +248,15 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/users/devices/:id — Desparear sensor
   // -------------------------------------------------------
-  router.delete('/devices/:id', authenticate, (req, res) => {
+  router.delete('/devices/:id', authenticate, async (req, res) => {
     try {
-      const device = db.prepare('SELECT id FROM wearable_devices WHERE id = ? AND user_id = ?')
+      const device = await db.prepare('SELECT id FROM wearable_devices WHERE id = ? AND user_id = ?')
         .get(req.params.id, req.user.id);
       if (!device) {
         return res.status(404).json({ error: 'Sensor não encontrado' });
       }
 
-      db.prepare('DELETE FROM wearable_devices WHERE id = ?').run(req.params.id);
+      await db.prepare('DELETE FROM wearable_devices WHERE id = ?').run(req.params.id);
       res.json({ success: true, id: req.params.id });
     } catch (err) {
       console.error('Delete device error:', err);
@@ -267,7 +267,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // POST /api/users/field-test — Processar teste de campo para iniciantes/avançados
   // -------------------------------------------------------
-  router.post('/field-test', authenticate, (req, res) => {
+  router.post('/field-test', authenticate, async (req, res) => {
     try {
       const { test_type, distance_km, duration_seconds, avg_hr, max_hr, rest_hr } = req.body;
 
@@ -319,7 +319,7 @@ module.exports = function usersRoutes(db) {
       };
 
       // Persistir no perfil do usuário
-      db.prepare(`
+      await db.prepare(`
         UPDATE user_profiles SET
           pace_5k = ?,
           hr_max_tested = ?,
@@ -343,7 +343,7 @@ module.exports = function usersRoutes(db) {
         if (rawVo2 >= 20 && rawVo2 <= 100) {
           vo2maxEstimate = +rawVo2.toFixed(1);
           const today = new Date().toISOString().split('T')[0];
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO vo2max_estimates (id, user_id, date, vo2max_value, method, notes)
             VALUES (?, ?, ?, ?, 'cooper_12min', ?)
           `).run(
@@ -377,7 +377,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/users/objectives
   // -------------------------------------------------------
-  router.put('/objectives', authenticate, (req, res) => {
+  router.put('/objectives', authenticate, async (req, res) => {
     try {
       const {
         distance_km, target_race_date, level,
@@ -431,7 +431,7 @@ module.exports = function usersRoutes(db) {
         }
       }
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO user_objectives (
           user_id, distance_km, target_race_date, level,
           focus, typical_weekly_km, active_injuries
@@ -450,7 +450,7 @@ module.exports = function usersRoutes(db) {
         focus || null, numWeeklyKm, injuriesJson,
       );
 
-      const objectives = db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
+      const objectives = await db.prepare('SELECT * FROM user_objectives WHERE user_id = ?').get(req.user.id);
       res.json({
         ...objectives,
         // A coluna guarda JSON; o cliente recebe a lista já pronta.
@@ -465,9 +465,9 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // GET /api/users/:username
   // -------------------------------------------------------
-  router.get('/:username', authenticate, (req, res) => {
+  router.get('/:username', authenticate, async (req, res) => {
     try {
-      const profile = db.prepare(`
+      const profile = await db.prepare(`
         SELECT p.*, u.role, u.created_at as member_since
         FROM user_profiles p
         JOIN users u ON u.id = p.user_id
@@ -479,27 +479,27 @@ module.exports = function usersRoutes(db) {
       }
 
       // Stats
-      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(profile.user_id);
-      const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(profile.user_id);
-      const activities = db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND privacy = "public"').get(profile.user_id);
-      const totalDistance = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(profile.user_id);
+      const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(profile.user_id);
+      const following = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(profile.user_id);
+      const activities = await db.prepare('SELECT COUNT(*) as count FROM activities WHERE user_id = ? AND privacy = "public"').get(profile.user_id);
+      const totalDistance = await db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activities WHERE user_id = ?').get(profile.user_id);
 
       // Is following?
-      const isFollowing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, profile.user_id);
+      const isFollowing = await db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, profile.user_id);
 
       // Privacy
-      const privacy = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(profile.user_id);
+      const privacy = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(profile.user_id);
 
       // Latest VO2max
       let vo2max = null;
       if (privacy?.show_vo2max) {
-        vo2max = db.prepare('SELECT vo2max_value, date FROM vo2max_estimates WHERE user_id = ? ORDER BY date DESC LIMIT 1').get(profile.user_id);
+        vo2max = await db.prepare('SELECT vo2max_value, date FROM vo2max_estimates WHERE user_id = ? ORDER BY date DESC LIMIT 1').get(profile.user_id);
       }
 
       // Achievements
       let achievements = [];
       if (privacy?.show_achievements) {
-        achievements = db.prepare(`
+        achievements = await db.prepare(`
           SELECT a.*, ua.earned_at
           FROM user_achievements ua
           JOIN achievements a ON a.id = ua.achievement_id
@@ -530,7 +530,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/users/settings
   // -------------------------------------------------------
-  router.put('/settings', authenticate, (req, res) => {
+  router.put('/settings', authenticate, async (req, res) => {
     try {
       const { language, timezone, notifications_enabled, email_notifications, push_notifications } = req.body;
 
@@ -550,9 +550,9 @@ module.exports = function usersRoutes(db) {
       fields.push("updated_at = datetime('now')");
       values.push(req.user.id);
 
-      db.prepare(`UPDATE user_settings SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
+      await db.prepare(`UPDATE user_settings SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
 
-      const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
+      const settings = await db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
       res.json(settings);
     } catch (err) {
       console.error('Users update settings error:', err);
@@ -563,7 +563,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // PUT /api/users/privacy
   // -------------------------------------------------------
-  router.put('/privacy', authenticate, (req, res) => {
+  router.put('/privacy', authenticate, async (req, res) => {
     try {
       const { public_activities, show_hrv_status, show_vo2max, show_achievements, allow_messages } = req.body;
 
@@ -579,10 +579,10 @@ module.exports = function usersRoutes(db) {
       if (fields.length > 0) {
         fields.push("updated_at = datetime('now')");
         values.push(req.user.id);
-        db.prepare(`UPDATE privacy_settings SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
+        await db.prepare(`UPDATE privacy_settings SET ${fields.join(', ')} WHERE user_id = ?`).run(...values);
       }
 
-      const privacy = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
+      const privacy = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
       res.json(privacy);
     } catch (err) {
       console.error('Users update privacy error:', err);
@@ -602,7 +602,7 @@ module.exports = function usersRoutes(db) {
         return res.status(400).json({ error: 'Informe sua senha para confirmar a exclusão' });
       }
 
-      const user = db
+      const user = await db
         .prepare('SELECT id, password_hash FROM users WHERE id = ? AND deleted_at IS NULL')
         .get(req.user.id);
       if (!user) {
@@ -614,11 +614,11 @@ module.exports = function usersRoutes(db) {
         return res.status(401).json({ error: 'Senha incorreta' });
       }
 
-      db.prepare("UPDATE users SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(req.user.id);
+      await db.prepare("UPDATE users SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(req.user.id);
 
       // Sessões abertas param de valer imediatamente.
       try {
-        db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(req.user.id);
+        await db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(req.user.id);
       } catch (_) { /* tabela pode não existir em bancos antigos */ }
 
       res.json({ success: true, message: 'Conta excluída com sucesso.' });

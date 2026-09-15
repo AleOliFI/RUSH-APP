@@ -14,7 +14,7 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // GET /api/social/feed — Feed de atividades
   // -------------------------------------------------------
-  router.get('/feed', authenticate, (req, res) => {
+  router.get('/feed', authenticate, async (req, res) => {
     try {
       const { page = 1, limit = 20, scope = 'following' } = req.query;
       const parsedPage = Math.max(1, parseInt(page, 10) || 1);
@@ -25,7 +25,7 @@ module.exports = function socialRoutes(db) {
 
       if (scope === 'global') {
         // Feed global (public activities)
-        activities = db.prepare(`
+        activities = await db.prepare(`
           SELECT a.*, up.name, up.username, up.avatar_url
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
@@ -36,7 +36,7 @@ module.exports = function socialRoutes(db) {
         `).all(parsedLimit, offset);
       } else if (scope === 'academy' && req.user.academy_id) {
         // Feed da assessoria
-        activities = db.prepare(`
+        activities = await db.prepare(`
           SELECT a.*, up.name, up.username, up.avatar_url
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
@@ -47,7 +47,7 @@ module.exports = function socialRoutes(db) {
         `).all(req.user.academy_id, parsedLimit, offset);
       } else {
         // Feed de quem o user segue + próprio
-        activities = db.prepare(`
+        activities = await db.prepare(`
           SELECT a.*, up.name, up.username, up.avatar_url
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
@@ -61,10 +61,10 @@ module.exports = function socialRoutes(db) {
       }
 
       // Enrich with likes/comments
-      const enriched = activities.map(a => {
-        const likesCount = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
-        const commentsCount = db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
-        const hasLiked = db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(a.id, req.user.id);
+      const enriched = await Promise.all(activities.map(async (a) => {
+        const likesCount = await db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(a.id);
+        const commentsCount = await db.prepare('SELECT COUNT(*) as count FROM comments WHERE activity_id = ?').get(a.id);
+        const hasLiked = await db.prepare('SELECT 1 FROM likes WHERE activity_id = ? AND user_id = ?').get(a.id, req.user.id);
 
         // Format duration
         const hours = Math.floor((a.duration_seconds || 0) / 3600);
@@ -79,7 +79,7 @@ module.exports = function socialRoutes(db) {
           has_liked: !!hasLiked,
           initials: a.name ? a.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??',
         };
-      });
+      }));
 
       res.json({ feed: enriched, page: parsedPage, limit: parsedLimit });
     } catch (err) {
@@ -91,7 +91,7 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // POST /api/social/follow/:userId — Seguir
   // -------------------------------------------------------
-  router.post('/follow/:userId', authenticate, (req, res) => {
+  router.post('/follow/:userId', authenticate, async (req, res) => {
     try {
       const targetId = req.params.userId;
 
@@ -99,28 +99,28 @@ module.exports = function socialRoutes(db) {
         return res.status(400).json({ error: 'Você não pode seguir a si mesmo' });
       }
 
-      const target = db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(targetId);
+      const target = await db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(targetId);
       if (!target) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
 
-      const existing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
+      const existing = await db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
       if (existing) {
         return res.status(409).json({ error: 'Você já segue este usuário' });
       }
 
-      db.prepare('INSERT INTO follows (follower_id, followed_id) VALUES (?, ?)').run(req.user.id, targetId);
+      await db.prepare('INSERT INTO follows (follower_id, followed_id) VALUES (?, ?)').run(req.user.id, targetId);
 
       // Notify
-      const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-      criarNotificacao(db, {
+      const profile = await db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+      await criarNotificacao(db, {
         userId: targetId,
         type: 'follow',
         sourceUserId: req.user.id,
         message: `${profile?.name || 'Alguém'} começou a seguir você`,
       });
 
-      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
+      const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
       res.json({ following: true, followers_count: followers.count });
     } catch (err) {
       console.error('Follow error:', err);
@@ -131,15 +131,15 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/social/follow/:userId — Deixar de seguir
   // -------------------------------------------------------
-  router.delete('/follow/:userId', authenticate, (req, res) => {
+  router.delete('/follow/:userId', authenticate, async (req, res) => {
     try {
       const targetId = req.params.userId;
       if (!targetId) {
         return res.status(400).json({ error: 'ID do usuário obrigatório' });
       }
 
-      db.prepare('DELETE FROM follows WHERE follower_id = ? AND followed_id = ?').run(req.user.id, targetId);
-      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
+      await db.prepare('DELETE FROM follows WHERE follower_id = ? AND followed_id = ?').run(req.user.id, targetId);
+      const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
       res.json({ following: false, followers_count: followers ? followers.count : 0 });
     } catch (err) {
       console.error('Unfollow error:', err);
@@ -150,10 +150,10 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // GET /api/social/followers — Seguidores
   // -------------------------------------------------------
-  router.get('/followers', authenticate, (req, res) => {
+  router.get('/followers', authenticate, async (req, res) => {
     try {
       const userId = req.query.user_id || req.user.id;
-      const followers = db.prepare(`
+      const followers = await db.prepare(`
         SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, f.created_at as followed_at
         FROM follows f
         JOIN user_profiles up ON up.user_id = f.follower_id
@@ -171,10 +171,10 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // GET /api/social/following — Seguindo
   // -------------------------------------------------------
-  router.get('/following', authenticate, (req, res) => {
+  router.get('/following', authenticate, async (req, res) => {
     try {
       const userId = req.query.user_id || req.user.id;
-      const following = db.prepare(`
+      const following = await db.prepare(`
         SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, f.created_at as followed_at
         FROM follows f
         JOIN user_profiles up ON up.user_id = f.followed_id
@@ -192,34 +192,34 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // POST /api/social/like/:activityId — Curtir
   // -------------------------------------------------------
-  router.post('/like/:activityId', authenticate, (req, res) => {
+  router.post('/like/:activityId', authenticate, async (req, res) => {
     try {
       const activityId = req.params.activityId;
       if (!activityId) {
         return res.status(400).json({ error: 'ID da atividade obrigatório' });
       }
 
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
 
-      const existing = db.prepare('SELECT id FROM likes WHERE activity_id = ? AND user_id = ?').get(activityId, req.user.id);
+      const existing = await db.prepare('SELECT id FROM likes WHERE activity_id = ? AND user_id = ?').get(activityId, req.user.id);
 
       if (existing) {
         // Unlike
-        db.prepare('DELETE FROM likes WHERE id = ?').run(existing.id);
-        const count = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(activityId);
+        await db.prepare('DELETE FROM likes WHERE id = ?').run(existing.id);
+        const count = await db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(activityId);
         return res.json({ liked: false, likes_count: count.count });
       }
 
       // Like
-      db.prepare('INSERT INTO likes (id, activity_id, user_id) VALUES (?, ?, ?)').run(uuidv4(), activityId, req.user.id);
+      await db.prepare('INSERT INTO likes (id, activity_id, user_id) VALUES (?, ?, ?)').run(uuidv4(), activityId, req.user.id);
 
       // Notify activity owner
       if (activity.user_id !== req.user.id) {
-        const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-        criarNotificacao(db, {
+        const profile = await db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+        await criarNotificacao(db, {
           userId: activity.user_id,
           type: 'like',
           sourceUserId: req.user.id,
@@ -228,7 +228,7 @@ module.exports = function socialRoutes(db) {
         });
       }
 
-      const count = db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(activityId);
+      const count = await db.prepare('SELECT COUNT(*) as count FROM likes WHERE activity_id = ?').get(activityId);
       res.json({ liked: true, likes_count: count.count });
     } catch (err) {
       console.error('Like error:', err);
@@ -239,7 +239,7 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // POST /api/social/comment/:activityId — Comentar
   // -------------------------------------------------------
-  router.post('/comment/:activityId', authenticate, (req, res) => {
+  router.post('/comment/:activityId', authenticate, async (req, res) => {
     try {
       const { content } = req.body;
       const activityId = req.params.activityId;
@@ -256,18 +256,18 @@ module.exports = function socialRoutes(db) {
         return res.status(400).json({ error: 'Comentário deve ter no máximo 1000 caracteres' });
       }
 
-      const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId);
+      const activity = await db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId);
       if (!activity) {
         return res.status(404).json({ error: 'Atividade não encontrada' });
       }
 
       const id = uuidv4();
-      db.prepare('INSERT INTO comments (id, activity_id, user_id, content) VALUES (?, ?, ?, ?)').run(id, activityId, req.user.id, content.trim());
+      await db.prepare('INSERT INTO comments (id, activity_id, user_id, content) VALUES (?, ?, ?, ?)').run(id, activityId, req.user.id, content.trim());
 
       // Notify activity owner
       if (activity.user_id !== req.user.id) {
-        const profile = db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
-        criarNotificacao(db, {
+        const profile = await db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+        await criarNotificacao(db, {
           userId: activity.user_id,
           type: 'comment',
           sourceUserId: req.user.id,
@@ -276,7 +276,7 @@ module.exports = function socialRoutes(db) {
         });
       }
 
-      const comment = db.prepare(`
+      const comment = await db.prepare(`
         SELECT c.*, up.name, up.username, up.avatar_url
         FROM comments c
         JOIN user_profiles up ON up.user_id = c.user_id
@@ -293,14 +293,14 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // DELETE /api/social/comment/:commentId
   // -------------------------------------------------------
-  router.delete('/comment/:commentId', authenticate, (req, res) => {
+  router.delete('/comment/:commentId', authenticate, async (req, res) => {
     try {
       const commentId = req.params.commentId;
       if (!commentId) {
         return res.status(400).json({ error: 'ID do comentário obrigatório' });
       }
 
-      const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(commentId);
+      const comment = await db.prepare('SELECT * FROM comments WHERE id = ?').get(commentId);
       if (!comment) {
         return res.status(404).json({ error: 'Comentário não encontrado' });
       }
@@ -309,7 +309,7 @@ module.exports = function socialRoutes(db) {
         return res.status(403).json({ error: 'Sem permissão para deletar este comentário' });
       }
 
-      db.prepare('DELETE FROM comments WHERE id = ?').run(commentId);
+      await db.prepare('DELETE FROM comments WHERE id = ?').run(commentId);
       res.json({ message: 'Comentário removido' });
     } catch (err) {
       console.error('Delete comment error:', err);
@@ -320,7 +320,7 @@ module.exports = function socialRoutes(db) {
   // -------------------------------------------------------
   // GET /api/social/search — Buscar usuários
   // -------------------------------------------------------
-  router.get('/search', authenticate, (req, res) => {
+  router.get('/search', authenticate, async (req, res) => {
     try {
       const { q } = req.query;
       if (!q || typeof q !== 'string' || q.trim().length < 2) {
@@ -330,7 +330,7 @@ module.exports = function socialRoutes(db) {
       const cleanQ = q.trim();
       // Só os campos de vitrine: a busca não é lugar para peso, altura
       // ou data de nascimento de quem o atleta ainda nem segue.
-      const users = db.prepare(`
+      const users = await db.prepare(`
         SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location, u.role
         FROM user_profiles up
         JOIN users u ON u.id = up.user_id
@@ -338,10 +338,10 @@ module.exports = function socialRoutes(db) {
         LIMIT 20
       `).all(`%${cleanQ}%`, `%${cleanQ}%`);
 
-      const enriched = users.map(u => {
-        const isFollowing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, u.user_id);
+      const enriched = await Promise.all(users.map(async (u) => {
+        const isFollowing = await db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, u.user_id);
         return { ...u, is_following: !!isFollowing };
-      });
+      }));
 
       res.json({ users: enriched });
     } catch (err) {
@@ -368,11 +368,11 @@ module.exports = function socialRoutes(db) {
   ];
 
   /** Mesma convenção de GET /api/activities/records, restrita ao que é público. */
-  function publicRecords(userId) {
+  async function publicRecords(userId) {
     const records = {};
 
     for (const dist of RECORD_DISTANCES) {
-      const best = db.prepare(`
+      const best = await db.prepare(`
         SELECT id, title, date, distance_km, duration_seconds,
                (duration_seconds * 1.0 / distance_km) as pace_seconds_per_km
         FROM activities
@@ -402,10 +402,10 @@ module.exports = function socialRoutes(db) {
     return records;
   }
 
-  router.get('/user/:userId/profile', authenticate, (req, res) => {
+  router.get('/user/:userId/profile', authenticate, async (req, res) => {
     try {
       const targetId = req.params.userId;
-      const profile = db.prepare(`
+      const profile = await db.prepare(`
         SELECT up.user_id, up.name, up.username, up.avatar_url, up.bio, up.location,
                up.instagram, up.strava, up.created_at
         FROM user_profiles up
@@ -417,10 +417,10 @@ module.exports = function socialRoutes(db) {
       }
 
       const isSelf = targetId === req.user.id;
-      const isFollowing = db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
+      const isFollowing = await db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?').get(req.user.id, targetId);
 
       // Sem linha na tabela, valem os padrões do schema.
-      const privacyRow = db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(targetId) || {};
+      const privacyRow = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(targetId) || {};
       const flag = (campo, padrao) => {
         const valor = privacyRow[campo];
         return valor === undefined || valor === null ? padrao : valor === 1 || valor === true;
@@ -430,19 +430,19 @@ module.exports = function socialRoutes(db) {
       const mostraRecordes = mostraAtividades && (isSelf || flag('show_achievements', true));
       const mostraVo2max = isSelf || flag('show_vo2max', false);
 
-      const followers = db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
-      const following = db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(targetId);
+      const followers = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE followed_id = ?').get(targetId);
+      const following = await db.prepare('SELECT COUNT(*) as count FROM follows WHERE follower_id = ?').get(targetId);
 
       // Contagem e quilometragem seguem o mesmo recorte da lista: se as
       // atividades são privadas, o número não pode entregar o que a lista esconde.
       const visibilidade = mostraAtividades ? "privacy = 'public'" : '1 = 0';
-      const resumo = db.prepare(`
+      const resumo = await db.prepare(`
         SELECT COUNT(*) as count, COALESCE(SUM(distance_km), 0) as total
         FROM activities WHERE user_id = ? AND ${visibilidade}
       `).get(targetId);
 
       const recentActivities = mostraAtividades
-        ? db.prepare(`
+        ? await db.prepare(`
             SELECT id, type, title, date, distance_km, duration_seconds, avg_pace, image_url
             FROM activities
             WHERE user_id = ? AND privacy = 'public'
@@ -452,7 +452,7 @@ module.exports = function socialRoutes(db) {
 
       let vo2max = null;
       if (mostraVo2max) {
-        const ultimo = db.prepare(`
+        const ultimo = await db.prepare(`
           SELECT vo2max_value, date FROM vo2max_estimates
           WHERE user_id = ? ORDER BY date DESC LIMIT 1
         `).get(targetId);
@@ -474,7 +474,7 @@ module.exports = function socialRoutes(db) {
           },
           recent_activities: recentActivities,
           // null distingue "o atleta escondeu" de "ainda não tem recorde".
-          records: mostraRecordes ? publicRecords(targetId) : null,
+          records: mostraRecordes ? await publicRecords(targetId) : null,
           vo2max,
           privacy: {
             activities_hidden: !mostraAtividades,

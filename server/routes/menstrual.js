@@ -13,7 +13,7 @@ module.exports = function menstrualRoutes(db) {
   // -------------------------------------------------------
   // POST /api/menstrual/profile — Salvar/atualizar perfil menstrual
   // -------------------------------------------------------
-  router.post('/profile', authenticate, (req, res) => {
+  router.post('/profile', authenticate, async (req, res) => {
     try {
       const userId = req.user.id;
       const { lmp_date, cycle_length_days, uses_hormonal_contraceptive, contraceptive_type } = req.body;
@@ -25,7 +25,7 @@ module.exports = function menstrualRoutes(db) {
       const safeCycleLength = Math.max(21, Math.min(35, Number(cycle_length_days) || 28));
       const safeContraceptive = uses_hormonal_contraceptive ? 1 : 0;
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO user_menstrual_profile (user_id, lmp_date, cycle_length_days, uses_hormonal_contraceptive, contraceptive_type, updated_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(user_id) DO UPDATE SET
@@ -36,7 +36,7 @@ module.exports = function menstrualRoutes(db) {
           updated_at = datetime('now')
       `).run(userId, lmp_date, safeCycleLength, safeContraceptive, contraceptive_type || null);
 
-      const profile = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
+      const profile = await db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
       res.json({ success: true, profile });
     } catch (err) {
       console.error('Menstrual profile error:', err);
@@ -47,9 +47,9 @@ module.exports = function menstrualRoutes(db) {
   // -------------------------------------------------------
   // GET /api/menstrual/profile — Obter perfil menstrual
   // -------------------------------------------------------
-  router.get('/profile', authenticate, (req, res) => {
+  router.get('/profile', authenticate, async (req, res) => {
     try {
-      const profile = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(req.user.id);
+      const profile = await db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(req.user.id);
       res.json({ has_profile: !!profile, profile: profile || null });
     } catch (err) {
       console.error('Menstrual profile get error:', err);
@@ -60,19 +60,19 @@ module.exports = function menstrualRoutes(db) {
   // -------------------------------------------------------
   // POST /api/menstrual/tracking — Registrar sintomas diários
   // -------------------------------------------------------
-  router.post('/tracking', authenticate, (req, res) => {
+  router.post('/tracking', authenticate, async (req, res) => {
     try {
       const userId = req.user.id;
       const today = req.body.date || new Date().toISOString().split('T')[0];
       const { cramp_level = 0, bloating_level = 0, energy_level = 3, mood_level = 3, bleeding_intensity } = req.body;
 
-      const profile = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
+      const profile = await db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
       const phase = profile?.lmp_date
         ? getCyclePhase(profile.lmp_date, profile.cycle_length_days, today)
         : 'follicular';
 
       const id = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO menstrual_tracking (id, user_id, date, phase, cramp_level, bloating_level, energy_level, mood_level, bleeding_intensity)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, date) DO UPDATE SET
@@ -91,7 +91,7 @@ module.exports = function menstrualRoutes(db) {
         bleeding_intensity || null
       );
 
-      const tracking = db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, today);
+      const tracking = await db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, today);
       const symptomScore = calcMenstrualSymptomScore(tracking);
       const recommendation = getPhaseTrainingRecommendation(phase, 'favorable');
 
@@ -105,18 +105,18 @@ module.exports = function menstrualRoutes(db) {
   // -------------------------------------------------------
   // GET /api/menstrual/today — Dados da fase atual e recomendação
   // -------------------------------------------------------
-  router.get('/today', authenticate, (req, res) => {
+  router.get('/today', authenticate, async (req, res) => {
     try {
       const userId = req.user.id;
       const today = req.query.date || new Date().toISOString().split('T')[0];
 
-      const profile = db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
+      const profile = await db.prepare('SELECT * FROM user_menstrual_profile WHERE user_id = ?').get(userId);
       if (!profile || !profile.lmp_date) {
         return res.json({ has_profile: false });
       }
 
       const phase = getCyclePhase(profile.lmp_date, profile.cycle_length_days, today);
-      const tracking = db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, today);
+      const tracking = await db.prepare('SELECT * FROM menstrual_tracking WHERE user_id = ? AND date = ?').get(userId, today);
       const symptomScore = calcMenstrualSymptomScore(tracking);
       const recommendation = getPhaseTrainingRecommendation(phase, 'favorable');
 

@@ -83,8 +83,8 @@ function rotaDe(notificacao) {
 }
 
 /** O banco guarda booleanos como 0/1; ausência de linha vale o padrão. */
-function querPush(db, userId) {
-  const settings = db
+async function querPush(db, userId) {
+  const settings = await db
     .prepare('SELECT notifications_enabled, push_notifications FROM user_settings WHERE user_id = ?')
     .get(userId);
 
@@ -121,9 +121,9 @@ async function entregar(inscricao, payload) {
  * Exportada à parte para a rota de teste da tela de ajustes.
  */
 async function enviarPush(db, userId, notificacao) {
-  if (!pushConfigurado || !querPush(db, userId)) return { enviados: 0, removidos: 0 };
+  if (!pushConfigurado || !(await querPush(db, userId))) return { enviados: 0, removidos: 0 };
 
-  const inscricoes = db
+  const inscricoes = await db
     .prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?')
     .all(userId);
   if (inscricoes.length === 0) return { enviados: 0, removidos: 0 };
@@ -140,16 +140,18 @@ async function enviarPush(db, userId, notificacao) {
 
   let enviados = 0;
   let removidos = 0;
-  resultados.forEach((resultado, indice) => {
+  // for..of em vez de forEach: o callback do forEach não espera
+  // promessa, e as escritas abaixo ficariam soltas.
+  for (const [indice, resultado] of resultados.entries()) {
     const endpoint = inscricoes[indice].endpoint;
     if (resultado === 'ok') {
       enviados += 1;
-      db.prepare("UPDATE push_subscriptions SET last_success_at = datetime('now') WHERE endpoint = ?").run(endpoint);
+      await db.prepare("UPDATE push_subscriptions SET last_success_at = datetime('now') WHERE endpoint = ?").run(endpoint);
     } else if (resultado === 'morta') {
       removidos += 1;
-      db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+      await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
     }
-  });
+  }
 
   return { enviados, removidos };
 }
@@ -164,13 +166,13 @@ async function enviarPush(db, userId, notificacao) {
  *
  * Nunca lança: uma notificação que falha não pode derrubar a ação.
  */
-function criarNotificacao(db, { userId, type, message, sourceUserId = null, activityId = null }) {
+async function criarNotificacao(db, { userId, type, message, sourceUserId = null, activityId = null }) {
   if (!userId || !type) return null;
 
   const id = uuidv4();
 
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO notifications (id, user_id, type, source_user_id, activity_id, message)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, userId, type, sourceUserId, activityId, message ?? null);
@@ -179,9 +181,9 @@ function criarNotificacao(db, { userId, type, message, sourceUserId = null, acti
     return null;
   }
 
-  setImmediate(() => {
+  setImmediate(async () => {
     try {
-      const linha = db.prepare('SELECT id, type, message FROM notifications WHERE id = ?').get(id);
+      const linha = await db.prepare('SELECT id, type, message FROM notifications WHERE id = ?').get(id);
       if (!linha) return; // A transação que a criou foi desfeita.
       enviarPush(db, userId, linha).catch(() => {});
     } catch (_) {

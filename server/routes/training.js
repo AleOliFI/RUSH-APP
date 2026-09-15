@@ -13,7 +13,7 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // GET /api/training/plans — Lista planos de treino
   // -------------------------------------------------------
-  router.get('/plans', authenticate, (req, res) => {
+  router.get('/plans', authenticate, async (req, res) => {
     try {
       const { distance_km, level } = req.query;
       let query = 'SELECT tp.*, up.name as creator_name FROM training_plans tp JOIN user_profiles up ON up.user_id = tp.created_by WHERE 1=1';
@@ -40,7 +40,7 @@ module.exports = function trainingRoutes(db) {
 
       query += ' ORDER BY tp.created_at DESC';
 
-      const plans = db.prepare(query).all(...params);
+      const plans = await db.prepare(query).all(...params);
       res.json({ plans });
     } catch (err) {
       console.error('Get plans error:', err);
@@ -51,7 +51,7 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // POST /api/training/plans — Criar plano de treino
   // -------------------------------------------------------
-  router.post('/plans', authenticate, authorize('coach', 'owner', 'admin'), (req, res) => {
+  router.post('/plans', authenticate, authorize('coach', 'owner', 'admin'), async (req, res) => {
     try {
       const { name, distance_km, duration_weeks, level, description, sessions } = req.body;
 
@@ -76,8 +76,8 @@ module.exports = function trainingRoutes(db) {
 
       const planId = uuidv4();
 
-      const createPlan = db.transaction(() => {
-        db.prepare(`
+      const createPlan = db.transaction(async () => {
+        await db.prepare(`
           INSERT INTO training_plans (id, name, distance_km, duration_weeks, level, description, created_by, academy_id)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(planId, String(name).trim(), numDist, numWeeks, level, description ? String(description).trim() : null, req.user.id, req.user.academy_id || null);
@@ -107,10 +107,10 @@ module.exports = function trainingRoutes(db) {
         }
       });
 
-      createPlan();
+      await createPlan();
 
-      const plan = db.prepare('SELECT * FROM training_plans WHERE id = ?').get(planId);
-      const planSessions = db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(planId);
+      const plan = await db.prepare('SELECT * FROM training_plans WHERE id = ?').get(planId);
+      const planSessions = await db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(planId);
 
       res.status(201).json({ plan, sessions: planSessions });
     } catch (err) {
@@ -122,9 +122,9 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // GET /api/training/plans/:id — Detalhes do plano
   // -------------------------------------------------------
-  router.get('/plans/:id', authenticate, (req, res) => {
+  router.get('/plans/:id', authenticate, async (req, res) => {
     try {
-      const plan = db.prepare(`
+      const plan = await db.prepare(`
         SELECT tp.*, up.name as creator_name
         FROM training_plans tp
         JOIN user_profiles up ON up.user_id = tp.created_by
@@ -135,7 +135,7 @@ module.exports = function trainingRoutes(db) {
         return res.status(404).json({ error: 'Plano não encontrado' });
       }
 
-      const sessions = db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(plan.id);
+      const sessions = await db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(plan.id);
 
       // Group sessions by week
       const weeks = {};
@@ -154,7 +154,7 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // POST /api/training/assign — Atribuir plano ao atleta
   // -------------------------------------------------------
-  router.post('/assign', authenticate, authorize('coach', 'owner', 'admin'), (req, res) => {
+  router.post('/assign', authenticate, authorize('coach', 'owner', 'admin'), async (req, res) => {
     try {
       const { user_id, plan_id, start_date } = req.body;
 
@@ -167,12 +167,12 @@ module.exports = function trainingRoutes(db) {
         return res.status(400).json({ error: 'start_date deve ser uma data válida (YYYY-MM-DD)' });
       }
 
-      const athlete = db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(user_id);
+      const athlete = await db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(user_id);
       if (!athlete) {
         return res.status(404).json({ error: 'Atleta não encontrado' });
       }
 
-      const plan = db.prepare('SELECT * FROM training_plans WHERE id = ?').get(plan_id);
+      const plan = await db.prepare('SELECT * FROM training_plans WHERE id = ?').get(plan_id);
       if (!plan) {
         return res.status(404).json({ error: 'Plano não encontrado' });
       }
@@ -183,16 +183,16 @@ module.exports = function trainingRoutes(db) {
       const formattedEndDate = endDateObj.toISOString().split('T')[0];
 
       // Cancel any existing active plan
-      db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(user_id);
+      await db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(user_id);
 
       const assignId = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO assigned_plans (id, user_id, plan_id, start_date, end_date, status)
         VALUES (?, ?, ?, ?, ?, 'active')
       `).run(assignId, user_id, plan_id, formattedStartDate, formattedEndDate);
 
       // Notify athlete
-      criarNotificacao(db, {
+      await criarNotificacao(db, {
         userId: user_id,
         type: 'plan_assigned',
         sourceUserId: req.user.id,
@@ -212,9 +212,9 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // GET /api/training/my-plan — Plano ativo do atleta
   // -------------------------------------------------------
-  router.get('/my-plan', authenticate, (req, res) => {
+  router.get('/my-plan', authenticate, async (req, res) => {
     try {
-      const assignment = db.prepare(`
+      const assignment = await db.prepare(`
         SELECT ap.*, tp.name as plan_name, tp.distance_km, tp.duration_weeks, tp.level
         FROM assigned_plans ap
         JOIN training_plans tp ON tp.id = ap.plan_id
@@ -235,17 +235,17 @@ module.exports = function trainingRoutes(db) {
 
       // Update current week in database if changed
       if (assignment.current_week !== currentWeek) {
-        db.prepare("UPDATE assigned_plans SET current_week = ?, updated_at = datetime('now') WHERE id = ?").run(currentWeek, assignment.id);
+        await db.prepare("UPDATE assigned_plans SET current_week = ?, updated_at = datetime('now') WHERE id = ?").run(currentWeek, assignment.id);
       }
 
       // Get today's session
-      const todaySession = db.prepare(`
+      const todaySession = await db.prepare(`
         SELECT * FROM training_sessions
         WHERE plan_id = ? AND week_number = ? AND day_of_week = ?
       `).get(assignment.plan_id, currentWeek, dayOfWeek);
 
       // Get all sessions for current week
-      const weekSessions = db.prepare(`
+      const weekSessions = await db.prepare(`
         SELECT * FROM training_sessions
         WHERE plan_id = ? AND week_number = ?
         ORDER BY day_of_week
@@ -253,7 +253,7 @@ module.exports = function trainingRoutes(db) {
 
       // Get daily status for agent suggestion
       const todayStr = today.toISOString().split('T')[0];
-      const dailyStatus = db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, todayStr);
+      const dailyStatus = await db.prepare('SELECT * FROM daily_status WHERE user_id = ? AND date = ?').get(req.user.id, todayStr);
 
       res.json({
         has_plan: true,
@@ -280,7 +280,7 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   // POST /api/training/generate-plan — Auto-generate plan
   // -------------------------------------------------------
-  router.post('/generate-plan', authenticate, (req, res) => {
+  router.post('/generate-plan', authenticate, async (req, res) => {
     try {
       const { distance_km, level, duration_weeks = 12 } = req.body;
 
@@ -308,8 +308,8 @@ module.exports = function trainingRoutes(db) {
       // Training templates based on distance and level
       const templates = getTrainingTemplates(numDist, level);
 
-      const createPlan = db.transaction(() => {
-        db.prepare(`
+      const createPlan = db.transaction(async () => {
+        await db.prepare(`
           INSERT INTO training_plans (id, name, distance_km, duration_weeks, level, description, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `).run(planId, planName, numDist, numWeeks, level,
@@ -332,22 +332,22 @@ module.exports = function trainingRoutes(db) {
         }
       });
 
-      createPlan();
+      await createPlan();
 
       // Auto-assign to user
       const startDate = new Date().toISOString().split('T')[0];
       const endDate = new Date(Date.now() + numWeeks * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(req.user.id);
+      await db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(req.user.id);
 
       const assignId = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO assigned_plans (id, user_id, plan_id, start_date, end_date, status)
         VALUES (?, ?, ?, ?, ?, 'active')
       `).run(assignId, req.user.id, planId, startDate, endDate);
 
-      const plan = db.prepare('SELECT * FROM training_plans WHERE id = ?').get(planId);
-      const sessions = db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(planId);
+      const plan = await db.prepare('SELECT * FROM training_plans WHERE id = ?').get(planId);
+      const sessions = await db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(planId);
 
       res.status(201).json({ plan, sessions, assignment: { id: assignId, start_date: startDate, end_date: endDate } });
     } catch (err) {
