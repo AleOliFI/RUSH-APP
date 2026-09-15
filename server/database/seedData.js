@@ -22,6 +22,7 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { calculateLnRmssd } = require('../agent/trainingAgent');
+const { getTrainingTemplates, generateWeekSessions } = require('../services/periodizacao');
 
 /** Ordem importa: filhos antes dos pais, por causa das chaves estrangeiras. */
 const TABELAS_PARA_LIMPAR = [
@@ -94,17 +95,6 @@ const ATLETAS = [
     instagram: '@ana.running', strava: 'anapaulalima',
     objetivo: { distancia: 5, nivel: 'intermediate', prova: null },
   },
-];
-
-/** Semana 1 do plano de maratona. Os tipos batem com o CHECK da tabela. */
-const SESSOES_SEMANA_1 = [
-  { dia: 1, tipo: 'easy_run', km: 8, min: 45, pace: '5:35', zona: 'Z2', desc: 'Rodagem leve aeróbica contínua em Z2' },
-  { dia: 2, tipo: 'interval', km: 10, min: 55, pace: '4:15', zona: 'Z4', desc: 'Aquecimento 2km + 6x 800m em Z4 com 90s trote + 2km soltura' },
-  { dia: 3, tipo: 'rest', km: 0, min: 0, pace: null, zona: null, desc: 'Descanso programado ou mobilidade ativa' },
-  { dia: 4, tipo: 'tempo', km: 12, min: 65, pace: '4:45', zona: 'Z3', desc: '2km leve + 8km em ritmo de limiar de lactato (Z3-Z4) + 2km desaquecimento' },
-  { dia: 5, tipo: 'recovery', km: 6, min: 35, pace: '6:00', zona: 'Z1', desc: 'Trote regenerativo leve para oxigenação mitocondrial' },
-  { dia: 6, tipo: 'long_run', km: 22, min: 120, pace: '5:30', zona: 'Z2', desc: 'Longão de resistência progressivo em Z2' },
-  { dia: 7, tipo: 'rest', km: 0, min: 0, pace: null, zona: null, desc: 'Descanso total e restauração neuromuscular' },
 ];
 
 async function seedDatabase(db) {
@@ -188,31 +178,106 @@ async function seedDatabase(db) {
     );
   }
 
-  // --- Plano de treino ---
-  const planoId = 'plan-maratona-42k';
-  await db.prepare(`
-    INSERT INTO training_plans (id, academy_id, created_by, name, description, distance_km, duration_weeks, level)
-    VALUES (?, ?, ?, 'Plano Maratona Performance 42K', 'Auto-periodização científica por VFC.', 42, 12, 'intermediate')
-  `).run(planoId, academiaId, ATLETAS[1].id);
+  // --- Planos de treino ---
+  // Antes daqui havia uma unica semana escrita a mao, e o plano de
+  // maratona anunciava 12 semanas tendo so a primeira: quem abrisse a
+  // semana 2 no app encontrava o calendario vazio.
+  //
+  // Agora cada plano e gerado pela mesma periodizacao que a rota
+  // /training/generate-plan usa (services/periodizacao.js), semana a
+  // semana, das 12. Nao ha numero inventado aqui: o volume, a fase e o
+  // tipo de cada sessao saem da funcao que o app usa de verdade.
+  //
+  // Um plano por combinacao de distancia e nivel que aparece entre os
+  // atletas, e cada atleta recebe o seu. A lista sai dos proprios
+  // objetivos, entao incluir um atleta novo la em cima ja cria o plano
+  // dele aqui embaixo.
+  const SEMANAS = 12;
+  const NOME_NIVEL = { beginner: 'Iniciante', intermediate: 'Intermediário', advanced: 'Avançado' };
+  const NOME_DISTANCIA = { 5: '5K', 10: '10K', 21: 'Meia Maratona', 42: 'Maratona' };
 
+  /**
+   * Ritmo medio da sessao, em min:seg por km.
+   *
+   * Nao e um dado novo: e a divisao da duracao pela distancia que a
+   * propria sessao ja traz. A coluna existe e a tela mostra, entao
+   * calcular aqui evita que ela apareca vazia.
+   */
+  const ritmo = (km, min) => {
+    if (!km || !min) return null;
+    const segundos = Math.round((min * 60) / km);
+    return `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, '0')}`;
+  };
+
+  const inserirPlano = db.prepare(`
+    INSERT INTO training_plans (id, academy_id, created_by, name, description, distance_km, duration_weeks, level)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
   const inserirSessao = db.prepare(`
     INSERT INTO training_sessions (id, plan_id, week_number, day_of_week, type, distance_km, duration_min, target_pace, target_hr_zone, description)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  for (const s of SESSOES_SEMANA_1) {
-    await inserirSessao.run(uuidv4(), planoId, 1, s.dia, s.tipo, s.km, s.min, s.pace, s.zona, s.desc);
-  }
+  const inserirAtribuicao = db.prepare(`
+    INSERT INTO assigned_plans (id, user_id, plan_id, start_date, end_date, current_week, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'active')
+  `);
 
-  // As datas são calculadas aqui, e não com date('now', '-7 days'):
-  // o deslocamento relativo é dialeto do SQLite, e assim o mesmo seed
-  // vale para os dois bancos sem depender de tradução.
   const emDias = (n) => new Date(hoje.getTime() + n * 86400000).toISOString().split('T')[0];
 
-  // A coluna é `status`, não `is_active`.
-  await db.prepare(`
-    INSERT INTO assigned_plans (id, user_id, plan_id, start_date, end_date, current_week, status)
-    VALUES (?, ?, ?, ?, ?, 1, 'active')
-  `).run(uuidv4(), ATLETAS[0].id, planoId, emDias(-7), emDias(77));
+  const planosPorChave = new Map();
+  let totalSessoes = 0;
+
+  for (const atleta of ATLETAS) {
+    const { distancia, nivel } = atleta.objetivo;
+    const chave = `${distancia}-${nivel}`;
+
+    if (!planosPorChave.has(chave)) {
+      const planoId = `plan-${distancia}k-${nivel}`;
+      await inserirPlano.run(
+        planoId, academiaId, ATLETAS[1].id,
+        `Plano ${NOME_DISTANCIA[distancia]} — ${NOME_NIVEL[nivel]}`,
+        `Periodização em 4 fases (base, build, peak, taper) ao longo de ${SEMANAS} semanas, com ajuste diário por VFC.`,
+        distancia, SEMANAS, nivel,
+      );
+
+      const templates = getTrainingTemplates(distancia, nivel);
+      for (let semana = 1; semana <= SEMANAS; semana += 1) {
+        const sessoes = generateWeekSessions(templates, semana, SEMANAS, distancia, nivel);
+
+        // A periodizacao devolve so os dias de treino. Os outros dias
+        // entram como descanso: o calendario da semana mostra os sete
+        // dias, e um dia em branco seria lido como falha de carregamento
+        // em vez de folga prescrita.
+        const diasComTreino = new Set(sessoes.map((x) => x.day_of_week));
+        for (let dia = 1; dia <= 7; dia += 1) {
+          if (diasComTreino.has(dia)) continue;
+          sessoes.push({
+            day_of_week: dia, type: 'rest', distance_km: 0, duration_min: 0,
+            target_hr_zone: null, description: 'Descanso programado — recuperação é parte do treino',
+          });
+        }
+
+        sessoes.sort((a, b) => a.day_of_week - b.day_of_week);
+        for (const s of sessoes) {
+          await inserirSessao.run(
+            uuidv4(), planoId, semana, s.day_of_week, s.type,
+            s.distance_km, s.duration_min, ritmo(s.distance_km, s.duration_min),
+            s.target_hr_zone, s.description,
+          );
+          totalSessoes += 1;
+        }
+      }
+
+      planosPorChave.set(chave, planoId);
+    }
+
+    // Todos comecam na semana 2: o app tem uma semana de historico
+    // para mostrar em vez de um plano que ainda nao comecou.
+    await inserirAtribuicao.run(
+      uuidv4(), atleta.id, planosPorChave.get(chave),
+      emDias(-7), emDias(SEMANAS * 7 - 7), 2,
+    );
+  }
 
   // --- Atividades do feed ---
   // O CHECK de `type` só aceita os 8 tipos de esporte: um treino
@@ -233,7 +298,10 @@ async function seedDatabase(db) {
   await inserirAtividade.run(uuidv4(), ATLETAS[3].id, 'Rodagem Regenerativa Leve',
     'Recuperação ativa após o longão de sábado.', diasAtras(3), 6.5, 2340, '6:00/km', 132, 145, 410);
 
-  console.log(`✅ Banco semeado: ${ATLETAS.length} atletas, 1 plano, 14 dias de VFC e 3 atividades.`);
+  console.log(
+    `✅ Banco semeado: ${ATLETAS.length} atletas, ${planosPorChave.size} planos de ` +
+    `${SEMANAS} semanas (${totalSessoes} sessões), 14 dias de VFC e 3 atividades.`
+  );
 }
 
 module.exports = seedDatabase;
