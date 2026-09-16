@@ -40,6 +40,8 @@ edit_note
 emoji_events
 error
 event_busy
+expand_less
+expand_more
 favorite
 fitness_center
 flag

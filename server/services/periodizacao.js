@@ -44,15 +44,36 @@ function getTrainingTemplates(distanceKm, level) {
 }
 
 /**
+ * Em que fase da periodização cai uma semana.
+ *
+ * Estava embutida em generateWeekSessions, onde só o gerador
+ * enxergava. A tela do plano precisa da mesma resposta para
+ * desenhar a régua das fases, e recalculá-la lá criaria uma
+ * segunda fonte de verdade — que é como a FCmáx medida passou a
+ * ser ignorada e como a semana da prescrição quase saiu trocada.
+ *
+ * As proporções são as que o gerador sempre usou: o primeiro
+ * terço é base, até dois terços é build, o que vem depois é pico,
+ * e as duas últimas semanas são o taper.
+ *
+ * @returns {'base'|'build'|'peak'|'taper'}
+ */
+function faseDaSemana(weekNumber, totalWeeks) {
+  const total = Number(totalWeeks) || 1;
+  const semana = Number(weekNumber) || 1;
+  if (semana <= Math.round(total * 0.33)) return 'base';
+  if (semana <= Math.round(total * 0.66)) return 'build';
+  if (semana <= total - 2) return 'peak';
+  return 'taper';
+}
+
+/**
  * Gera sessões semanais com periodização fisiológica e salvaguardas biomecânicas.
  * Baseado em modelos de periodização linear reversa e blocos (Daniels, Pfitzinger, Seiler).
  */
 function generateWeekSessions(templates, weekNumber, totalWeeks, distanceKm, level) {
   // 4 Fases de Periodização
-  const phase = weekNumber <= Math.round(totalWeeks * 0.33) ? 'base'
-    : weekNumber <= Math.round(totalWeeks * 0.66) ? 'build'
-    : weekNumber <= totalWeeks - 2 ? 'peak'
-    : 'taper';
+  const phase = faseDaSemana(weekNumber, totalWeeks);
 
   // Progressão de volume linear e suave (sem drops na transição Base -> Build)
   const baseFraction = Math.max(1, Math.round(totalWeeks * 0.33));
@@ -161,4 +182,4 @@ function generateWeekSessions(templates, weekNumber, totalWeeks, distanceKm, lev
   return sessions;
 }
 
-module.exports = { getTrainingTemplates, generateWeekSessions };
+module.exports = { getTrainingTemplates, generateWeekSessions, faseDaSemana };

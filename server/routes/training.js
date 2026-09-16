@@ -8,7 +8,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 // A periodizacao mora em services/: o seed gera o plano de
 // demonstracao pelo mesmo caminho que esta rota.
-const { getTrainingTemplates, generateWeekSessions } = require('../services/periodizacao');
+const { getTrainingTemplates, generateWeekSessions, faseDaSemana } = require('../services/periodizacao');
 const { posicaoNoPlano } = require('../services/semanaDoPlano');
 
 module.exports = function trainingRoutes(db) {
@@ -148,7 +148,70 @@ module.exports = function trainingRoutes(db) {
         weeks[session.week_number].push(session);
       }
 
-      res.json({ plan, sessions, weeks });
+      // Resumo por semana: fase, volume e quantas sessoes de corrida.
+      //
+      // A FASE vem daqui, e nao da tela. Ela e derivada de
+      // week_number e duration_weeks pela mesma funcao que gera o
+      // plano — se a tela recalculasse, seriam duas contas para a
+      // mesma resposta, e elas divergiriam no primeiro ajuste de
+      // periodizacao.
+      const totalSemanas = Number(plan.duration_weeks) || 0;
+      const resumoSemanas = Object.keys(weeks)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map((numero) => {
+          const doDia = weeks[numero];
+          const km = doDia.reduce((soma, x) => soma + (Number(x.distance_km) || 0), 0);
+          return {
+            week_number: numero,
+            phase: faseDaSemana(numero, totalSemanas),
+            total_km: +km.toFixed(1),
+            session_count: doDia.filter((x) => x.type !== 'rest').length,
+            rest_count: doDia.filter((x) => x.type === 'rest').length,
+            has_test: doDia.some((x) => x.type === 'test'),
+          };
+        });
+
+      const volumeTotal = resumoSemanas.reduce((soma, x) => soma + x.total_km, 0);
+
+      // Quais sessoes ESTE atleta ja cumpriu. Uma atividade guarda o
+      // session_id do treino que ela realizou, entao "feito" e um dado
+      // e nao uma estimativa. Sem isto a tela teria de inventar o
+      // progresso, ou nao mostrar nenhum.
+      const cumpridas = await db.prepare(`
+        SELECT DISTINCT a.session_id
+        FROM activities a
+        JOIN training_sessions ts ON ts.id = a.session_id
+        WHERE a.user_id = ? AND ts.plan_id = ? AND a.session_id IS NOT NULL
+      `).all(req.user.id, plan.id);
+
+      const idsCumpridos = cumpridas.map((x) => x.session_id);
+      const kmCumpridos = sessions
+        .filter((x) => idsCumpridos.includes(x.id))
+        .reduce((soma, x) => soma + (Number(x.distance_km) || 0), 0);
+
+      // A atribuicao diz em que semana o atleta esta e quando termina.
+      const minhaAtribuicao = await db.prepare(`
+        SELECT start_date, end_date, current_week, status
+        FROM assigned_plans
+        WHERE user_id = ? AND plan_id = ? AND status = 'active'
+        ORDER BY created_at DESC LIMIT 1
+      `).get(req.user.id, plan.id);
+
+      res.json({
+        plan,
+        sessions,
+        weeks,
+        week_summary: resumoSemanas,
+        assignment: minhaAtribuicao || null,
+        completed_session_ids: idsCumpridos,
+        completed_km: +kmCumpridos.toFixed(1),
+        totals: {
+          weeks: resumoSemanas.length,
+          sessions: sessions.length,
+          total_km: +volumeTotal.toFixed(1),
+        },
+      });
     } catch (err) {
       console.error('Get plan details error:', err);
       res.status(500).json({ error: 'Erro ao buscar detalhes do plano' });

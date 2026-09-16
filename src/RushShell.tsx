@@ -28,6 +28,7 @@ import { AthleteSearchScreen } from './screens/AthleteSearchScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { FullPlanScreen } from './screens/FullPlanScreen';
 import { CoachDashboardScreen } from './screens/CoachDashboardScreen';
 import { CoachAthleteScreen } from './screens/CoachAthleteScreen';
 import { CoachAthletesScreen } from './screens/CoachAthletesScreen';
@@ -40,7 +41,7 @@ import { usePushNotifications } from './hooks/usePushNotifications';
 import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
-import { useHrZones } from './hooks/useTrainingReference';
+import { useHrZones, usePlanoCompleto } from './hooks/useTrainingReference';
 import { DownloadToast } from './components/rush/DownloadToast';
 import { BleHardwareModal } from './components/rush/BleHardwareModal';
 import { ShoeRetirementModal } from './components/rush/ShoeRetirementModal';
@@ -94,6 +95,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
     weeklySummary,
     upcomingSessions,
     currentWeek,
+    planRaw,
     feedPosts,
     feedChannel,
     setFeedChannel,
@@ -143,7 +145,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const [activeRoute, setActiveRoute] = useState<{ id: string; title?: string | null } | null>(null);
 
   // A aba Treinos tem duas faces: a prescrição do dia e o histórico.
-  const [workoutsView, setWorkoutsView] = useState<'prescricao' | 'historico'>('prescricao');
+  const [workoutsView, setWorkoutsView] = useState<'prescricao' | 'historico' | 'plano'>('prescricao');
   const [historyTab, setHistoryTab] = useState<'calendario' | 'lista' | 'carga'>('calendario');
 
   // Atividade aberta em detalhe, a partir do histórico.
@@ -208,6 +210,12 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   // As zonas alimentam a classificação de intensidade do histórico; só são
   // buscadas quando o atleta abre essa visão.
   const { zones } = useHrZones(workoutsView === 'historico');
+
+  // O plano inteiro so e buscado quando a aba do plano abre: sao 84
+  // sessoes, e elas nao fazem falta nas outras duas abas.
+  const planoCompleto = usePlanoCompleto(
+    workoutsView === 'plano' ? (planRaw?.plan?.id ?? null) : null,
+  );
   const history = useActivityHistory(zones);
 
   /** Depois de publicar, volta para o feed já atualizado. */
@@ -358,9 +366,10 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           <div className="flex flex-col w-full">
             {/* Prescrição do dia x histórico: mesma aba, duas faces. */}
             <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
                 {([
-                  { id: 'prescricao', label: 'Prescrição' },
+                  { id: 'prescricao', label: 'Hoje' },
+                  { id: 'plano', label: 'Plano' },
                   { id: 'historico', label: 'Histórico' },
                 ] as const).map((view) => (
                   <button
@@ -391,6 +400,11 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
                   reload();
                 }}
                 onViewRoute={setActiveRoute}
+              />
+            ) : workoutsView === 'plano' ? (
+              <FullPlanScreen
+                plano={planoCompleto}
+                onVoltar={() => setWorkoutsView('prescricao')}
               />
             ) : workoutsView === 'prescricao' ? (
               <WorkoutsScreen
