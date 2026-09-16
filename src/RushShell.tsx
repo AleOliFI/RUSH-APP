@@ -28,6 +28,11 @@ import { AthleteSearchScreen } from './screens/AthleteSearchScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { CoachDashboardScreen } from './screens/CoachDashboardScreen';
+import { CoachAthleteScreen } from './screens/CoachAthleteScreen';
+import { CoachAthletesScreen } from './screens/CoachAthletesScreen';
+import { CoachPrescribeScreen } from './screens/CoachPrescribeScreen';
+import { usePainelAssessoria, useFichaAtleta, useGestaoAtletas } from './hooks/useAssessoria';
 import { useActivityDetail } from './hooks/useActivityDetail';
 import { useSocial, usePublicProfile } from './hooks/useSocial';
 import { useNotifications } from './hooks/useNotifications';
@@ -169,6 +174,21 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const publicProfile = usePublicProfile(openAthleteId);
 
   const [profileView, setProfileView] = useState<'perfil' | 'conta' | 'ajustes'>('perfil');
+
+  // ---- Modulo do treinador ----
+  // Vive dentro da aba Perfil, como Ajustes: a BottomNav e fixa em
+  // seis colunas e o desenho do treinador pede outra barra inteira.
+  // Enfiar uma setima coluna la mudaria a navegacao de todo mundo.
+  const [coachView, setCoachView] = useState<null | 'painel' | 'atleta' | 'gestao' | 'prescrever'>(null);
+  const [coachAtletaId, setCoachAtletaId] = useState<string | null>(null);
+
+  const ehTreinador = ['coach', 'owner', 'admin'].includes(String(meRaw?.role || ''));
+
+  const painelAssessoria = usePainelAssessoria(ehTreinador && coachView !== null);
+  const fichaAtleta = useFichaAtleta(
+    coachView === 'atleta' || coachView === 'prescrever' ? coachAtletaId : null,
+  );
+  const gestaoAtletas = useGestaoAtletas();
   // Os ajustes e a exclusao leem os mesmos dados: o hook carrega para as duas.
   const account = useAccountSettings(profileView === 'conta' || profileView === 'ajustes');
 
@@ -449,7 +469,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'conta' && (
+        {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'conta' && (
           <DeleteAccountScreen
             subscription={subscription}
             activities={recentActivitiesRaw}
@@ -460,7 +480,42 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'ajustes' && (
+        {/* ---------- Modulo do treinador ---------- */}
+        {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'painel' && (
+          <CoachDashboardScreen
+            painel={painelAssessoria}
+            onAbrirAtleta={(id) => { setCoachAtletaId(id); setCoachView('atleta'); }}
+            onPrescrever={(id) => { setCoachAtletaId(id); setCoachView('prescrever'); }}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'atleta' && (
+          <CoachAthleteScreen
+            ficha={fichaAtleta}
+            onVoltar={() => setCoachView('painel')}
+            onPrescrever={() => setCoachView('prescrever')}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'prescrever' && (
+          <CoachPrescribeScreen
+            ficha={fichaAtleta}
+            gestao={gestaoAtletas}
+            onVoltar={() => setCoachView(coachAtletaId ? 'atleta' : 'painel')}
+            onPrescrito={() => { fichaAtleta.reload(); setCoachView('atleta'); }}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'gestao' && (
+          <CoachAthletesScreen
+            painel={painelAssessoria}
+            gestao={gestaoAtletas}
+            onVoltar={() => setCoachView('painel')}
+            onConcluido={() => setCoachView('painel')}
+          />
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'ajustes' && (
           <SettingsScreen
             account={account}
             push={push}
@@ -469,7 +524,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           />
         )}
 
-        {!isNotificationsOpen && currentTab === 'perfil' && profileView === 'perfil' && (
+        {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'perfil' && (
           <ProfileScreen
             athlete={athlete}
             readiness={readiness}
@@ -491,6 +546,8 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onViewImage={viewImage}
             onViewRoute={setActiveRoute}
             onOpenAccount={() => setProfileView('ajustes')}
+            onOpenAssessoria={ehTreinador ? () => setCoachView('painel') : undefined}
+            onOpenGestaoAtletas={ehTreinador ? () => setCoachView('gestao') : undefined}
           />
         )}
       </main>

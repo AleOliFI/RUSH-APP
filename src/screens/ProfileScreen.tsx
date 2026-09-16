@@ -42,6 +42,10 @@ interface ProfileScreenProps {
   onViewRoute: (activity: { id: string; title?: string | null }) => void;
   /** Abre a tela de exclusão de conta. */
   onOpenAccount: () => void;
+  /** Abre o painel da assessoria. Só existe para treinador. */
+  onOpenAssessoria?: () => void;
+  /** Gestão de atletas da assessoria. Só existe para treinador. */
+  onOpenGestaoAtletas?: () => void;
 }
 
 const ACWR_ZONE_TEXT: Record<string, string> = {
@@ -72,6 +76,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onViewImage,
   onViewRoute,
   onOpenAccount,
+  onOpenAssessoria,
+  onOpenGestaoAtletas,
 }) => {
   const [activeTab, setActiveTab] = useState<'posts' | 'stats' | 'badges'>('posts');
 
@@ -319,6 +325,40 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </div>
           <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
         </button>
+
+        {/* Só aparece para quem é treinador: o RushShell só passa
+            estes callbacks quando o papel da conta permite. */}
+        {onOpenAssessoria && (
+          <button
+            onClick={onOpenAssessoria}
+            className="min-h-[56px] p-3.5 bg-[#1C1C1C] hover:bg-[#262626] border border-[#FF5500] rounded-2xl flex items-center justify-between transition-all cursor-pointer shadow-md text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[#FF5500] text-[24px]">monitoring</span>
+              <div>
+                <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Painel da equipe</span>
+                <span className="text-[10px] text-[#A1A1AA] block">Atletas por risco fisiológico</span>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
+          </button>
+        )}
+
+        {onOpenGestaoAtletas && (
+          <button
+            onClick={onOpenGestaoAtletas}
+            className="min-h-[56px] p-3.5 bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] rounded-2xl flex items-center justify-between transition-all cursor-pointer shadow-md text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[#FF5500] text-[24px]">groups</span>
+              <div>
+                <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Atletas</span>
+                <span className="text-[10px] text-[#A1A1AA] block">Convidar e cadastrar</span>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
+          </button>
+        )}
 
         <button
           onClick={onOpenAccount}

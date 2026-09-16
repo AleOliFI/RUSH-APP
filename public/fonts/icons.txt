@@ -62,6 +62,7 @@ lock
 lock_open
 login
 logout
+mail
 manage_accounts
 map
 monitoring

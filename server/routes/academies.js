@@ -111,7 +111,11 @@ module.exports = function academiesRoutes(db) {
       // Athletes with today's status
       const athleteStatuses = await db.prepare(`
         SELECT u.id, up.name, up.username, up.avatar_url,
-          ds.status, ds.lnrmssd, ds.suggested_action, ds.explanation_text
+          ds.status, ds.lnrmssd, ds.suggested_action, ds.explanation_text,
+          -- A base entra junto porque o valor absoluto nao diz nada: um
+          -- lnRMSSD de 34 so vira sinal quando comparado com a media do
+          -- proprio atleta. Sem isto a tela mostraria um numero solto.
+          ds.lnrmssd_7d_mean, ds.lnrmssd_7d_sd
         FROM users u
         JOIN user_profiles up ON up.user_id = u.id
         LEFT JOIN daily_status ds ON ds.user_id = u.id AND ds.date = ?
@@ -126,11 +130,17 @@ module.exports = function academiesRoutes(db) {
       `).all(today, req.user.academy_id);
 
       // Stats
+      // TODAS as contagens abaixo filtram por role = 'athlete', igual a
+      // lista de atletas. Antes, so `totalAthletes` e a lista filtravam:
+      // o treinador e o dono da assessoria entravam no numerador e
+      // ficavam fora do denominador. Na tela isso aparecia como "1 de 3
+      // mediram" com os tres atletas marcados como "nao mediu" — o
+      // resumo e a lista contando populacoes diferentes.
       const statusCounts = await db.prepare(`
         SELECT ds.status, COUNT(*) as count
         FROM daily_status ds
         JOIN users u ON u.id = ds.user_id
-        WHERE u.academy_id = ? AND ds.date = ?
+        WHERE u.academy_id = ? AND u.role = 'athlete' AND u.deleted_at IS NULL AND ds.date = ?
         GROUP BY ds.status
       `).all(req.user.academy_id, today);
 
@@ -138,7 +148,7 @@ module.exports = function academiesRoutes(db) {
         SELECT COUNT(*) as count, COALESCE(SUM(a.distance_km), 0) as total_km
         FROM activities a
         JOIN users u ON u.id = a.user_id
-        WHERE u.academy_id = ? AND a.date >= ?
+        WHERE u.academy_id = ? AND u.role = 'athlete' AND u.deleted_at IS NULL AND a.date >= ?
       `).get(req.user.academy_id, thirtyDaysAgo);
 
       const totalAthletes = await db.prepare("SELECT COUNT(*) as count FROM users WHERE academy_id = ? AND role = 'athlete' AND deleted_at IS NULL").get(req.user.academy_id);
@@ -146,7 +156,7 @@ module.exports = function academiesRoutes(db) {
         SELECT COUNT(DISTINCT ds.user_id) as count
         FROM daily_status ds
         JOIN users u ON u.id = ds.user_id
-        WHERE u.academy_id = ? AND ds.date = ?
+        WHERE u.academy_id = ? AND u.role = 'athlete' AND u.deleted_at IS NULL AND ds.date = ?
       `).get(req.user.academy_id, today);
 
       res.json({
@@ -263,12 +273,30 @@ module.exports = function academiesRoutes(db) {
 
       // Current plan
       const plan = await db.prepare(`
-        SELECT ap.*, tp.name as plan_name, tp.distance_km, tp.level
+        SELECT ap.*, tp.name as plan_name, tp.distance_km, tp.level, tp.duration_weeks
         FROM assigned_plans ap
         JOIN training_plans tp ON tp.id = ap.plan_id
         WHERE ap.user_id = ? AND ap.status = 'active'
         LIMIT 1
       `).get(athleteId);
+
+      // As zonas do ATLETA, calculadas aqui pelas mesmas funcoes que
+      // /hrv/zones usa. O treinador precisa delas para prescrever: "Z4"
+      // e uma letra, "161-181 bpm dele" e uma instrucao. Calcular no
+      // cliente recriaria a regra de zonas num segundo lugar, e foi
+      // exatamente assim que a FCmax medida passou a ser ignorada.
+      const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
+      const perfilParaZonas = {
+        age: athlete.date_of_birth
+          ? Math.max(15, new Date().getFullYear() - new Date(athlete.date_of_birth).getFullYear())
+          : 30,
+        gender: athlete.gender || 'male',
+        weightKg: athlete.weight_kg,
+        heightCm: athlete.height_cm,
+        hrMaxTested: athlete.hr_max_tested,
+      };
+      const maxHrAtleta = calculateMaxHr(perfilParaZonas);
+      const medidaValida = Number(athlete.hr_max_tested) >= 120 && Number(athlete.hr_max_tested) <= 220;
 
       res.json({
         athlete,
@@ -276,6 +304,9 @@ module.exports = function academiesRoutes(db) {
         recent_activities: recentActivities,
         vo2max_history: vo2max,
         current_plan: plan || null,
+        max_hr: maxHrAtleta,
+        max_hr_source: medidaValida ? 'field_test' : 'age_estimate',
+        hr_zones: calculateHrZones(maxHrAtleta),
       });
     } catch (err) {
       console.error('Get athlete details error:', err);
