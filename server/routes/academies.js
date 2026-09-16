@@ -6,6 +6,9 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { authenticate, authorize } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
+// A conta de semana/dia e a MESMA que /training/my-plan usa: se as duas
+// divergirem, a sessao gravada cai num dia que o app nao procura.
+const { posicaoNoPlano } = require('../services/semanaDoPlano');
 
 module.exports = function academiesRoutes(db) {
   const router = express.Router();
@@ -358,7 +361,7 @@ module.exports = function academiesRoutes(db) {
   router.post('/athlete/:id/prescribe', authenticate, authorize('owner', 'coach', 'admin'), async (req, res) => {
     try {
       const athleteId = req.params.id;
-      const { title, type, distance_km, duration_min, target_pace, target_hr_zone, description, notes } = req.body;
+      const { title, type, distance_km, duration_min, target_pace, target_hr_zone, description, notes, data_treino } = req.body;
 
       if (!athleteId || !type) {
         return res.status(400).json({ error: 'ID do atleta e tipo de treino são obrigatórios' });
@@ -370,8 +373,69 @@ module.exports = function academiesRoutes(db) {
         return res.status(404).json({ error: 'Atleta não encontrado na sua assessoria' });
       }
 
+      // -------------------------------------------------------
+      // Gravar a sessao — o passo que faltava.
+      // -------------------------------------------------------
+      // Ate aqui esta rota so notificava o atleta e devolvia o
+      // payload de volta, respondendo "Treino prescrito e enviado
+      // com sucesso". O treino nao era gravado em lugar nenhum: o
+      // atleta recebia o aviso, abria o app e nao encontrava nada.
+      //
+      // Uma sessao vive na chave (plan_id, week_number,
+      // day_of_week) — nao ha coluna de data. Entao a prescricao
+      // precisa do plano ativo do atleta para ter onde morar.
+      const atribuicao = await db.prepare(`
+        SELECT ap.*, tp.duration_weeks
+        FROM assigned_plans ap
+        JOIN training_plans tp ON tp.id = ap.plan_id
+        WHERE ap.user_id = ? AND ap.status = 'active'
+        ORDER BY ap.created_at DESC LIMIT 1
+      `).get(athleteId);
+
+      if (!atribuicao) {
+        return res.status(409).json({
+          error: 'Este atleta não tem plano ativo, e uma sessão precisa de um plano para existir. ' +
+                 'Atribua um plano antes de prescrever.',
+        });
+      }
+
+      const { week_number, day_of_week } = posicaoNoPlano(
+        atribuicao.start_date, atribuicao.duration_weeks, data_treino || new Date(),
+      );
+
+      // Todo dia do plano ja tem uma sessao — inclusive os de
+      // descanso. Inserir outra no mesmo dia deixaria "o treino de
+      // hoje" ambiguo, porque /training/my-plan busca com .get() e
+      // pegaria uma das duas sem criterio. Prescrever SUBSTITUI o
+      // dia, que e tambem o que o treinador quer dizer.
+      const anterior = await db.prepare(
+        'SELECT id, type FROM training_sessions WHERE plan_id = ? AND week_number = ? AND day_of_week = ?'
+      ).get(atribuicao.plan_id, week_number, day_of_week);
+
+      if (anterior) {
+        await db.prepare('DELETE FROM training_sessions WHERE id = ?').run(anterior.id);
+      }
+
+      const sessaoId = uuidv4();
+      await db.prepare(`
+        INSERT INTO training_sessions
+          (id, plan_id, week_number, day_of_week, type, distance_km, duration_min,
+           target_pace, target_hr_zone, description, is_fixed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
+        sessaoId, atribuicao.plan_id, week_number, day_of_week, type,
+        Number(distance_km) || null, Number(duration_min) || null,
+        target_pace || null, target_hr_zone || null,
+        description || notes || 'Sessão personalizada pelo treinador.',
+      );
+
+      // is_fixed = 1: o agente de VFC ajusta o volume de sessoes
+      // comuns quando a prontidao cai, e uma prescricao do
+      // treinador nao deve ser remexida sem que ele saiba.
+
       // Notify athlete of coach's prescription
       const coachProfile = await db.prepare('SELECT name FROM user_profiles WHERE user_id = ?').get(req.user.id);
+
       await criarNotificacao(db, {
         userId: athleteId,
         type: 'plan_assigned',
@@ -379,19 +443,17 @@ module.exports = function academiesRoutes(db) {
         message: `Seu treinador ${coachProfile?.name || 'do RUSH'} prescreveu uma nova sessão: ${title || type} (${distance_km || 5} km)`,
       });
 
-      res.json({
+      const gravada = await db.prepare('SELECT * FROM training_sessions WHERE id = ?').get(sessaoId);
+
+      res.status(201).json({
         success: true,
-        prescribed_session: {
-          athlete_id: athleteId,
-          title: title || 'Treino Prescrito pelo Coach',
-          type,
-          distance_km: Number(distance_km) || null,
-          duration_min: Number(duration_min) || null,
-          target_pace: target_pace || null,
-          target_hr_zone: target_hr_zone || null,
-          description: description || notes || 'Sessão personalizada pelo treinador.',
-        },
-        message: 'Treino prescrito e enviado com sucesso ao atleta!',
+        session: gravada,
+        replaced: anterior ? { id: anterior.id, type: anterior.type } : null,
+        week_number,
+        day_of_week,
+        message: anterior
+          ? `Treino prescrito: substituiu a sessão de ${anterior.type} da semana ${week_number}.`
+          : `Treino prescrito na semana ${week_number}.`,
       });
     } catch (err) {
       console.error('Prescribe workout error:', err);

@@ -9,6 +9,7 @@ const { criarNotificacao } = require('../services/notificacoes');
 // A periodizacao mora em services/: o seed gera o plano de
 // demonstracao pelo mesmo caminho que esta rota.
 const { getTrainingTemplates, generateWeekSessions } = require('../services/periodizacao');
+const { posicaoNoPlano } = require('../services/semanaDoPlano');
 
 module.exports = function trainingRoutes(db) {
   const router = express.Router();
@@ -229,12 +230,13 @@ module.exports = function trainingRoutes(db) {
         return res.json({ has_plan: false, plan: null, today_session: null });
       }
 
-      // Calculate current week safely (handles future start date gracefully)
-      const startDate = new Date(assignment.start_date);
+      // A mesma funcao que a prescricao do treinador usa. Se cada
+      // lado fizesse a propria conta, uma sessao gravada na
+      // semana 6 poderia ser procurada na 5 — e o sintoma seria
+      // "o treino nao apareceu", sem erro nenhum no log.
       const today = new Date();
-      const daysDiff = Math.floor((today - startDate) / (24 * 60 * 60 * 1000));
-      const currentWeek = Math.max(1, Math.min(Math.floor(daysDiff / 7) + 1, assignment.duration_weeks));
-      const dayOfWeek = today.getDay() || 7;
+      const { week_number: currentWeek, day_of_week: dayOfWeek } =
+        posicaoNoPlano(assignment.start_date, assignment.duration_weeks, today);
 
       // Update current week in database if changed
       if (assignment.current_week !== currentWeek) {
