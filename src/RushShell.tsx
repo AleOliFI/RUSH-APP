@@ -29,6 +29,7 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { FullPlanScreen } from './screens/FullPlanScreen';
+import { HrZonesScreen } from './screens/HrZonesScreen';
 import { CoachDashboardScreen } from './screens/CoachDashboardScreen';
 import { CoachAthleteScreen } from './screens/CoachAthleteScreen';
 import { CoachAthletesScreen } from './screens/CoachAthletesScreen';
@@ -153,7 +154,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const activityDetail = useActivityDetail(openActivityId);
 
   // A aba Medição também tem duas faces: a captura de VFC e o ciclo.
-  const [measureView, setMeasureView] = useState<'vfc' | 'ciclo'>('vfc');
+  const [measureView, setMeasureView] = useState<'vfc' | 'ciclo' | 'zonas'>('vfc');
   const cycle = useCycle(measureView === 'ciclo');
 
   // Perfil também abre a área de conta (hoje: exclusão).
@@ -209,7 +210,10 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
 
   // As zonas alimentam a classificação de intensidade do histórico; só são
   // buscadas quando o atleta abre essa visão.
-  const { zones } = useHrZones(workoutsView === 'historico');
+  // O histórico usa as zonas para a distribuição por faixa; a aba de
+  // zonas as mostra. O mesmo hook serve aos dois.
+  const zonasFc = useHrZones(workoutsView === 'historico' || measureView === 'zonas');
+  const { zones } = zonasFc;
 
   // O plano inteiro so e buscado quando a aba do plano abre: sao 84
   // sessoes, e elas nao fazem falta nas outras duas abas.
@@ -321,9 +325,10 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         {!isNotificationsOpen && currentTab === 'medicao' && (
           <div className="flex flex-col w-full">
             <div className="w-full max-w-2xl mx-auto px-4 sm:px-5 pt-2">
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#1C1C1C] border border-[#262626]">
                 {([
-                  { id: 'vfc', label: 'Medição VFC' },
+                  { id: 'vfc', label: 'Medir' },
+                  { id: 'zonas', label: 'Zonas FC' },
                   { id: 'ciclo', label: 'Ciclo' },
                 ] as const).map((view) => (
                   <button
@@ -343,7 +348,12 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
               </div>
             </div>
 
-            {measureView === 'ciclo' ? (
+            {measureView === 'zonas' ? (
+              <HrZonesScreen
+                zonas={zonasFc}
+                onFazerTeste={() => setIsFieldProtocolOpen(true)}
+              />
+            ) : measureView === 'ciclo' ? (
               <CycleScreen
                 cycle={cycle}
                 rmssdToday={hrvStatusRaw?.measurement?.rmssd_ms ?? null}

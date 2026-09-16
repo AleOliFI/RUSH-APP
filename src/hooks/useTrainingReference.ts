@@ -21,8 +21,17 @@ export interface HrZone {
 }
 
 export interface HrZonesData {
-  /** Estimada por idade quando não há teste de campo — a tela precisa dizer isso. */
   maxHr: number | null;
+  /**
+   * De onde veio a FCmáx: medida num teste de campo, ou estimada
+   * pela idade.
+   *
+   * A tela precisa distinguir as duas. Uma estimativa por idade é
+   * uma média populacional — ela erra por indivíduo, e num caso
+   * medido aqui a diferença foi de 13 bpm, o bastante para deslocar
+   * uma zona inteira. Mostrar as duas do mesmo jeito engana quem lê.
+   */
+  maxHrSource: 'field_test' | 'age_estimate' | null;
   zones: Record<string, HrZone>;
   isLoading: boolean;
   error: string | null;
@@ -31,6 +40,7 @@ export interface HrZonesData {
 
 export function useHrZones(enabled = true): HrZonesData {
   const [maxHr, setMaxHr] = useState<number | null>(null);
+  const [maxHrSource, setMaxHrSource] = useState<'field_test' | 'age_estimate' | null>(null);
   const [zones, setZones] = useState<Record<string, HrZone>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +51,7 @@ export function useHrZones(enabled = true): HrZonesData {
     try {
       const res = await hrv.zones();
       setMaxHr(res?.max_hr ?? null);
+      setMaxHrSource(res?.max_hr_source ?? null);
       setZones(res?.zones || {});
     } catch (err: any) {
       setError(err?.message || 'Erro ao carregar as zonas de frequência cardíaca');
@@ -53,7 +64,7 @@ export function useHrZones(enabled = true): HrZonesData {
     if (enabled) reload();
   }, [enabled, reload]);
 
-  return { maxHr, zones, isLoading, error, reload };
+  return { maxHr, maxHrSource, zones, isLoading, error, reload };
 }
 
 export interface LeaderboardEntry {
