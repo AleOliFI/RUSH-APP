@@ -158,15 +158,40 @@ class Statement {
   }
 }
 
+// ------------------------------------------------------------
+// TLS da conexão com o banco.
+//
+// Em localhost não há TLS, e exigi-lo quebraria os testes.
+//
+// Fora dele a verificação fica ligada — sempre. O Supabase assina
+// o certificado do pooler com uma CA própria, que não está entre
+// as raízes públicas do Node: sem ela a conexão morre com
+// SELF_SIGNED_CERT_IN_CHAIN. A saída fácil seria `rejectUnauthorized:
+// false`, que mantém o tráfego criptografado mas deixa de conferir
+// COM QUEM se está falando. Aqui a CA é fixada em vez disso.
+//
+// A CA do Supabase só entra quando o destino é do Supabase. Para
+// qualquer outro provedor valem as raízes públicas de sempre, senão
+// trocar de banco quebraria a conexão por um motivo que ninguém
+// adivinharia.
+// ------------------------------------------------------------
+function tlsPara(connectionString) {
+  const url = connectionString || '';
+  if (/localhost|127\.0\.0\.1/.test(url)) return false;
+  if (/supabase\.(com|co)\b/.test(url)) {
+    const { SUPABASE_ROOT_2021_CA } = require('./certificados/supabaseRootCa');
+    return { ca: SUPABASE_ROOT_2021_CA, rejectUnauthorized: true };
+  }
+  return { rejectUnauthorized: true };
+}
+
 class Database {
   constructor(connectionString, opcoes = {}) {
     this.pool = new Pool({
       connectionString,
       // Provedores gerenciados (Neon, Supabase, Vercel) exigem TLS.
       // Em localhost não há TLS e forçá-lo quebraria o teste.
-      ssl: /localhost|127\.0\.0\.1/.test(connectionString || '')
-        ? false
-        : { rejectUnauthorized: true },
+      ssl: tlsPara(connectionString),
       max: opcoes.max ?? 5,
     });
 
@@ -226,4 +251,4 @@ class Database {
   }
 }
 
-module.exports = { Database, trocarPlaceholders, traduzir };
+module.exports = { Database, trocarPlaceholders, traduzir, tlsPara };
