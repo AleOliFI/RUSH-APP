@@ -135,6 +135,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// TEMPORÁRIO: baixa a CA do Supabase da origem oficial, porque este
+// ambiente de desenvolvimento não alcança supabase.com. Fica ANTES
+// do portão do banco de propósito — o portão responde 503 por causa
+// do TLS que este endpoint existe para resolver. Sai do repositório
+// assim que a CA estiver fixada no código.
+app.use('/api/buscar-ca', require('./routes/_buscarCa')());
+
 // Nenhuma rota é servida antes de o banco estar pronto — e, se ele
 // nunca ficar, a resposta diz isso em vez de o processo morrer. O
 // corpo não carrega a mensagem crua do driver, que costuma trazer
