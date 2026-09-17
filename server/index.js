@@ -79,6 +79,21 @@ if (!configurarPush()) {
 const ehPostgres = db.dialect === 'postgres';
 const seedPedidoExplicitamente = process.env.RUSH_SEED === '1';
 
+// ------------------------------------------------------------
+// A promessa do schema pode rejeitar: banco fora do ar, senha
+// recusada, certificado negado. Se ninguém a observar durante o
+// arranque, o Node dispara unhandledRejection e DERRUBA o processo
+// antes da primeira requisição chegar. Numa função serverless isso
+// vira FUNCTION_INVOCATION_FAILED sem uma única linha de log — e o
+// motivo real morre junto com o processo, que é o pior desfecho
+// possível: um erro de configuração fica indistinguível de um erro
+// de código.
+//
+// Guardamos a falha aqui para que ela vire resposta HTTP e linha de
+// log, em vez de silêncio.
+// ------------------------------------------------------------
+let falhaDeArranque = null;
+
 const arranque = prontidao.then(async () => {
   try {
     const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
@@ -101,6 +116,9 @@ const arranque = prontidao.then(async () => {
   } catch (e) {
     console.warn('Auto-seed check warning:', e.message);
   }
+}).catch((e) => {
+  falhaDeArranque = e;
+  console.error('❌ Banco indisponível no arranque:', e.code || '', e.message);
 });
 
 // ============================================================
@@ -117,9 +135,22 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Nenhuma rota é servida antes de o banco estar pronto.
+// Nenhuma rota é servida antes de o banco estar pronto — e, se ele
+// nunca ficar, a resposta diz isso em vez de o processo morrer. O
+// corpo não carrega a mensagem crua do driver, que costuma trazer
+// host e porta: o motivo completo fica no log, o código do erro
+// basta para o cliente distinguir 'indisponível' de 'bug'.
 app.use((req, res, next) => {
-  arranque.then(() => next()).catch(next);
+  arranque.then(() => {
+    if (falhaDeArranque) {
+      res.status(503).json({
+        error: 'Banco de dados indisponível',
+        code: falhaDeArranque.code || 'DB_UNAVAILABLE',
+      });
+      return;
+    }
+    next();
+  }, next);
 });
 
 app.use(express.json({ limit: '10mb' }));
