@@ -3,7 +3,7 @@
 // ============================================================
 
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate, authorize } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 // A periodizacao mora em services/: o seed gera o plano de

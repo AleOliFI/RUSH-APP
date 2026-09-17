@@ -3,7 +3,7 @@
 // ============================================================
 
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');

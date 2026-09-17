@@ -5,7 +5,7 @@
 
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const path = require('path');
 const fs = require('fs');
 const { calculateLnRmssd } = require('./server/agent/trainingAgent');

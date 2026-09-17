@@ -20,7 +20,7 @@
 // ============================================================
 
 const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 const { calculateLnRmssd } = require('../agent/trainingAgent');
 const { getTrainingTemplates, generateWeekSessions } = require('../services/periodizacao');
 

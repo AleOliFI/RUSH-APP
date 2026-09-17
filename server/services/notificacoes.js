@@ -11,7 +11,7 @@
 // porque o serviço de push do navegador está fora do ar.
 // ============================================================
 
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 
 let webpush = null;
 let pushConfigurado = false;
