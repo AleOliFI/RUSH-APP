@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
-import { challenges, hrv, training } from '../api';
+import { hrv, training } from '../api';
 
 export interface HrZone {
   name: string;
@@ -65,62 +65,6 @@ export function useHrZones(enabled = true): HrZonesData {
   }, [enabled, reload]);
 
   return { maxHr, maxHrSource, zones, isLoading, error, reload };
-}
-
-export interface LeaderboardEntry {
-  user_id: string;
-  name: string;
-  username: string;
-  avatar_url: string | null;
-  rank: number;
-  progress_value: number;
-  progress_pct: number;
-  is_me: boolean;
-}
-
-export interface LeaderboardData {
-  challenge: any | null;
-  entries: LeaderboardEntry[];
-  /** A linha do próprio atleta, para fixar no topo ou no rodapé da lista. */
-  myEntry: LeaderboardEntry | null;
-  isLoading: boolean;
-  error: string | null;
-  reload: () => Promise<void>;
-}
-
-export function useChallengeLeaderboard(challengeId: string | null): LeaderboardData {
-  const [challenge, setChallenge] = useState<any | null>(null);
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const reload = useCallback(async () => {
-    if (!challengeId) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await challenges.leaderboard(challengeId);
-      setChallenge(res?.challenge || null);
-      setEntries(res?.leaderboard || []);
-    } catch (err: any) {
-      setError(err?.message || 'Erro ao carregar o ranking do desafio');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [challengeId]);
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
-
-  return {
-    challenge,
-    entries,
-    myEntry: entries.find((e) => e.is_me) || null,
-    isLoading,
-    error,
-    reload,
-  };
 }
 
 // ------------------------------------------------------------

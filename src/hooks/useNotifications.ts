@@ -115,26 +115,3 @@ export function useNotifications(enabled = true): NotificationsData {
 
   return { items, unreadCount, isLoading, error, hasMore, reload, loadMore, markRead, markAllRead };
 }
-
-/**
- * Só o contador, para o sino do cabeçalho: evita carregar a lista
- * inteira em telas que apenas mostram o badge.
- */
-export function useUnreadCount(enabled = true) {
-  const [count, setCount] = useState(0);
-
-  const refresh = useCallback(async () => {
-    try {
-      const res = await notificationsApi.unreadCount();
-      setCount(res?.unread_count ?? 0);
-    } catch {
-      // Um badge que falha não deve quebrar a tela: fica no último valor.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (enabled) refresh();
-  }, [enabled, refresh]);
-
-  return { count, refresh };
-}
