@@ -1,12 +1,12 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth, users, setAuth, clearAuth, getUser, getToken } from '../api';
 import UpgradeProModal from '../components/UpgradeProModal';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext<any>(null);
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => getUser());
-  const [token, setToken] = useState(() => getToken());
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<any>(() => getUser());
+  const [token, setToken] = useState<string | null>(() => getToken());
   const [isLoading, setIsLoading] = useState(true);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
       setToken(currentToken);
       return mergedUser;
     } catch (err) {
-      console.warn('Session check failed or expired:', err.message);
+      console.warn('Session check failed or expired:', (err as Error)?.message);
       clearAuth();
       setUser(null);
       setToken(null);
@@ -56,7 +56,7 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:expired', handleAuthExpired);
   }, [refreshUser]);
 
-  const login = async (email, password) => {
+  const login = async (email: string, password: string) => {
     const data = await auth.login(email, password);
     setAuth(data);
     const activeUser = data.user;
@@ -65,8 +65,13 @@ export function AuthProvider({ children }) {
     return activeUser;
   };
 
-  const register = async (params, maybePassword, maybeName, maybeUsername) => {
-    let payload;
+  const register = async (
+    params: any,
+    maybePassword?: string,
+    maybeName?: string,
+    maybeUsername?: string,
+  ) => {
+    let payload: any;
     if (typeof params === 'object' && params !== null) {
       payload = params;
     } else {
@@ -98,8 +103,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const updateUser = (partialData) => {
-    setUser((prev) => {
+  const updateUser = (partialData: any) => {
+    setUser((prev: any) => {
       const updated = { ...(prev || {}), ...partialData };
       localStorage.setItem('rush_user', JSON.stringify(updated));
       return updated;
