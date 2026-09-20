@@ -5,7 +5,7 @@
 // e os links profundos continuam funcionando.
 // ============================================================
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TabType, ImageViewerItem } from './types';
 import { Header } from './components/rush/Header';
@@ -30,10 +30,10 @@ import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { FullPlanScreen } from './screens/FullPlanScreen';
 import { HrZonesScreen } from './screens/HrZonesScreen';
-import { CoachDashboardScreen } from './screens/CoachDashboardScreen';
-import { CoachAthleteScreen } from './screens/CoachAthleteScreen';
-import { CoachAthletesScreen } from './screens/CoachAthletesScreen';
-import { CoachPrescribeScreen } from './screens/CoachPrescribeScreen';
+
+
+
+
 import { usePainelAssessoria, useFichaAtleta, useGestaoAtletas } from './hooks/useAssessoria';
 import { useActivityDetail } from './hooks/useActivityDetail';
 import { useSocial, usePublicProfile } from './hooks/useSocial';
@@ -46,10 +46,10 @@ import { useHrZones, usePlanoCompleto } from './hooks/useTrainingReference';
 import { DownloadToast } from './components/rush/DownloadToast';
 import { BleHardwareModal } from './components/rush/BleHardwareModal';
 import { ShoeRetirementModal } from './components/rush/ShoeRetirementModal';
-import { GearGarageModal } from './components/rush/GearGarageModal';
+
 import { StoryExporterModal } from './components/rush/StoryExporterModal';
-import { WorkoutSummaryModal } from './components/rush/WorkoutSummaryModal';
-import { ActiveRunModal } from './components/rush/ActiveRunModal';
+
+
 import { FieldProtocolModal } from './components/rush/FieldProtocolModal';
 import { ActivityCommentsModal } from './components/rush/ActivityCommentsModal';
 import { NewPostModal } from './components/rush/NewPostModal';
@@ -59,6 +59,52 @@ import { useRushData } from './hooks/useRushData';
 import type { RunSummary } from './hooks/useRunTracker';
 import { parseCustomZonePaces } from './data/adapters';
 import { activitiesToCsv, downloadCsv } from './utils/exportCsv';
+
+
+// ------------------------------------------------------------
+// Carregadas sob demanda
+// ------------------------------------------------------------
+// Estas sete somavam ~3.200 linhas dentro do bundle unico, e nenhuma
+// delas e a primeira tela: as quatro do treinador vivem atras de
+// Perfil, e as tres modais so abrem por acao explicita. Adiar o
+// download tira esse peso da primeira carga sem que ninguem espere
+// por ele — quando abrem, o codigo ja chegou.
+//
+// As seis abas principais NAO entram: sao o caminho critico, e adiar
+// qualquer uma delas trocaria peso de download por espera visivel.
+//
+// StoryExporterModal ficou de fora de proposito: ao contrario das
+// outras tres, ela nao tem guarda `if (!isOpen) return null` — monta
+// um canvas em efeitos atrelados a isOpen —, entao torna-la
+// condicional mudaria comportamento.
+//
+// `lazy` espera default export e estas sao nomeadas, dai o `.then`.
+const CoachDashboardScreen = lazy(() => import('./screens/CoachDashboardScreen').then((m) => ({ default: m.CoachDashboardScreen })));
+const CoachAthleteScreen = lazy(() => import('./screens/CoachAthleteScreen').then((m) => ({ default: m.CoachAthleteScreen })));
+const CoachAthletesScreen = lazy(() => import('./screens/CoachAthletesScreen').then((m) => ({ default: m.CoachAthletesScreen })));
+const CoachPrescribeScreen = lazy(() => import('./screens/CoachPrescribeScreen').then((m) => ({ default: m.CoachPrescribeScreen })));
+const GearGarageModal = lazy(() => import('./components/rush/GearGarageModal').then((m) => ({ default: m.GearGarageModal })));
+const ActiveRunModal = lazy(() => import('./components/rush/ActiveRunModal').then((m) => ({ default: m.ActiveRunModal })));
+const WorkoutSummaryModal = lazy(() => import('./components/rush/WorkoutSummaryModal').then((m) => ({ default: m.WorkoutSummaryModal })));
+
+/**
+ * Moldura do carregamento.
+ *
+ * Numa TELA, o fallback precisa ocupar espaço com o fundo do app: sem
+ * isso a troca apareceria como um flash branco no meio do conteudo.
+ *
+ * Numa MODAL, ocupar espaco e o erro oposto — ela e sobreposta, e um
+ * bloco no fluxo do documento empurraria o layout por um instante
+ * antes de a modal abrir por cima. Dai `moldura={false}`.
+ */
+const Adiado: React.FC<{ children: React.ReactNode; moldura?: boolean }> = ({
+  children,
+  moldura = true,
+}) => (
+  <Suspense fallback={moldura ? <div className="min-h-[40vh] bg-[#0D0D0D]" aria-busy="true" /> : null}>
+    {children}
+  </Suspense>
+);
 
 /** Mapeamento bidirecional entre as abas do design e as rotas do app. */
 const TAB_TO_PATH: Record<TabType, string> = {
@@ -506,46 +552,54 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
 
         {/* ---------- Modulo do treinador ---------- */}
         {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'painel' && (
-          <CoachDashboardScreen
-            painel={painelAssessoria}
-            gestao={gestaoAtletas}
-            onAbrirAtleta={(id) => { setCoachAtletaId(id); setCoachView('atleta'); }}
-            onPrescrever={(id) => { setCoachAtletaId(id); setCoachView('prescrever'); }}
-            onAssessoriaCriada={async () => {
-              // O backend promoveu a conta a `owner` e gravou o
-              // academy_id. `reload` recarrega users.me(), sem o qual
-              // o app continuaria mostrando "Nenhuma assessoria" para
-              // quem acabou de criar uma.
-              await reload();
-              await painelAssessoria.reload();
-            }}
-          />
+          <Adiado>
+            <CoachDashboardScreen
+              painel={painelAssessoria}
+              gestao={gestaoAtletas}
+              onAbrirAtleta={(id) => { setCoachAtletaId(id); setCoachView('atleta'); }}
+              onPrescrever={(id) => { setCoachAtletaId(id); setCoachView('prescrever'); }}
+              onAssessoriaCriada={async () => {
+                // O backend promoveu a conta a `owner` e gravou o
+                // academy_id. `reload` recarrega users.me(), sem o qual
+                // o app continuaria mostrando "Nenhuma assessoria" para
+                // quem acabou de criar uma.
+                await reload();
+                await painelAssessoria.reload();
+              }}
+            />
+          </Adiado>
         )}
 
         {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'atleta' && (
-          <CoachAthleteScreen
-            ficha={fichaAtleta}
-            onVoltar={() => setCoachView('painel')}
-            onPrescrever={() => setCoachView('prescrever')}
-          />
+          <Adiado>
+            <CoachAthleteScreen
+              ficha={fichaAtleta}
+              onVoltar={() => setCoachView('painel')}
+              onPrescrever={() => setCoachView('prescrever')}
+            />
+          </Adiado>
         )}
 
         {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'prescrever' && (
-          <CoachPrescribeScreen
-            ficha={fichaAtleta}
-            gestao={gestaoAtletas}
-            onVoltar={() => setCoachView(coachAtletaId ? 'atleta' : 'painel')}
-            onPrescrito={() => { fichaAtleta.reload(); setCoachView('atleta'); }}
-          />
+          <Adiado>
+            <CoachPrescribeScreen
+              ficha={fichaAtleta}
+              gestao={gestaoAtletas}
+              onVoltar={() => setCoachView(coachAtletaId ? 'atleta' : 'painel')}
+              onPrescrito={() => { fichaAtleta.reload(); setCoachView('atleta'); }}
+            />
+          </Adiado>
         )}
 
         {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'gestao' && (
-          <CoachAthletesScreen
-            painel={painelAssessoria}
-            gestao={gestaoAtletas}
-            onVoltar={() => setCoachView('painel')}
-            onConcluido={() => setCoachView('painel')}
-          />
+          <Adiado>
+            <CoachAthletesScreen
+              painel={painelAssessoria}
+              gestao={gestaoAtletas}
+              onVoltar={() => setCoachView('painel')}
+              onConcluido={() => setCoachView('painel')}
+            />
+          </Adiado>
         )}
 
         {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'ajustes' && (
@@ -623,15 +677,19 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         onViewImage={viewImage}
       />
 
-      <GearGarageModal
-        isOpen={isGearGarageOpen}
-        shoes={shoes}
-        summary={shoesSummary}
-        onClose={() => setIsGearGarageOpen(false)}
-        onReloadGear={reloadGear}
-        onOpenShoeRetirement={(shoeId) => setRetirementShoeId(shoeId)}
-        onViewImage={viewImage}
-      />
+      {isGearGarageOpen && (
+        <Adiado moldura={false}>
+          <GearGarageModal
+            isOpen={isGearGarageOpen}
+            shoes={shoes}
+            summary={shoesSummary}
+            onClose={() => setIsGearGarageOpen(false)}
+            onReloadGear={reloadGear}
+            onOpenShoeRetirement={(shoeId) => setRetirementShoeId(shoeId)}
+            onViewImage={viewImage}
+          />
+        </Adiado>
+      )}
 
       <StoryExporterModal
         isOpen={isStoryExporterOpen}
@@ -640,28 +698,36 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         onClose={() => setIsStoryExporterOpen(false)}
       />
 
-      <WorkoutSummaryModal
-        isOpen={isWorkoutSummaryOpen}
-        summary={lastRunSummary}
-        hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}
-        personalRecords={recordsRaw?.records || null}
-        weightKg={profileRaw?.weight_kg ?? null}
-        onClose={() => setIsWorkoutSummaryOpen(false)}
-        onOpenStoryExporter={() => setIsStoryExporterOpen(true)}
-        onPublishToFeed={() => setIsNewPostOpen(true)}
-        onViewImage={viewImage}
-      />
+      {isWorkoutSummaryOpen && (
+        <Adiado moldura={false}>
+          <WorkoutSummaryModal
+            isOpen={isWorkoutSummaryOpen}
+            summary={lastRunSummary}
+            hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}
+            personalRecords={recordsRaw?.records || null}
+            weightKg={profileRaw?.weight_kg ?? null}
+            onClose={() => setIsWorkoutSummaryOpen(false)}
+            onOpenStoryExporter={() => setIsStoryExporterOpen(true)}
+            onPublishToFeed={() => setIsNewPostOpen(true)}
+            onViewImage={viewImage}
+          />
+        </Adiado>
+      )}
 
-      <ActiveRunModal
-        isOpen={isActiveRunOpen}
-        workout={todayWorkout}
-        onClose={() => setIsActiveRunOpen(false)}
-        onFinishWorkout={async (summary) => {
-          await handleFinishRun(summary, todayWorkout.id);
-          setLastRunSummary(summary);
-          setIsWorkoutSummaryOpen(true);
-        }}
-      />
+      {isActiveRunOpen && (
+        <Adiado moldura={false}>
+          <ActiveRunModal
+            isOpen={isActiveRunOpen}
+            workout={todayWorkout}
+            onClose={() => setIsActiveRunOpen(false)}
+            onFinishWorkout={async (summary) => {
+              await handleFinishRun(summary, todayWorkout.id);
+              setLastRunSummary(summary);
+              setIsWorkoutSummaryOpen(true);
+            }}
+          />
+        </Adiado>
+      )}
 
       <FieldProtocolModal
         isOpen={isFieldProtocolOpen}
