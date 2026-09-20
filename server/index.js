@@ -96,6 +96,11 @@ let falhaDeArranque = null;
 
 const arranque = prontidao.then(async () => {
   try {
+    // Conta TODAS as linhas, inclusive contas excluídas: aqui a
+    // pergunta não é "há usuários ativos?", é "este banco já foi
+    // usado?". Uma conta excluída responde que sim — e o seed começa
+    // apagando ~20 tabelas. Filtrar `deleted_at` aqui abriria a porta
+    // para apagar um banco que só parecia vazio.
     const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
     const bancoVazio = !userCount || Number(userCount.count) === 0;
 
@@ -208,7 +213,17 @@ app.use('/api/gear', gearRoutes(db));
 // vazios que faria o monitoramento dizer que esta tudo bem.
 app.get('/api/health', async (req, res) => {
   try {
-    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+    // `deleted_at IS NULL` porque a exclusão de conta é lógica: a linha
+    // fica no banco para sempre (users.js faz UPDATE, não DELETE). Sem o
+    // filtro este número conta contas que já não existem para quem usa o
+    // app — e é justamente o número que se olha para saber se há gente
+    // dentro. Um banco com uma conta excluída e nenhuma ativa reportaria
+    // `users: 1`.
+    //
+    // activities e hrv_measurements não têm `deleted_at`, então seguem
+    // como estão. Vale saber que as atividades de uma conta excluída
+    // continuam sendo contadas aqui: elas não são apagadas junto.
+    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL').get();
     const activityCount = await db.prepare('SELECT COUNT(*) as count FROM activities').get();
     const hrvCount = await db.prepare('SELECT COUNT(*) as count FROM hrv_measurements').get();
 
