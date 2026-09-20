@@ -430,11 +430,14 @@ async function runMasterSuite() {
     assert.ok(mainJs.includes('measureText'), 'main.jsx must detect the icon font by measuring text, not document.fonts.check');
   });
 
-  await it('R2.4: as 8 telas do design system novo existem, são montadas pelo shell e a nav legada segue no painel da assessoria', () => {
+  await it('R2.4: as 8 telas do design system novo existem, são montadas pelo shell e nenhuma página legada sobrevive', () => {
     // As páginas .jsx antigas (src/pages/Login, Onboarding, Dashboard, Feed,
     // Training, Profile) foram removidas: o app autenticado é montado pelo
-    // RushShell a partir das telas em src/screens. O painel /coach continua
-    // no design system legado e por isso mantém BottomNav.jsx.
+    // RushShell a partir das telas em src/screens.
+    //
+    // CoachDashboard.jsx era a última delas, e caiu junto com a barra
+    // inferior legada que só existia para servi-la: o módulo do treinador
+    // dentro do shell faz tudo o que ela fazia, e mais.
     const screens = [
       'LoginScreen', 'OnboardingScreen', 'HomeScreen', 'MeasurementScreen',
       'WorkoutsScreen', 'FeedScreen', 'ProScreen', 'ProfileScreen',
@@ -455,17 +458,24 @@ async function runMasterSuite() {
     assert.ok(appJsx.includes('LoginScreen'), 'App.jsx must route /login through LoginScreen');
     assert.ok(appJsx.includes('OnboardingScreen'), 'App.jsx must route /onboarding through OnboardingScreen');
 
-    for (const orphan of ['Login', 'Onboarding', 'Dashboard', 'Feed', 'Training', 'Profile']) {
+    for (const orphan of ['Login', 'Onboarding', 'Dashboard', 'Feed', 'Training', 'Profile', 'CoachDashboard']) {
       assert.ok(
         !fs.existsSync(path.join(rootDir, 'src', 'pages', `${orphan}.jsx`)),
         `src/pages/${orphan}.jsx was replaced by src/screens and must not come back`,
       );
     }
 
-    // A barra inferior legada ainda serve o painel da assessoria.
-    const legacyNav = fs.readFileSync(path.join(rootDir, 'src', 'components', 'BottomNav.jsx'), 'utf8');
-    for (const cls of ['bottom-nav', 'nav-item']) {
-      assert.ok(legacyNav.includes(cls), `BottomNav.jsx must contain design class "${cls}"`);
+    // A barra legada saiu com o painel que ela servia. Se voltar, volta a
+    // duplicar a navegação do shell — que é de onde veio o defeito dos
+    // botões apontando para rotas inexistentes.
+    assert.ok(
+      !fs.existsSync(path.join(rootDir, 'src', 'components', 'BottomNav.jsx')),
+      'src/components/BottomNav.jsx era a nav do painel legado e não deve voltar; a barra do app é src/components/rush/BottomNav.tsx',
+    );
+
+    // O módulo do treinador que substituiu o painel precisa estar montado.
+    for (const coachScreen of ['CoachDashboardScreen', 'CoachAthleteScreen', 'CoachAthletesScreen', 'CoachPrescribeScreen']) {
+      assert.ok(shell.includes(`<${coachScreen}`), `RushShell must render ${coachScreen}`);
     }
   });
 

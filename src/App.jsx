@@ -3,18 +3,23 @@
 // ------------------------------------------------------------
 // Área pública: Login / Registro / Onboarding.
 // Área autenticada: RushShell (6 abas do novo design system).
-// O painel da assessoria (/coach) permanece na estrutura antiga.
+//
+// O painel da assessoria era uma segunda implementação da mesma
+// funcionalidade, no design system antigo, servida por /coach. O
+// módulo dentro do RushShell (Perfil → treinador) faz tudo o que ele
+// fazia e mais — inclusive convite por e-mail, que o antigo nunca
+// teve —, então ele saiu junto com a barra inferior legada, que só
+// existia para servi-lo. /coach agora redireciona para /perfil, para
+// quem tiver o link salvo não cair em lugar nenhum.
 // ============================================================
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginScreen } from './screens/LoginScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
-import CoachDashboard from './pages/CoachDashboard';
-import BottomNav from './components/BottomNav';
 import RushShell from './RushShell';
 
-/** Rotas do shell novo — tudo o que não for pública nem /coach cai aqui. */
+/** Rotas do shell novo — tudo o que não for pública cai aqui. */
 const SHELL_PATHS = ['/', '/medicao', '/treinos', '/feed', '/pro', '/perfil'];
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
@@ -59,11 +64,6 @@ function PublicRoute({ children }) {
 
 function AppRoutes() {
   const { user, logout, login, register, updateUser, refreshUser } = useAuth();
-  const location = useLocation();
-
-  // O shell novo traz a própria navegação inferior; a barra antiga fica
-  // restrita ao painel da assessoria, que ainda usa o design system legado.
-  const showLegacyNav = location.pathname === '/coach';
 
   return (
     <div className="app-shell">
@@ -92,14 +92,8 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/coach"
-          element={
-            <ProtectedRoute>
-              <CoachDashboard user={user} onLogout={logout} />
-            </ProtectedRoute>
-          }
-        />
+        {/* O painel legado saiu; o módulo do treinador vive em Perfil. */}
+        <Route path="/coach" element={<Navigate to="/perfil" replace />} />
 
         {SHELL_PATHS.map((path) => (
           <Route
@@ -115,7 +109,6 @@ function AppRoutes() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {showLegacyNav && <BottomNav />}
     </div>
   );
 }

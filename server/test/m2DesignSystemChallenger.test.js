@@ -53,12 +53,11 @@ const REQUIRED_DESIGN_CLASSES = [
 ];
 
 // As páginas .jsx legadas (Login, Onboarding, Dashboard, Feed, Training,
-// Profile) foram substituídas pelas telas em src/screens, montadas pelo
-// RushShell. Restam aqui o shell da aplicação e a barra inferior legada,
-// que ainda serve o painel da assessoria (/coach).
+// Profile, CoachDashboard) foram substituídas pelas telas em src/screens,
+// montadas pelo RushShell. A barra inferior legada saiu com a última
+// delas, o painel da assessoria — restou aqui só o shell da aplicação.
 const PAGES_AND_COMPONENTS = [
   { name: 'App.jsx', file: 'src/App.jsx', requiredClasses: ['app-shell'] },
-  { name: 'BottomNav.jsx', file: 'src/components/BottomNav.jsx', requiredClasses: ['bottom-nav', 'nav-item'] },
 ];
 
 
