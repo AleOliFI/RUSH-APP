@@ -5,7 +5,7 @@
   "scripts": {
     "server": "node server/index.js",
     "seed": "node seed.js",
-    "test": "node server/test/masterE2EAcceptance.test.js",
+    "test": "node scripts/rodarTestes.js",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
@@ -14,14 +14,14 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "better-sqlite3": "^13.0.3",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^6.0.5",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
