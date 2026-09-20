@@ -24,14 +24,29 @@
 // preenchidos com número plausível.
 // ============================================================
 
-import React from 'react';
-import type { AtletaDoPainel, PainelData } from '../hooks/useAssessoria';
+import React, { useState } from 'react';
+import type { AtletaDoPainel, GestaoAtletasData, PainelData } from '../hooks/useAssessoria';
 
 interface CoachDashboardScreenProps {
   painel: PainelData;
+  gestao: GestaoAtletasData;
   onAbrirAtleta: (id: string) => void;
   onPrescrever: (id: string) => void;
+  /**
+   * Chamado depois de criar a assessoria. O backend promove a conta a
+   * `owner` e grava o `academy_id`: sem recarregar o usuário, o app
+   * continuaria mostrando "Nenhuma assessoria" para quem acabou de
+   * criar uma.
+   */
+  onAssessoriaCriada: () => void | Promise<void>;
 }
+
+/** Vagas de cada plano, como o backend as calcula. */
+const PLANOS = [
+  { id: 'basic', nome: 'Basic', vagas: 50 },
+  { id: 'pro', nome: 'Pro', vagas: 150 },
+  { id: 'elite', nome: 'Elite', vagas: 500 },
+] as const;
 
 /** Cores e rótulo de cada estado fisiológico. */
 const ESTADO = {
@@ -167,24 +182,172 @@ const CartaoAtleta: React.FC<{
 
 // ------------------------------------------------------------
 
+/**
+ * O que a conta de treinador vê antes de existir uma assessoria.
+ *
+ * Esta tela já dizia "Nenhuma assessoria" e parava aí: a rota de
+ * criação existia no backend desde sempre, sem nada no app que a
+ * chamasse. O treinador chegava numa porta fechada sem maçaneta —
+ * e o resto do módulo (atletas, prescrição, convite) depende da
+ * assessoria existir, então era a jornada inteira travada.
+ */
+const CriarAssessoria: React.FC<{
+  gestao: GestaoAtletasData;
+  onCriada: () => void | Promise<void>;
+}> = ({ gestao, onCriada }) => {
+  const [nome, setNome] = useState('');
+  const [local, setLocal] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [plano, setPlano] = useState<string>('basic');
+
+  const podeEnviar = nome.trim().length > 0 && !gestao.isSaving;
+
+  const enviar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!podeEnviar) return;
+    gestao.limpar();
+    try {
+      await gestao.criarAssessoria({
+        name: nome.trim(),
+        location: local.trim() || undefined,
+        cnpj: cnpj.trim() || undefined,
+        description: descricao.trim() || undefined,
+        plan_type: plano,
+      });
+      await onCriada();
+    } catch {
+      /* gestao.error mostra o motivo */
+    }
+  };
+
+  return (
+    <div className="flex flex-col w-full max-w-2xl mx-auto px-4 sm:px-5 pt-6 pb-8 space-y-4">
+      <div className="bg-[#1C1C1C] border border-[#262626] rounded-2xl p-5 text-center space-y-2">
+        <span className="material-symbols-outlined text-[#A1A1AA] text-[32px]">groups</span>
+        <h2 className="font-headline text-base text-[#F7F5F3] uppercase">Nenhuma assessoria</h2>
+        <p className="text-xs text-[#A1A1AA] leading-relaxed">
+          Sua conta é de treinador, mas ainda não está vinculada a uma assessoria. Sem isso não há
+          atletas para acompanhar. Crie a sua abaixo.
+        </p>
+      </div>
+
+      <form onSubmit={enviar} className="bg-[#1C1C1C] border border-[#FF5500]/40 rounded-2xl p-4 space-y-3">
+        <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase tracking-widest block">
+          Criar assessoria
+        </span>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] text-[#A1A1AA] uppercase tracking-wider">Nome *</span>
+          <input
+            type="text"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            required
+            maxLength={120}
+            placeholder="Ex.: Assessoria Rush"
+            className="w-full min-h-[44px] bg-[#101010] border border-[#262626] rounded-lg px-3 text-sm text-[#F7F5F3] placeholder:text-[#525252] focus:border-[#FF5500] focus:outline-none"
+          />
+        </label>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block space-y-1">
+            <span className="text-[10px] text-[#A1A1AA] uppercase tracking-wider">Cidade</span>
+            <input
+              type="text"
+              value={local}
+              onChange={(e) => setLocal(e.target.value)}
+              maxLength={120}
+              className="w-full min-h-[44px] bg-[#101010] border border-[#262626] rounded-lg px-3 text-sm text-[#F7F5F3] focus:border-[#FF5500] focus:outline-none"
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-[10px] text-[#A1A1AA] uppercase tracking-wider">CNPJ</span>
+            <input
+              type="text"
+              value={cnpj}
+              onChange={(e) => setCnpj(e.target.value)}
+              maxLength={20}
+              inputMode="numeric"
+              className="w-full min-h-[44px] bg-[#101010] border border-[#262626] rounded-lg px-3 text-sm text-[#F7F5F3] focus:border-[#FF5500] focus:outline-none"
+            />
+          </label>
+        </div>
+
+        <label className="block space-y-1">
+          <span className="text-[10px] text-[#A1A1AA] uppercase tracking-wider">Descrição</span>
+          <textarea
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            rows={2}
+            maxLength={400}
+            className="w-full bg-[#101010] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#F7F5F3] resize-none focus:border-[#FF5500] focus:outline-none"
+          />
+        </label>
+
+        <div className="space-y-1.5">
+          <span className="text-[10px] text-[#A1A1AA] uppercase tracking-wider block">
+            Plano — define quantos atletas cabem
+          </span>
+          <div className="grid grid-cols-3 gap-2">
+            {PLANOS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlano(p.id)}
+                aria-pressed={plano === p.id}
+                className={`min-h-[44px] rounded-lg border px-2 py-1.5 transition-colors cursor-pointer ${
+                  plano === p.id
+                    ? 'border-[#FF5500] bg-[#FF5500]/10'
+                    : 'border-[#262626] bg-[#101010] hover:border-[#404040]'
+                }`}
+              >
+                <span className={`block text-xs font-bold uppercase ${plano === p.id ? 'text-[#FF5500]' : 'text-[#F7F5F3]'}`}>
+                  {p.nome}
+                </span>
+                <span className="block text-[9px] text-[#737373]">{p.vagas} atletas</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {gestao.error && (
+          <div className="bg-[#101010] border border-[#EF4444] rounded-lg p-3 flex items-start gap-2">
+            <span className="material-symbols-outlined text-[#EF4444] text-[16px]">error</span>
+            <span className="text-xs text-[#F7F5F3] leading-relaxed">{gestao.error}</span>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={!podeEnviar}
+          className="w-full min-h-[44px] bg-[#FF5500] disabled:bg-[#262626] disabled:text-[#737373] rounded-lg flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed transition-colors"
+        >
+          <span className="material-symbols-outlined text-[#0D0D0D] text-[18px]">add</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#0D0D0D]">
+            {gestao.isSaving ? 'Criando…' : 'Criar assessoria'}
+          </span>
+        </button>
+
+        <p className="text-[10px] text-[#737373] leading-relaxed">
+          Você passa a ser o responsável pela assessoria e pode convidar ou cadastrar atletas em
+          seguida. O plano pode ser trocado depois.
+        </p>
+      </form>
+    </div>
+  );
+};
+
+// ------------------------------------------------------------
+
 export const CoachDashboardScreen: React.FC<CoachDashboardScreenProps> = ({
-  painel, onAbrirAtleta, onPrescrever,
+  painel, gestao, onAbrirAtleta, onPrescrever, onAssessoriaCriada,
 }) => {
   const { athletes, summary, academy, isLoading, semAssessoria, error } = painel;
 
   if (semAssessoria) {
-    return (
-      <div className="flex flex-col w-full max-w-2xl mx-auto px-4 sm:px-5 pt-6 pb-8">
-        <div className="bg-[#1C1C1C] border border-[#262626] rounded-2xl p-5 text-center space-y-2">
-          <span className="material-symbols-outlined text-[#A1A1AA] text-[32px]">groups</span>
-          <h2 className="font-headline text-base text-[#F7F5F3] uppercase">Nenhuma assessoria</h2>
-          <p className="text-xs text-[#A1A1AA] leading-relaxed">
-            Sua conta é de treinador, mas ainda não está vinculada a uma assessoria. Sem isso não há
-            atletas para acompanhar.
-          </p>
-        </div>
-      </div>
-    );
+    return <CriarAssessoria gestao={gestao} onCriada={onAssessoriaCriada} />;
   }
 
   if (isLoading && athletes.length === 0) {

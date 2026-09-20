@@ -186,6 +186,12 @@ export interface GestaoAtletasData {
   resultado: string | null;
   convidar: (email: string) => Promise<void>;
   cadastrar: (dados: Record<string, any>) => Promise<void>;
+  /**
+   * Cria a assessoria do treinador. O backend promove a conta a
+   * `owner` e grava o `academy_id` — quem chamar precisa recarregar
+   * o usuário depois, senão o app segue achando que não há assessoria.
+   */
+  criarAssessoria: (dados: Record<string, any>) => Promise<any>;
   prescrever: (athleteId: string, dados: Record<string, any>) => Promise<any>;
   limpar: () => void;
 }
@@ -226,6 +232,18 @@ export function useGestaoAtletas(): GestaoAtletasData {
     } finally { setIsSaving(false); }
   }, []);
 
+  const criarAssessoria = useCallback(async (dados: Record<string, any>) => {
+    setIsSaving(true); setError(null); setResultado(null);
+    try {
+      const r = await academies.create(dados);
+      setResultado(`Assessoria "${r?.name || dados.name}" criada.`);
+      return r;
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível criar a assessoria');
+      throw err;
+    } finally { setIsSaving(false); }
+  }, []);
+
   const prescrever = useCallback(async (athleteId: string, dados: Record<string, any>) => {
     setIsSaving(true); setError(null); setResultado(null);
     try {
@@ -238,5 +256,5 @@ export function useGestaoAtletas(): GestaoAtletasData {
     } finally { setIsSaving(false); }
   }, []);
 
-  return { isSaving, error, resultado, convidar, cadastrar, prescrever, limpar };
+  return { isSaving, error, resultado, convidar, cadastrar, criarAssessoria, prescrever, limpar };
 }

@@ -155,12 +155,21 @@ async function requestText(path, options = {}) {
 }
 
 // Auth API
+// Removidos daqui por nao terem nenhum chamador em todo o src/, e
+// porque cada um ja tem quem faca o mesmo trabalho:
+//   auth.me        -> users.me() faz a mesma requisicao
+//   auth.refresh   -> tryRefresh() acima ja fala com /auth/refresh,
+//                     e com deduplicacao de chamadas concorrentes
+//   users.getUser  -> perfil publico vem de social.userProfile()
+//   training.plans -> nenhuma tela lista o catalogo de planos; o plano
+//                     do atleta vem de training.myPlan()
+// As ROTAS continuam existindo no backend e cobertas por teste. Se
+// alguma tela precisar de uma delas, o wrapper volta em uma linha.
+
 export const auth = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
-  me: () => request('/users/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
-  refresh: (refreshToken) => request('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }),
   forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: (data) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(data) }),
 };
@@ -175,7 +184,6 @@ export const users = {
   objectives: (data) => request('/users/objectives', { method: 'PUT', body: JSON.stringify(data) }),
   settings: (data) => request('/users/settings', { method: 'PUT', body: JSON.stringify(data) }),
   privacy: (data) => request('/users/privacy', { method: 'PUT', body: JSON.stringify(data) }),
-  getUser: (username) => request(`/users/${username}`),
   fieldTest: (data) => request('/users/field-test', { method: 'POST', body: JSON.stringify(data) }),
   deleteAccount: (password) => request('/users/me', { method: 'DELETE', body: JSON.stringify({ password }) }),
   privacyZone: () => request('/users/privacy-zone'),
@@ -217,7 +225,6 @@ export const menstrual = {
 // Training
 export const training = {
   myPlan: () => request('/training/my-plan'),
-  plans: (params) => request(`/training/plans${params ? `?${new URLSearchParams(params)}` : ''}`),
   planDetails: (id) => request(`/training/plans/${id}`),
   generatePlan: (data) => request('/training/generate-plan', { method: 'POST', body: JSON.stringify(data) }),
 };

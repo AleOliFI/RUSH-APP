@@ -508,8 +508,17 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'painel' && (
           <CoachDashboardScreen
             painel={painelAssessoria}
+            gestao={gestaoAtletas}
             onAbrirAtleta={(id) => { setCoachAtletaId(id); setCoachView('atleta'); }}
             onPrescrever={(id) => { setCoachAtletaId(id); setCoachView('prescrever'); }}
+            onAssessoriaCriada={async () => {
+              // O backend promoveu a conta a `owner` e gravou o
+              // academy_id. `reload` recarrega users.me(), sem o qual
+              // o app continuaria mostrando "Nenhuma assessoria" para
+              // quem acabou de criar uma.
+              await reload();
+              await painelAssessoria.reload();
+            }}
           />
         )}
 
