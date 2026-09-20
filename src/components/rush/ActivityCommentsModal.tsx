@@ -42,6 +42,32 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apagandoId, setApagandoId] = useState<string | null>(null);
+
+  /**
+   * Apagar o proprio comentario. A rota
+   * DELETE /api/social/comment/:id ja recusa quem nao e o dono com 403,
+   * mas a tela so oferece o botao para o dono: deixar o botao visivel e
+   * depender do 403 seria prometer uma acao que vai falhar.
+   *
+   * A remocao e local em vez de recarregar tudo — a lista ja esta na
+   * mao e recarregar piscaria a discussao inteira por causa de uma
+   * linha. `onInteraction` avisa o feed para o contador acompanhar.
+   */
+  const apagarComentario = useCallback(async (commentId: string) => {
+    if (!window.confirm('Apagar este comentário? Não dá para desfazer.')) return;
+    setApagandoId(commentId);
+    setError(null);
+    try {
+      await social.deleteComment(commentId);
+      setComments((atuais) => atuais.filter((c) => c.id !== commentId));
+      onInteraction?.();
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível apagar o comentário.');
+    } finally {
+      setApagandoId(null);
+    }
+  }, [onInteraction]);
 
   const load = useCallback(async () => {
     if (!activityId) return;
@@ -56,6 +82,10 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
       setComments(
         (data.comments?.items || []).map((c: any) => ({
           id: c.id,
+          // A consulta faz SELECT c.*, entao o dono vem junto. Ele era
+          // descartado aqui, e sem ele a tela nao tinha como saber quais
+          // comentarios sao de quem esta lendo.
+          authorId: c.user_id,
           authorName: c.name || 'Atleta',
           authorHandle: `@${c.username || 'rush'}`,
           authorAvatar: c.avatar_url || APP_IMAGES.headerAvatar,
@@ -277,11 +307,26 @@ export const ActivityCommentsModal: React.FC<ActivityCommentsModalProps> = ({
                       </div>
                     </div>
 
-                    {comm.tag && (
-                      <span className="text-[10px] text-[#A1A1AA] bg-[#101010] px-2 py-0.5 rounded border border-[#262626]">
-                        {comm.tag}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {comm.tag && (
+                        <span className="text-[10px] text-[#A1A1AA] bg-[#101010] px-2 py-0.5 rounded border border-[#262626]">
+                          {comm.tag}
+                        </span>
+                      )}
+
+                      {comm.authorId && comm.authorId === currentUserId && (
+                        <button
+                          type="button"
+                          onClick={() => apagarComentario(comm.id)}
+                          disabled={apagandoId === comm.id}
+                          aria-label="Apagar meu comentário"
+                          title="Apagar meu comentário"
+                          className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-[#737373] hover:text-[#EF4444] hover:bg-[#101010] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-xs text-[#e5e2e1] leading-relaxed pl-11">

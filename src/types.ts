@@ -71,6 +71,8 @@ export interface FeedPost {
 
 export interface ActivityComment {
   id: string;
+  /** Dono do comentário, para a tela saber quais podem ser apagados. */
+  authorId?: string;
   authorName: string;
   authorHandle: string;
   authorAvatar: string;
