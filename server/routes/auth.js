@@ -4,9 +4,10 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { randomUUID: uuidv4 } = require('node:crypto');
+const { randomUUID: uuidv4, randomInt } = require('node:crypto');
 const { generateAccessToken, authenticate, JWT_SECRET } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
+const { enviarEmail, modeloCodigoDeRecuperacao } = require('../services/email');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_REGEX = /^[a-z0-9_]{3,30}$/i;
@@ -306,6 +307,15 @@ module.exports = function authRoutes(db) {
   // -------------------------------------------------------
   // POST /api/auth/forgot-password
   // -------------------------------------------------------
+  // A resposta e IDENTICA nos tres casos: e-mail cadastrado, nao
+  // cadastrado, e envio que falhou. Qualquer diferenca entre eles
+  // — status, texto, ate tempo de resposta — transforma esta rota
+  // num verificador de quais e-mails tem conta no RUSH.
+  const RESPOSTA_RECUPERACAO = {
+    success: true,
+    message: 'Se este e-mail tiver conta no RUSH, o código de recuperação chega em instantes.',
+  };
+
   router.post('/forgot-password', async (req, res) => {
     try {
       const { email } = req.body;
@@ -316,21 +326,36 @@ module.exports = function authRoutes(db) {
       const normalizedEmail = email.trim().toLowerCase();
       const user = await db.prepare('SELECT id, email FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
 
+      // Sem conta: responde igual e nao faz mais nada.
       if (!user) {
-        return res.status(404).json({ error: 'Nenhum usuário cadastrado com este email' });
+        return res.json(RESPOSTA_RECUPERACAO);
       }
 
-      // Generate 6-digit numeric verification code
-      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      // Codigo de 6 digitos, com entropia de crypto. Math.random nao
+      // e imprevisivel o bastante para credencial de redefinicao.
+      const resetCode = String(randomInt(100000, 1000000));
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora
 
       await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(resetCode, expiresAt, user.id);
 
-      res.json({
-        success: true,
-        message: 'Código de recuperação gerado com sucesso.',
-        code: resetCode, // Enviado para facilitar teste/simulação em ambiente local
+      // O codigo sai POR E-MAIL e so por e-mail. Devolve-lo aqui —
+      // como esta rota fazia — entrega a conta de qualquer pessoa
+      // a quem souber o endereco dela.
+      const { html, texto } = modeloCodigoDeRecuperacao(resetCode);
+      const envio = await enviarEmail({
+        para: user.email,
+        assunto: 'Código para redefinir sua senha — RUSH RUNNING',
+        html,
+        texto,
       });
+
+      if (!envio.enviado) {
+        // Falhou: registra e segue com a MESMA resposta. Quem pediu
+        // nao consegue distinguir isso de um envio bem-sucedido.
+        console.error(`✉️  Código de recuperação não enviado (${envio.motivo}).`);
+      }
+
+      res.json(RESPOSTA_RECUPERACAO);
     } catch (err) {
       console.error('Forgot password error:', err);
       res.status(500).json({ error: 'Erro ao processar recuperação de senha' });
@@ -355,11 +380,10 @@ module.exports = function authRoutes(db) {
       const normalizedEmail = email.trim().toLowerCase();
       const user = await db.prepare('SELECT * FROM users WHERE email = ? AND deleted_at IS NULL').get(normalizedEmail);
 
-      if (!user) {
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
-
-      if (!user.reset_token || user.reset_token !== String(code).trim()) {
+      // Conta inexistente e codigo errado respondem a MESMA coisa.
+      // Um 404 aqui dizia "este e-mail nao tem conta" para quem
+      // chutasse qualquer codigo.
+      if (!user || !user.reset_token || user.reset_token !== String(code).trim()) {
         return res.status(400).json({ error: 'Código de recuperação inválido' });
       }
 

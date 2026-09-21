@@ -77,11 +77,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ mode: initialMode = 'l
 
     try {
       const res = await authApi.forgotPassword(recoveryEmail.trim());
-      // Em ambiente local o backend devolve o código para facilitar o teste.
+      // O código sai apenas por e-mail. A resposta do servidor é a
+      // mesma para conta existente e inexistente — de propósito —,
+      // então a tela também não pode insinuar qual é o caso.
       setRecoveryNotice(
-        res?.code
-          ? `Código gerado: ${res.code}. Em produção ele é enviado por email.`
-          : 'Código enviado para o seu email.',
+        res?.message || 'Se este e-mail tiver conta no RUSH, o código chega em instantes.',
       );
       setRecoveryStep('reset');
     } catch (err: any) {

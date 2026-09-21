@@ -8,6 +8,33 @@
 
 import { subscriptions } from '../api';
 
+// ------------------------------------------------------------
+// A conclusao de compra esta suspensa de proposito.
+//
+// O caminho anterior chamava `subscriptions.activate`, que
+// concedia PRO no servidor SEM nenhuma comprovacao de pagamento —
+// bastava estar logado. A rota foi fechada, e a concessao passou a
+// exigir recibo verificado pelo servidor (StoreKit / Play Billing),
+// que ainda sera construido.
+//
+// Falhar aqui, com mensagem clara, e melhor do que chamar uma rota
+// que responde 501 e devolver "erro desconhecido" para quem tentou
+// pagar.
+// ------------------------------------------------------------
+const MENSAGEM_INDISPONIVEL =
+  'A assinatura ainda não pode ser concluída. A compra pelas lojas está em implementação.';
+
+/**
+ * Sempre lanca. O `@returns {never}` nao e enfeite: sem ele o
+ * TypeScript infere `void` no retorno de quem chama e as telas
+ * passam a achar que existe um caminho de sucesso aqui.
+ *
+ * @returns {never}
+ */
+function compraIndisponivel() {
+  throw new Error(MENSAGEM_INDISPONIVEL);
+}
+
 const REVENUECAT_PUBLIC_KEY = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || 'test_QVdSKIsEdHtkQrZlFpYIDMDByiH';
 const RUSH_PRO_MONTHLY_ID = 'rush_pro_monthly_2990'; // R$ 29,90 / mês com 7 dias trial
 const RUSH_PRO_YEARLY_ID = 'rush_pro_yearly_23880'; // R$ 238,80 / ano
@@ -47,7 +74,7 @@ export const billing = {
         const { customerInfo } = await window.Purchases.purchaseProduct(RUSH_PRO_MONTHLY_ID);
         const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
         if (isPro) {
-          return await subscriptions.activate('monthly', 'apple_in_app');
+          return compraIndisponivel();
         }
       } catch (err) {
         if (!err.userCancelled) {
@@ -58,7 +85,7 @@ export const billing = {
     }
 
     // 2. Ambiente Web: ativação direta ou redirecionamento de checkout
-    return await subscriptions.activate('monthly', 'web_checkout');
+    return compraIndisponivel();
   },
 
   /**
@@ -70,7 +97,7 @@ export const billing = {
         const { customerInfo } = await window.Purchases.purchaseProduct(RUSH_PRO_YEARLY_ID);
         const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
         if (isPro) {
-          return await subscriptions.activate('yearly', 'apple_in_app');
+          return compraIndisponivel();
         }
       } catch (err) {
         if (!err.userCancelled) {
@@ -80,7 +107,7 @@ export const billing = {
       }
     }
 
-    return await subscriptions.activate('yearly', 'web_checkout');
+    return compraIndisponivel();
   },
 
   /**
@@ -92,8 +119,8 @@ export const billing = {
         const customerInfo = await window.Purchases.restorePurchases();
         const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
         if (isPro) {
-          await subscriptions.activate('monthly', 'apple_in_app');
-          return { success: true, restored: true };
+          // Restaurar tambem passa a depender de recibo verificado.
+          return compraIndisponivel();
         }
         return { success: true, restored: false, message: 'Nenhuma assinatura ativa encontrada para este Apple ID.' };
       } catch (err) {

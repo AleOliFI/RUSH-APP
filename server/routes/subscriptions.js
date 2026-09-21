@@ -106,51 +106,31 @@ module.exports = function subscriptionsRoutes(db) {
   });
 
   // -------------------------------------------------------
-  // POST /api/subscriptions/activate — Ativar assinatura RUSH PRO
+  // POST /api/subscriptions/activate — DESATIVADA
   // -------------------------------------------------------
-  router.post('/activate', authenticate, async (req, res) => {
-    try {
-      const { plan_type = 'monthly', provider = 'in_app' } = req.body;
-      const days = plan_type === 'yearly' ? 365 : 30;
-      const amountCents = plan_type === 'yearly' ? 23880 : 2990;
-      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-      const subId = uuidv4();
-
-      db.transaction(async () => {
-        await db.prepare(`
-          UPDATE users SET
-            subscription_tier = 'pro',
-            subscription_status = 'active',
-            subscription_provider = ?,
-            subscription_expires_at = ?,
-            updated_at = datetime('now')
-          WHERE id = ?
-        `).run(provider, expiresAt, req.user.id);
-
-        await db.prepare(`
-          INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, current_period_end)
-          VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?)
-        `).run(subId, req.user.id, amountCents, provider, expiresAt);
-
-        await criarNotificacao(db, {
-          userId: req.user.id,
-          type: 'system',
-          message: 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.',
-        });
-      })();
-
-      res.json({
-        success: true,
-        message: 'Assinatura RUSH PRO ativada com sucesso!',
-        tier: 'pro',
-        status: 'active',
-        is_pro: true,
-        expires_at: expiresAt,
-      });
-    } catch (err) {
-      console.error('Activate subscription error:', err);
-      res.status(500).json({ error: 'Erro ao ativar assinatura' });
-    }
+  // Esta rota concedia PRO por 30 ou 365 dias a QUALQUER conta
+  // autenticada que a chamasse. Sem recibo, sem webhook, sem
+  // verificacao nenhuma: bastava estar logado e fazer o pedido.
+  // E era exatamente o caminho que o checkout web usava.
+  //
+  // A concessao de PRO passa a ter duas portas, e so duas:
+  //
+  //   1. o webhook autenticado (/webhook, logo abaixo), e
+  //   2. a validacao de recibo de loja no servidor, que ainda
+  //      sera construida (StoreKit e Play Billing).
+  //
+  // Ate a segunda existir, esta rota responde 501. Fechar agora e
+  // melhor do que manter de pe um caminho que da PRO de graca: o
+  // custo e um botao de assinatura que ainda nao conclui; o custo
+  // de deixar aberto e a receita inteira.
+  router.post('/activate', authenticate, async (_req, res) => {
+    res.status(501).json({
+      error: 'A assinatura ainda não pode ser concluída por aqui.',
+      code: 'ATIVACAO_SEM_COMPROVACAO',
+      detail:
+        'A ativação do RUSH PRO passou a exigir comprovação de pagamento verificada pelo servidor. '
+        + 'A compra pelas lojas está em implementação.',
+    });
   });
 
   // -------------------------------------------------------
@@ -188,11 +168,23 @@ module.exports = function subscriptionsRoutes(db) {
   // -------------------------------------------------------
   router.post('/webhook', async (req, res) => {
     try {
-      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET || 'rush_webhook_secret_2026';
-      const authHeader = req.headers.authorization || req.headers['x-webhook-token'];
+      // Este segredo tinha um valor literal como fallback, num
+      // repositorio PUBLICO, e a checagem so rodava quando
+      // NODE_ENV era exatamente 'production'. Qualquer pessoa que
+      // lesse o GitHub podia chamar este webhook e se dar PRO.
+      //
+      // Agora falha FECHADA: sem a variavel de ambiente a rota nao
+      // atende ninguem, em ambiente nenhum. Um webhook de pagamento
+      // que aceita chamada sem credencial nao e um webhook, e uma
+      // porta aberta.
+      const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        console.error('⚠️  PAYMENT_WEBHOOK_SECRET não definido — webhook de pagamento recusando tudo.');
+        return res.status(503).json({ error: 'Webhook de pagamento não configurado' });
+      }
 
-      // Optional secret validation in production
-      if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${webhookSecret}` && authHeader !== webhookSecret) {
+      const authHeader = req.headers.authorization || req.headers['x-webhook-token'];
+      if (authHeader !== `Bearer ${webhookSecret}` && authHeader !== webhookSecret) {
         return res.status(401).json({ error: 'Webhook signature/token inválido' });
       }
 
