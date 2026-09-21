@@ -8,6 +8,7 @@ const { authenticate, optionalAuth } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
+const { chaveDaSemana } = require('../services/semanaCalendario');
 const { aplicarZona } = require('../services/zonaPrivacidade');
 
 module.exports = function activitiesRoutes(db) {
@@ -459,16 +460,31 @@ module.exports = function activitiesRoutes(db) {
         GROUP BY type
       `).all(req.user.id, startDate);
 
-      const weeklyDistances = await db.prepare(`
-        SELECT
-          strftime('%Y-W%W', date) as week,
-          SUM(distance_km) as total_km,
-          COUNT(*) as activities
+      // O agrupamento por semana acontece aqui, e nao no SQL, porque
+      // `strftime` e funcao do SQLite: em Postgres esta consulta dava
+      // 500 (42883, function strftime does not exist) enquanto
+      // funcionava em desenvolvimento. Traduzir no adaptador seria
+      // pior — nenhum formato do Postgres bate com o `%W`, e os dois
+      // ambientes passariam a agrupar diferente sem erro nenhum.
+      const linhasPorData = await db.prepare(`
+        SELECT date, distance_km
         FROM activities
         WHERE user_id = ? AND date >= ?
-        GROUP BY strftime('%Y-W%W', date)
-        ORDER BY week
       `).all(req.user.id, startDate);
+
+      const porSemana = new Map();
+      for (const linha of linhasPorData) {
+        const semana = chaveDaSemana(linha.date);
+        if (!semana) continue;
+        const atual = porSemana.get(semana) || { week: semana, total_km: 0, activities: 0 };
+        atual.total_km += Number(linha.distance_km) || 0;
+        atual.activities += 1;
+        porSemana.set(semana, atual);
+      }
+
+      // A consulta antiga terminava em ORDER BY week; a chave e
+      // ordenavel como texto, entao a ordem sai a mesma.
+      const weeklyDistances = [...porSemana.values()].sort((a, b) => a.week.localeCompare(b.week));
 
       res.json({
         period_days: days,
