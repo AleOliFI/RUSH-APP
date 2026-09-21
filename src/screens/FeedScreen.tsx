@@ -1,6 +1,5 @@
 import React from 'react';
 import { FeedPost, ImageViewerItem } from '../types';
-import { downloadImageToDevice } from '../utils/imageDownload';
 import { Avatar } from '../components/rush/Avatar';
 import type { FeedChannel } from '../hooks/useRushData';
 
@@ -263,19 +262,6 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                     title="Ver em tela cheia"
                   >
                     <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                  </button>
-                  <button
-                    onClick={() =>
-                      downloadImageToDevice(
-                        post.activityPhoto!,
-                        `rush_feed_${post.id}.jpg`,
-                        `Foto do Treino (${post.authorName})`
-                      )
-                    }
-                    className="min-h-[44px] min-w-[44px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] p-2.5 rounded-xl flex items-center justify-center font-bold shadow-md transition-all cursor-pointer"
-                    title="Baixar imagem"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">download</span>
                   </button>
                 </div>
               </div>

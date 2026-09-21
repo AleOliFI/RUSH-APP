@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { AthleteProfile, PhysiologicalReadiness, WorkoutPrescription, DailyMileage, ImageViewerItem, WeeklySummary } from '../types';
-import { downloadImageToDevice } from '../utils/imageDownload';
 import { APP_IMAGES } from '../data/appAssets';
 import { DailySummary } from '../components/rush/DailySummary';
 import { FatigueAlert } from '../components/rush/FatigueAlert';
@@ -48,25 +47,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   fatigueAlert,
   acwr = null,
 }) => {
-  const [isDownloadingWorkoutImg, setIsDownloadingWorkoutImg] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-
-  const handleDownloadWorkoutImage = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isDownloadingWorkoutImg) return;
-    setIsDownloadingWorkoutImg(true);
-    setDownloadSuccess(false);
-
-    const safeFilename = `${todayWorkout.title.toLowerCase().replace(/[^a-z0-9]/gi, '-')}-track.png`;
-    const res = await downloadImageToDevice(todayWorkout.imageUrl, safeFilename);
-
-    setIsDownloadingWorkoutImg(false);
-    if (res.success) {
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 3500);
-    }
-  };
-
   const handleOpenWorkoutViewer = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onViewImage) {
@@ -312,30 +292,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </span>
           </div>
 
-          {/* Top Right Quick Actions: Download Image & View Fullscreen */}
+          {/* Top Right Quick Action: ver a imagem em tela cheia */}
           <div className="absolute top-4 right-4 flex items-center space-x-2 z-10">
-            {/* Direct Download Button */}
-            <button
-              onClick={handleDownloadWorkoutImage}
-              disabled={isDownloadingWorkoutImg}
-              className={`h-8 px-2.5 rounded-lg text-[11px] font-label-caps uppercase tracking-wider flex items-center space-x-1.5 shadow-md border transition-all cursor-pointer ${
-                downloadSuccess
-                  ? 'bg-[#22C55E] text-[#0D0D0D] border-[#22C55E]'
-                  : isDownloadingWorkoutImg
-                  ? 'bg-[#0D0D0D]/90 text-[#FF5500] border-[#FF5500] cursor-wait'
-                  : 'bg-[#0D0D0D]/85 hover:bg-[#FF5500] text-[#F7F5F3] hover:text-[#0D0D0D] border-[#333] hover:border-[#FF5500]'
-              }`}
-              title="Baixar e salvar esta imagem no armazenamento local"
-              aria-label="Baixar imagem do treino"
-            >
-              <span className="material-symbols-outlined text-[15px]">
-                {isDownloadingWorkoutImg ? 'progress_activity' : downloadSuccess ? 'check' : 'download'}
-              </span>
-              <span className="hidden sm:inline">
-                {isDownloadingWorkoutImg ? 'Baixando...' : downloadSuccess ? 'Salvo!' : 'Baixar Imagem'}
-              </span>
-            </button>
-
             {/* View Fullscreen Modal */}
             <button
               onClick={handleOpenWorkoutViewer}
@@ -541,17 +499,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <span className="material-symbols-outlined text-[16px]">visibility</span>
           </button>
           <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              const filename = `rush-running-atleta-${athlete.name.toLowerCase().replace(/[^a-z0-9]/gi, '-')}.png`;
-              await downloadImageToDevice(athlete.avatarUrl, filename);
-            }}
-            title="Baixar foto do atleta"
-            className="w-8 h-8 rounded bg-[#1C1C1C] hover:bg-[#FF5500] hover:text-[#0D0D0D] text-[#737373] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">download</span>
-          </button>
-          <button
             onClick={onOpenProfile}
             title="Ver passaporte biométrico completo"
             className="w-8 h-8 rounded bg-[#1C1C1C] hover:bg-[#262626] text-[#737373] hover:text-[#FF5500] border border-[#333] flex items-center justify-center cursor-pointer transition-colors"
@@ -624,14 +571,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => downloadImageToDevice(activity.image_url, filename, activity.title)}
-                      title="Salvar no dispositivo"
-                      className="h-8 px-2.5 shrink-0 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-label-caps font-extrabold text-[10px] uppercase flex items-center space-x-1 cursor-pointer transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[14px]">download</span>
-                      <span>Baixar</span>
-                    </button>
                   </div>
                 );
               })}

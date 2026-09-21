@@ -39,12 +39,15 @@ export const ActiveRunModal: React.FC<ActiveRunModalProps> = ({
   const [countdownNum, setCountdownNum] = useState(3);
   const [isLocked, setIsLocked] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Corrida encerrada com 0 km, aguardando o atleta decidir salvar ou descartar.
+  const [semDistancia, setSemDistancia] = useState<RunSummary | null>(null);
 
   // Ao abrir, começa a adquirir sinal de GNSS imediatamente.
   useEffect(() => {
     if (isOpen) {
       setStage('pre-run');
       setSaveError(null);
+      setSemDistancia(null);
       tracker.prepare();
     } else {
       tracker.reset();
@@ -90,14 +93,9 @@ export const ActiveRunModal: React.FC<ActiveRunModalProps> = ({
           ? 'lento'
           : 'no-alvo';
 
-  const handleFinish = async () => {
-    const summary = tracker.finish();
-
-    if (summary.distanceKm <= 0) {
-      setSaveError('Nenhuma distância registrada pelo GPS — nada foi salvo.');
-      return;
-    }
-
+  /** Grava a corrida e fecha. Usado pelo Encerrar normal e pelo "salvar mesmo assim". */
+  const salvar = async (summary: RunSummary) => {
+    setSemDistancia(null);
     setStage('saving');
     try {
       await onFinishWorkout(summary);
@@ -107,6 +105,30 @@ export const ActiveRunModal: React.FC<ActiveRunModalProps> = ({
       setSaveError(err?.message || 'Não foi possível salvar a corrida.');
       setStage('live');
     }
+  };
+
+  const handleFinish = async () => {
+    const summary = tracker.finish();
+
+    // Sem distância o atleta não pode ficar preso na tela: ou ele salva o
+    // tempo cronometrado (esteira, GPS falho) ou descarta — os dois saem.
+    if (summary.distanceKm <= 0) {
+      setSaveError(null);
+      setSemDistancia(summary);
+      return;
+    }
+
+    await salvar(summary);
+  };
+
+  // O backend recusa duration_seconds <= 0 ("número positivo"). Sem distância
+  // E sem tempo não existe atividade para gravar: aí a única saída é sair.
+  const podeSalvarSemDistancia = (semDistancia?.durationSeconds ?? 0) >= 1;
+
+  const descartar = () => {
+    setSemDistancia(null);
+    tracker.reset();
+    onClose();
   };
 
   return (
@@ -234,8 +256,8 @@ export const ActiveRunModal: React.FC<ActiveRunModalProps> = ({
             </button>
             {!hasSignal && (
               <p className="text-[11px] text-[#A1A1AA] text-center leading-relaxed">
-                Sem sinal de GNSS a corrida é cronometrada, mas a distância fica em 0 km e nada é salvo ao
-                encerrar.
+                Sem sinal de GNSS a corrida é cronometrada, mas a distância fica em 0 km. Ao encerrar você
+                escolhe se guarda só o tempo ou se descarta.
               </p>
             )}
           </div>
@@ -475,6 +497,50 @@ export const ActiveRunModal: React.FC<ActiveRunModalProps> = ({
               <span className="material-symbols-outlined text-[20px]">stop</span>
               <span className="text-xs tracking-wider">{stage === 'saving' ? 'Salvando' : 'Encerrar'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 4. ENCERRAMENTO SEM DISTÂNCIA */}
+      {/* ------------------------------------------------------------ */}
+      {/* Antes daqui o Encerrar com 0 km mostrava um erro e não fazia  */}
+      {/* mais nada: a tela não salvava nem fechava, e o atleta ficava  */}
+      {/* preso. Esteira e GPS sem sinal caem neste caso, e o tempo     */}
+      {/* cronometrado pode valer — então a saída é uma escolha, não um */}
+      {/* bloqueio. O backend aceita distance_km = 0.                   */}
+      {/* ============================================================ */}
+      {semDistancia && (
+        <div className="absolute inset-0 z-10 bg-[#0D0D0D]/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div
+            role="alertdialog"
+            aria-labelledby="sem-distancia-title"
+            className="w-full max-w-sm bg-[#141414] border border-[#262626] rounded-3xl p-6 space-y-4"
+          >
+            <h3 id="sem-distancia-title" className="font-headline text-lg uppercase tracking-wider text-[#F7F5F3]">
+              Nenhuma distância registrada
+            </h3>
+            <p className="text-[13px] text-[#A1A1AA] leading-relaxed">
+              {podeSalvarSemDistancia
+                ? `O GPS não acumulou nenhum quilômetro nesta sessão. Você pode guardar mesmo assim — ficam ${formatClock(semDistancia.durationSeconds)} de duração e 0 km — ou descartar.`
+                : 'A sessão foi encerrada sem distância e sem tempo cronometrado. Não há o que guardar.'}
+            </p>
+            <div className={podeSalvarSemDistancia ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1'}>
+              <button
+                onClick={descartar}
+                className="min-h-[48px] rounded-2xl bg-[#262626] hover:bg-[#353534] border border-[#353534] text-[#F7F5F3] font-headline text-xs uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                {podeSalvarSemDistancia ? 'Descartar' : 'Sair'}
+              </button>
+              {podeSalvarSemDistancia && (
+                <button
+                  onClick={() => salvar(semDistancia)}
+                  className="min-h-[48px] rounded-2xl bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] font-headline text-xs uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  Salvar mesmo assim
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -8,7 +8,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { AthleteProfile, ImageViewerItem } from '../../types';
-import { downloadImageToDevice } from '../../utils/imageDownload';
 import { prepareImageForUpload } from '../../utils/imageUpload';
 import { users } from '../../api';
 
@@ -32,7 +31,6 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   onLogout,
   onViewImage,
 }) => {
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,15 +64,6 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
   }, [isOpen, profile, currentAthlete]);
 
   if (!isOpen) return null;
-
-  const handleDownloadPhoto = async (e: React.MouseEvent, athlete: AthleteProfile) => {
-    e.stopPropagation();
-    if (downloadingId) return;
-    setDownloadingId(athlete.id);
-    const filename = `rush-running-atleta-${athlete.name.toLowerCase().replace(/[^a-z0-9]/gi, '-')}.png`;
-    await downloadImageToDevice(athlete.avatarUrl, filename);
-    setDownloadingId(null);
-  };
 
   const handleViewPhoto = (e: React.MouseEvent, athlete: AthleteProfile) => {
     e.stopPropagation();
@@ -203,7 +192,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
             </div>
           </div>
 
-          {/* Action buttons for Active Athlete's Photo */}
+          {/* Ver a foto do atleta */}
           <div className="flex items-center gap-2 pt-1 border-t border-[#202020]">
             <button
               onClick={(e) => handleViewPhoto(e, currentAthlete)}
@@ -211,19 +200,6 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
             >
               <span className="material-symbols-outlined text-[15px] text-[#FF5500]">visibility</span>
               <span>Visualizar Foto</span>
-            </button>
-            <button
-              onClick={(e) => handleDownloadPhoto(e, currentAthlete)}
-              disabled={downloadingId === currentAthlete.id}
-              className="flex-1 h-8 rounded bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] text-[11px] font-label-caps font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
-              title="Salvar foto deste atleta no seu dispositivo"
-            >
-              <span className="material-symbols-outlined text-[15px]">
-                {downloadingId === currentAthlete.id ? 'progress_activity' : 'download'}
-              </span>
-              <span>
-                {downloadingId === currentAthlete.id ? 'Baixando...' : 'Baixar Foto'}
-              </span>
             </button>
           </div>
         </div>

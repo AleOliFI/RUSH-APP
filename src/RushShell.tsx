@@ -43,7 +43,6 @@ import { useAccountSettings } from './hooks/useAccountSettings';
 import { useCycle } from './hooks/useCycle';
 import { useActivityHistory } from './hooks/useActivityHistory';
 import { useHrZones, usePlanoCompleto } from './hooks/useTrainingReference';
-import { DownloadToast } from './components/rush/DownloadToast';
 import { BleHardwareModal } from './components/rush/BleHardwareModal';
 import { ShoeRetirementModal } from './components/rush/ShoeRetirementModal';
 
@@ -783,8 +782,6 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
         isOpen={!!activeViewingImage}
         onClose={() => setActiveViewingImage(null)}
       />
-
-      <DownloadToast />
     </div>
   );
 }

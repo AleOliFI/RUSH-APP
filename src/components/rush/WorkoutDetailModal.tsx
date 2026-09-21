@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { WorkoutPrescription, ImageViewerItem } from '../../types';
-import { downloadImageToDevice } from '../../utils/imageDownload';
 
 interface WorkoutDetailModalProps {
   workout: WorkoutPrescription;
@@ -17,26 +16,7 @@ export const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
   onStartWorkout,
   onViewImage,
 }) => {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-
   if (!isOpen) return null;
-
-  const handleDownload = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (isDownloading) return;
-    setIsDownloading(true);
-    setDownloadSuccess(false);
-
-    const safeFilename = `${workout.title.toLowerCase().replace(/[^a-z0-9]/gi, '-')}-track.png`;
-    const res = await downloadImageToDevice(workout.imageUrl, safeFilename);
-
-    setIsDownloading(false);
-    if (res.success) {
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 3500);
-    }
-  };
 
   const handleOpenViewer = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -64,40 +44,8 @@ export const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
         >
           <div className="absolute inset-0 bg-gradient-to-t from-[#1C1C1C] via-[#1C1C1C]/60 to-transparent transition-opacity group-hover:opacity-75" />
           
-          {/* Top Actions: Download Button, View Image, Close */}
+          {/* Top Actions: ver imagem e fechar */}
           <div className="absolute top-4 right-4 flex items-center space-x-2">
-            {/* Download Button */}
-            <button
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className={`h-9 px-3 rounded-lg text-xs font-label-caps uppercase tracking-wider flex items-center space-x-1.5 shadow-lg border transition-all cursor-pointer ${
-                downloadSuccess
-                  ? 'bg-[#22C55E] text-[#0D0D0D] border-[#22C55E]'
-                  : isDownloading
-                  ? 'bg-[#0D0D0D]/90 text-[#FF5500] border-[#FF5500] cursor-wait'
-                  : 'bg-[#0D0D0D]/85 hover:bg-[#FF5500] text-[#F7F5F3] hover:text-[#0D0D0D] border-[#333] hover:border-[#FF5500]'
-              }`}
-              title="Salvar esta imagem no armazenamento local do seu dispositivo"
-              aria-label="Baixar imagem"
-            >
-              {isDownloading ? (
-                <>
-                  <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
-                  <span>Baixando...</span>
-                </>
-              ) : downloadSuccess ? (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">check</span>
-                  <span>Salvo!</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">download</span>
-                  <span>Baixar Imagem</span>
-                </>
-              )}
-            </button>
-
             {/* View Fullscreen button */}
             {onViewImage && (
               <button

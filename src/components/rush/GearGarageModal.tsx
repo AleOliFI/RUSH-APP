@@ -8,8 +8,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { ImageViewerItem, RunningShoe } from '../../types';
-import { downloadImageToDevice } from '../../utils/imageDownload';
 import { gear as gearApi } from '../../api';
+import { buscarModelos, CATEGORIAS, ModeloDeTenis } from '../../data/catalogoTenis';
 
 export interface ShoesSummary {
   total_km: number;
@@ -63,12 +63,40 @@ export const GearGarageModal: React.FC<GearGarageModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Sugestões do catálogo enquanto a pessoa digita o nome do par.
+  const [sugestoes, setSugestoes] = useState<ModeloDeTenis[]>([]);
 
   const active = useMemo(() => shoes.filter((s) => s.status !== 'RETIRED'), [shoes]);
   const retired = useMemo(() => shoes.filter((s) => s.status === 'RETIRED'), [shoes]);
   const critical = useMemo(() => active.find((s) => s.status === 'CRITICAL'), [active]);
 
   if (!isOpen) return null;
+
+  /**
+   * Digitar o nome busca no catálogo. Nada é forçado: a lista some
+   * quando não há correspondência e o campo continua livre.
+   */
+  const handleNome = (valor: string) => {
+    setForm((atual) => ({ ...atual, name: valor }));
+    setSugestoes(buscarModelos(valor));
+  };
+
+  /**
+   * Escolher um modelo preenche uso, placa e vida útil de referência.
+   * Tudo continua editável: os números da categoria são ponto de
+   * partida, não especificação de fabricante.
+   */
+  const handleEscolherModelo = (modelo: ModeloDeTenis) => {
+    const categoria = CATEGORIAS[modelo.categoria];
+    setForm((atual) => ({
+      ...atual,
+      name: modelo.nome,
+      model_type: categoria.usoPrincipal,
+      plate_technology: modelo.placa === 'carbono' ? 'Placa de carbono' : '',
+      max_km: String(categoria.vidaUtilKm),
+    }));
+    setSugestoes([]);
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +130,7 @@ export const GearGarageModal: React.FC<GearGarageModalProps> = ({
       });
       await onReloadGear();
       setForm(EMPTY_FORM);
+      setSugestoes([]);
       setIsAdding(false);
     } catch (err: any) {
       setError(err?.message || 'Não foi possível cadastrar o calçado.');
@@ -292,10 +321,36 @@ export const GearGarageModal: React.FC<GearGarageModalProps> = ({
                   <input
                     id="shoe-name"
                     value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    onChange={(e) => handleNome(e.target.value)}
                     placeholder="ex.: Nike Pegasus 41"
+                    autoComplete="off"
                     className="w-full h-10 rounded-lg bg-[#101010] border border-[#262626] px-3 text-xs text-[#F7F5F3] focus:outline-none focus:border-[#FF5500]"
                   />
+
+                  {sugestoes.length > 0 && (
+                    <ul className="rounded-lg border border-[#262626] bg-[#101010] divide-y divide-[#1C1C1C] overflow-hidden">
+                      {sugestoes.map((modelo) => (
+                        <li key={modelo.nome}>
+                          <button
+                            type="button"
+                            onClick={() => handleEscolherModelo(modelo)}
+                            className="w-full text-left px-3 py-2 hover:bg-[#1C1C1C] flex items-center justify-between gap-2 cursor-pointer"
+                          >
+                            <span className="text-xs text-[#F7F5F3] truncate">{modelo.nome}</span>
+                            <span className="font-label-sm text-[9px] uppercase text-[#737373] shrink-0">
+                              {CATEGORIAS[modelo.categoria].rotulo}
+                              {modelo.placa === 'carbono' ? ' • Carbono' : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <p className="text-[10px] text-[#737373] leading-relaxed">
+                    Escolher um modelo da lista preenche uso e vida útil estimada — os dois continuam
+                    editáveis. A versão (41, 22, v4…) você completa no nome.
+                  </p>
                 </div>
 
                 <div className="space-y-1">
@@ -417,16 +472,6 @@ export const GearGarageModal: React.FC<GearGarageModalProps> = ({
                           </span>
                         </div>
                       </div>
-
-                      {shoe.imageUrl && (
-                        <button
-                          onClick={() => downloadImageToDevice(shoe.imageUrl, `${shoe.id}.jpg`, `${shoe.name} - Imagem`)}
-                          className="w-9 h-9 shrink-0 rounded-lg bg-[#101010] text-[#A1A1AA] hover:text-[#F7F5F3] border border-[#262626] flex items-center justify-center transition-colors cursor-pointer"
-                          title="Baixar imagem do calçado"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">download</span>
-                        </button>
-                      )}
                     </div>
 
                     <div className="space-y-1.5 pt-1">

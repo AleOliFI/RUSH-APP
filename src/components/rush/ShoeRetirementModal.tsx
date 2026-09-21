@@ -15,7 +15,6 @@
 
 import React, { useState } from 'react';
 import { ImageViewerItem, RunningShoe } from '../../types';
-import { downloadImageToDevice } from '../../utils/imageDownload';
 import { gear as gearApi } from '../../api';
 
 interface ShoeRetirementModalProps {
@@ -171,13 +170,6 @@ export const ShoeRetirementModal: React.FC<ShoeRetirementModalProps> = ({
                     title="Ver em tela cheia"
                   >
                     <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-                  </button>
-                  <button
-                    onClick={() => downloadImageToDevice(shoe.imageUrl, `${shoe.id}.jpg`, shoe.name)}
-                    className="min-h-[40px] min-w-[40px] bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D] p-2 rounded-xl flex items-center justify-center cursor-pointer"
-                    title="Baixar imagem"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">download</span>
                   </button>
                 </div>
               </div>

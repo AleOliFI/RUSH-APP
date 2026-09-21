@@ -7,7 +7,6 @@
 
 import React, { useState } from 'react';
 import { AthleteProfile, ImageViewerItem, PhysiologicalReadiness, WeeklySummary } from '../types';
-import { downloadImageToDevice } from '../utils/imageDownload';
 import { formatDuration, paceFromActivity, timeAgo } from '../data/adapters';
 
 export interface Achievement {
@@ -129,19 +128,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 title="Ver foto em alta resolução"
               >
                 <span className="material-symbols-outlined text-[18px]">zoom_in</span>
-              </button>
-              <button
-                onClick={() =>
-                  downloadImageToDevice(
-                    athlete.avatarUrl,
-                    'athlete_avatar.jpg',
-                    `${athlete.name} - Avatar`
-                  )
-                }
-                className="min-h-[44px] min-w-[44px] p-2.5 rounded-xl bg-[#FF5500] text-[#0D0D0D] hover:bg-[#FF6B00] font-bold flex items-center justify-center shadow-md transition-all cursor-pointer"
-                title="Baixar avatar"
-              >
-                <span className="material-symbols-outlined text-[18px]">download</span>
               </button>
             </div>
           </div>

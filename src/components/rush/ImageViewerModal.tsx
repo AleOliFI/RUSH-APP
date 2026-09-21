@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ImageViewerItem } from '../../types';
-import { downloadImageToDevice } from '../../utils/imageDownload';
 
 interface ImageViewerModalProps {
   item: ImageViewerItem | null;
@@ -15,8 +14,6 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 }) => {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [naturalDimensions, setNaturalDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Reset controls when item changes or modal opens
@@ -24,8 +21,6 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
     if (isOpen) {
       setZoom(1);
       setRotation(0);
-      setIsDownloading(false);
-      setDownloadSuccess(false);
       setNaturalDimensions(null);
     }
   }, [isOpen, item]);
@@ -43,21 +38,6 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen || !item) return null;
-
-  const handleDownload = async () => {
-    if (isDownloading) return;
-    setIsDownloading(true);
-    setDownloadSuccess(false);
-
-    const safeFilename = item.filename || `${item.title.toLowerCase().replace(/\s+/g, '-')}.png`;
-    const res = await downloadImageToDevice(item.url, safeFilename);
-
-    setIsDownloading(false);
-    if (res.success) {
-      setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 4000);
-    }
-  };
 
   const handleImageLoaded = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -171,16 +151,9 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
             />
           </div>
 
-          {/* Download Floating Confirmation Banner */}
-          {downloadSuccess && (
-            <div className="absolute top-4 inset-x-4 max-w-md mx-auto bg-[#22C55E] text-[#0D0D0D] px-4 py-2.5 rounded-lg shadow-xl font-body text-xs font-bold flex items-center justify-center space-x-2 animate-fade-in border border-[#22C55E]/80">
-              <span className="material-symbols-outlined text-[20px]">check_circle</span>
-              <span>Imagem baixada e salva com sucesso no seu dispositivo!</span>
-            </div>
-          )}
         </div>
 
-        {/* Bottom Footer HUD with Prominent Download Button */}
+        {/* Rodapé: descrição da imagem e link para o original */}
         <div className="px-4 sm:px-6 py-4 bg-[#1C1C1C] border-t border-[#262626] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-shrink-0">
           {/* Telemetry / Description */}
           <div className="min-w-0">
@@ -196,7 +169,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
                 <span className="text-[#333]">•</span>
                 <span className="font-telemetry text-[#22C55E] font-bold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse"></span>
-                  DISPONÍVEL PARA DOWNLOAD LOCAL
+                  IMAGEM CARREGADA
                 </span>
               </div>
             )}
@@ -204,37 +177,6 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5">
-            {/* Primary Download Button */}
-            <button
-              id="btn-download-image"
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className={`flex-1 sm:flex-none h-11 px-5 rounded-lg font-headline-sm text-xs uppercase tracking-wider flex items-center justify-center space-x-2 shadow-[0_0_20px_rgba(255,85,0,0.3)] transition-all cursor-pointer ${
-                downloadSuccess
-                  ? 'bg-[#22C55E] text-[#0D0D0D]'
-                  : isDownloading
-                  ? 'bg-[#FF5500]/70 text-[#0D0D0D] cursor-wait'
-                  : 'bg-[#FF5500] hover:bg-[#FF6B00] text-[#0D0D0D]'
-              }`}
-            >
-              {isDownloading ? (
-                <>
-                  <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                  <span>SALVANDO IMAGEM...</span>
-                </>
-              ) : downloadSuccess ? (
-                <>
-                  <span className="material-symbols-outlined text-[18px]">check</span>
-                  <span>IMAGEM SALVA NO DISPOSITIVO</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[20px]">download</span>
-                  <span>BAIXAR IMAGEM (PNG)</span>
-                </>
-              )}
-            </button>
-
             {/* Quick Link Out */}
             <a
               href={item.url}

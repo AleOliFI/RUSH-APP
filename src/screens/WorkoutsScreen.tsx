@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { WorkoutPrescription, ImageViewerItem, UpcomingSession, WorkoutCategory } from '../types';
-import { downloadImageToDevice } from '../utils/imageDownload';
 import { formatClock, useRunTracker, RunSummary } from '../hooks/useRunTracker';
 
 interface WorkoutsScreenProps {
@@ -37,8 +36,6 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<'TODOS' | WorkoutCategory>('TODOS');
-  const [isDownloadingImg, setIsDownloadingImg] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   const formatTime = formatClock;
 
@@ -260,41 +257,8 @@ export const WorkoutsScreen: React.FC<WorkoutsScreenProps> = ({
             </span>
           </div>
 
-          {/* Download & View Actions */}
+          {/* Ver a imagem em tela cheia */}
           <div className="absolute top-4 right-4 flex items-center space-x-2 z-10">
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (isDownloadingImg) return;
-                setIsDownloadingImg(true);
-                setDownloadSuccess(false);
-                const safeFilename = `${workout.title.toLowerCase().replace(/[^a-z0-9]/gi, '-')}-track.png`;
-                const res = await downloadImageToDevice(workout.imageUrl, safeFilename);
-                setIsDownloadingImg(false);
-                if (res.success) {
-                  setDownloadSuccess(true);
-                  setTimeout(() => setDownloadSuccess(false), 3500);
-                }
-              }}
-              disabled={isDownloadingImg}
-              className={`h-8 px-2.5 rounded-lg text-[11px] font-label-caps uppercase tracking-wider flex items-center space-x-1.5 shadow-md border transition-all cursor-pointer ${
-                downloadSuccess
-                  ? 'bg-[#22C55E] text-[#0D0D0D] border-[#22C55E]'
-                  : isDownloadingImg
-                  ? 'bg-[#0D0D0D]/90 text-[#FF5500] border-[#FF5500] cursor-wait'
-                  : 'bg-[#0D0D0D]/85 hover:bg-[#FF5500] text-[#F7F5F3] hover:text-[#0D0D0D] border-[#333] hover:border-[#FF5500]'
-              }`}
-              title="Salvar imagem no seu dispositivo"
-              aria-label="Baixar imagem"
-            >
-              <span className="material-symbols-outlined text-[15px]">
-                {isDownloadingImg ? 'progress_activity' : downloadSuccess ? 'check' : 'download'}
-              </span>
-              <span className="hidden sm:inline">
-                {isDownloadingImg ? 'Baixando...' : downloadSuccess ? 'Salvo!' : 'Baixar Imagem'}
-              </span>
-            </button>
-
             <button
               onClick={(e) => {
                 e.stopPropagation();
