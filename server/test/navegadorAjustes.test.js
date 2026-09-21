@@ -173,12 +173,20 @@ function encerrarTudo() {
   });
   processos.push(api);
 
+  // O vite NAO pode herdar VITE_API_URL do .env. Se herdar, o app sob
+  // teste passa a falar com o endereco configurado la — e se um dia
+  // esse endereco for o de PRODUCAO, estes testes escrevem no banco
+  // real. Vazia, a variavel devolve o app ao proxy /api do vite, que
+  // aponta para o servidor descartavel deste teste. Mesmo cuidado que
+  // DATABASE_URL recebe do lado da API.
+  const ambienteWeb = { ...process.env, VITE_API_URL: '' };
+
   const web = spawn(
     'npx',
     ['vite', '--host', '127.0.0.1', '--port', String(PORTA_WEB), '--strictPort'],
     {
       cwd: RAIZ,
-      env: process.env,
+      env: ambienteWeb,
       stdio: 'ignore',
       detached: true,
     },

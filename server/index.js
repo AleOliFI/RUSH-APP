@@ -133,9 +133,31 @@ const arranque = prontidao.then(async () => {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
+// ------------------------------------------------------------
+// CORS
+// ------------------------------------------------------------
+// Era `origin: '*'`. Com autenticacao por Bearer em cabecalho e
+// sem cookie de sessao, isso nao abre CSRF — mas tambem nao ha
+// motivo para qualquer site do mundo poder chamar esta API em
+// nome de quem tenha um token.
+//
+// O app nativo entra aqui: o webview do Capacitor apresenta
+// origem `capacitor://localhost` (iOS) ou `https://localhost`
+// (Android, por causa do androidScheme). Sem essas duas na lista,
+// o app empacotado leva CORS na cara e nao fala com o servidor.
+//
+// CORS_ORIGIN aceita varias origens separadas por virgula. Sem a
+// variavel, segue liberado — mudar o padrao para restritivo aqui
+// derrubaria a producao atual sem aviso; a restricao e ligada por
+// configuracao, de proposito.
+const ORIGENS_NATIVAS = ['capacitor://localhost', 'https://localhost'];
+
+const origensPermitidas = process.env.CORS_ORIGIN
+  ? [...process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean), ...ORIGENS_NATIVAS]
+  : '*';
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: origensPermitidas,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));

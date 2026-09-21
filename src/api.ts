@@ -2,7 +2,28 @@
 // RUSH PERFORMANCE — API Client & Session Manager
 // ============================================================
 
-const API_BASE = '/api';
+// Na web o caminho relativo resolve sozinho, porque o frontend e a
+// API saem da mesma origem. Dentro do app nativo NAO: o webview
+// roda em https://localhost (Capacitor) e '/api' apontaria para o
+// proprio webview, que nao serve rota nenhuma.
+//
+// VITE_API_URL e definida no build que antecede o `cap sync`. A
+// queda para '/api' preserva o comportamento da web intacto.
+//
+// O sufixo /api e acrescentado quando falta. Isso nao e adivinhacao:
+// TODA rota deste servidor e montada sob /api (server/index.js), sem
+// excecao. E evita o erro mais provavel de quem configura isso —
+// escrever apenas o host e ver o app falhar em toda chamada, sem erro
+// visivel na tela. O .env deste projeto ja trazia exatamente essa
+// forma incompleta.
+function baseDaApi(): string {
+  const bruto = (import.meta.env.VITE_API_URL || '').trim();
+  if (!bruto) return '/api';
+  const semBarra = bruto.replace(/\/+$/, '');
+  return /\/api$/.test(semBarra) ? semBarra : `${semBarra}/api`;
+}
+
+const API_BASE = baseDaApi();
 
 function getToken() {
   return localStorage.getItem('rush_token');

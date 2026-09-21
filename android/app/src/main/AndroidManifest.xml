@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ================================================================
+         LOCALIZACAO — necessaria para o recurso central do app.
+         useRunTracker.ts mede distancia e ritmo por navigator.geolocation;
+         sem estas duas permissoes o webview nao recebe posicao nenhuma e
+         toda corrida termina com 0 km.
+
+         ATENCAO: estas cobrem apenas o PRIMEIRO PLANO. Com a tela
+         bloqueada ou o app em segundo plano, o Android suspende a
+         geolocalizacao do webview e a corrida para de acumular — que e
+         exatamente o que acontece numa corrida de verdade, com o celular
+         no bolso.
+
+         Resolver isso exige ACCESS_BACKGROUND_LOCATION, um plugin de
+         localizacao em segundo plano e um servico em primeiro plano com
+         notificacao persistente — mais justificativa escrita na Play
+         Console, que analisa esse pedido com rigor. NAO foi feito aqui:
+         e trabalho proprio, esta documentado em docs/compilar-nativo.md,
+         e prometer que funciona sem isso seria mentira.
+         ================================================================ -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+</manifest>
