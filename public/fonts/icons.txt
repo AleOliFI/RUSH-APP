@@ -30,7 +30,6 @@ delete_forever
 directions_run
 directions_walk
 download
-download_done
 download_for_offline
 ecg
 ecg_heart
@@ -47,6 +46,7 @@ fitness_center
 flag
 footprint
 fullscreen
+gavel
 gps_off
 group
 groups
@@ -102,6 +102,7 @@ send
 sensors
 share
 shield
+shield_person
 shield_with_heart
 speed
 sports_martial_arts

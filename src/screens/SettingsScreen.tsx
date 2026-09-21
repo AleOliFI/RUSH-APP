@@ -658,6 +658,32 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
         </button>
       </Secao>
+
+      {/* ---------- Documentos ---------- */}
+      {/* Abrem em aba nova de proposito: sao paginas publicas, com
+          URL propria, e e essa URL que vai para as lojas. Navegar
+          por dentro tiraria a pessoa do app no meio dos ajustes. */}
+      <Secao rotulo="Documentos" titulo="Privacidade e termos">
+        <div className="grid grid-cols-2 gap-2.5">
+          {[
+            { href: '/privacidade', icone: 'shield_person', rotulo: 'Política de privacidade' },
+            { href: '/termos', icone: 'gavel', rotulo: 'Termos de uso' },
+          ].map((doc) => (
+            <a
+              key={doc.href}
+              href={doc.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[56px] p-3.5 bg-[#101010] hover:bg-[#1C1C1C] border border-[#262626] rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+            >
+              <span className="material-symbols-outlined text-[#FF5500] text-[22px]">{doc.icone}</span>
+              <span className="font-headline text-[11px] uppercase text-[#F7F5F3] leading-tight">
+                {doc.rotulo}
+              </span>
+            </a>
+          ))}
+        </div>
+      </Secao>
     </div>
   );
 };

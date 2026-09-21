@@ -18,6 +18,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginScreen } from './screens/LoginScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import RushShell from './RushShell';
+import { LegalScreen } from './screens/LegalScreen';
 
 /** Rotas do shell novo — tudo o que não for pública cai aqui. */
 const SHELL_PATHS = ['/', '/medicao', '/treinos', '/feed', '/pro', '/perfil'];
@@ -92,6 +93,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        {/* Privacidade e Termos ficam FORA de PublicRoute e de
+            ProtectedRoute de proposito. As lojas exigem uma URL que
+            abra sem login, e PublicRoute redireciona quem JA esta
+            autenticado — o que esconderia a pagina justamente de
+            quem usa o app. Aqui abre para todo mundo, sempre. */}
+        <Route path="/privacidade" element={<LegalScreen documento="privacidade" />} />
+        <Route path="/termos" element={<LegalScreen documento="termos" />} />
+
         {/* O painel legado saiu; o módulo do treinador vive em Perfil. */}
         <Route path="/coach" element={<Navigate to="/perfil" replace />} />
 
