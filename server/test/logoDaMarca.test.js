@@ -12,9 +12,11 @@
 //
 //   • e um favicon roxo (#863bff) que não é da marca.
 //
-// O design system entregue define UMA marca: três barras em
-// #FF5500 / #FF7700 / #FF9933, "RUSH" em Anton e o selo PRO.
-// Este teste existe para nenhuma dessas variantes voltar.
+// O design system original define UMA marca: três barras em
+// #FF5500 / #FF7700 / #FFAA00 e o wordmark EMPILHADO — RUSH em
+// cima, RUNNING embaixo com tracking largo, tudo em Anton.
+// Este teste existe para nenhuma das variantes antigas voltar,
+// incluindo a versão com selo "PRO" que chegou a ser aplicada.
 //
 // Detalhe que não é capricho: dentro do app a marca é componente
 // (SVG no DOM, que enxerga a fonte da página); o arquivo solto
@@ -47,9 +49,9 @@ console.log('============================================================\n');
 
 // As três barras, exatamente como vieram no design system.
 const BARRAS = [
-  { d: 'M12 36L28 12H38L22 36H12Z', cor: '#FF5500' },
-  { d: 'M26 36L42 12H52L36 36H26Z', cor: '#FF7700' },
-  { d: 'M40 36L56 12H66L50 36H40Z', cor: '#FF9933' },
+  { d: 'M10 36L26 12H36L20 36H10Z', cor: '#FF5500' },
+  { d: 'M24 36L40 12H50L34 36H24Z', cor: '#FF7700' },
+  { d: 'M38 36L54 12H64L48 36H38Z', cor: '#FFAA00' },
 ];
 
 const componente = fs.readFileSync(path.join(RAIZ, 'src', 'components', 'rush', 'RushLogo.tsx'), 'utf8');
@@ -60,8 +62,8 @@ registrar(faltando.length === 0, 'C1: o componente traz as três barras entregue
 
 // O JSX quebra linha entre a tag e o texto, então a busca é por
 // palavra isolada, e não por ">RUSH<".
-registrar(/Anton/.test(componente) && /\bRUSH\b/.test(componente) && /\bPRO\b/.test(componente),
-  'C2: o wordmark é RUSH + PRO em Anton', 'a marca perdeu o wordmark ou a fonte');
+registrar(/Anton/.test(componente) && /\bRUSH\b/.test(componente) && /\bRUNNING\b/.test(componente),
+  'C2: o wordmark é RUSH + RUNNING em Anton', 'a marca perdeu o wordmark ou a fonte');
 
 // Quem usa a marca usa o componente.
 const header = fs.readFileSync(path.join(RAIZ, 'src', 'components', 'rush', 'Header.tsx'), 'utf8');

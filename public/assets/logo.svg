@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48" width="160" height="48" fill="none" role="img" aria-label="RUSH PRO">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 48" width="180" height="48" fill="none" role="img" aria-label="RUSH RUNNING">
   <!--
-    RUSH RUNNING — marca oficial (design system Kinetic Telemetry).
+    RUSH RUNNING — marca original do design system.
 
     A fonte Anton vai EMBUTIDA aqui de proposito. Este arquivo e
     consumido como imagem (<img>, Open Graph, e-mail), e um SVG
@@ -19,9 +19,9 @@
       }
     </style>
   </defs>
-  <path d="M12 36L28 12H38L22 36H12Z" fill="#FF5500"/>
-  <path d="M26 36L42 12H52L36 36H26Z" fill="#FF7700"/>
-  <path d="M40 36L56 12H66L50 36H40Z" fill="#FF9933"/>
-  <text x="74" y="32" fill="#FFFFFF" font-family="Anton, Impact, sans-serif" font-size="26" font-weight="900" letter-spacing="2">RUSH</text>
-  <text x="136" y="22" fill="#FF5500" font-family="Anton, Impact, sans-serif" font-size="10" font-weight="700">PRO</text>
+  <path d="M10 36L26 12H36L20 36H10Z" fill="#FF5500"/>
+  <path d="M24 36L40 12H50L34 36H24Z" fill="#FF7700"/>
+  <path d="M38 36L54 12H64L48 36H38Z" fill="#FFAA00"/>
+  <text x="70" y="27" fill="#FFFFFF" font-family="Anton, Impact, sans-serif" font-size="20" font-weight="900" letter-spacing="1.5">RUSH</text>
+  <text x="70" y="38" fill="#FF5500" font-family="Anton, Impact, sans-serif" font-size="10" font-weight="700" letter-spacing="3">RUNNING</text>
 </svg>
