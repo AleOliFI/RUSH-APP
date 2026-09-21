@@ -1,6 +1,6 @@
 import React from 'react';
-import { APP_IMAGES } from '../../data/appAssets';
 import { Avatar } from './Avatar';
+import { RushLogo } from './RushLogo';
 import { AthleteProfile, PhysiologicalReadiness } from '../../types';
 
 interface HeaderProps {
@@ -27,31 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Logo Section */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <img
-              alt="RUSH RUNNING PRO"
-              className="h-7 w-auto object-contain select-none"
-              src={APP_IMAGES.logo}
-              onError={(e) => {
-                // Fallback SVG if network throttled
-                const target = e.currentTarget;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent && !parent.querySelector('.svg-fallback')) {
-                  const fallback = document.createElement('div');
-                  fallback.className = 'svg-fallback flex items-center gap-2 font-headline text-2xl text-[#FF5500] tracking-tighter';
-                  fallback.innerHTML = `
-                    <div class="flex items-center space-x-1">
-                      <span class="w-2.5 h-6 bg-[#FF5500] skew-x-[-20deg] inline-block"></span>
-                      <span class="w-2.5 h-6 bg-[#FF6B00] skew-x-[-20deg] inline-block"></span>
-                      <span class="w-2.5 h-6 bg-[#FFAA00] skew-x-[-20deg] inline-block"></span>
-                    </div>
-                    <span class="text-white ml-1">RUSH</span>
-                    <span class="text-xs bg-[#FF5500] text-black px-1.5 py-0.5 rounded font-mono font-bold tracking-wider">PRO</span>
-                  `;
-                  parent.appendChild(fallback);
-                }
-              }}
-            />
+            <RushLogo className="h-7 w-auto" />
           </div>
         </div>
 

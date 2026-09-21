@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth as authApi } from '../api';
+import { RushLogo } from '../components/rush/RushLogo';
 
 interface LoginScreenProps {
   mode?: 'login' | 'register';
@@ -142,11 +143,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ mode: initialMode = 'l
             </span>
           </div>
 
-          <div className="flex items-center justify-center gap-2">
-            <span className="w-3 h-9 bg-[#FF5500] skew-x-[-20deg] inline-block" />
-            <span className="w-3 h-9 bg-[#FF6B00] skew-x-[-20deg] inline-block" />
-            <span className="w-3 h-9 bg-[#FFAA00] skew-x-[-20deg] inline-block" />
-            <h1 className="font-headline text-5xl text-[#F7F5F3] uppercase tracking-tight ml-1">RUSH</h1>
+          <div className="flex items-center justify-center">
+            <RushLogo className="h-14 w-auto" />
           </div>
 
           <p className="font-telemetry text-[11px] text-[#A1A1AA] uppercase tracking-[0.24em]">
