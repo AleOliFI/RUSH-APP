@@ -107,6 +107,53 @@ if (fs.existsSync(manifesto)) {
 
 registrar(fs.existsSync(path.join(RAIZ, 'ios', 'App')), 'C10: o projeto iOS foi gerado');
 
+// ------------------------------------------------------------
+// iOS: as duas coisas sem as quais nao se publica
+// ------------------------------------------------------------
+
+// Sem esta chave o iOS ENCERRA o app quando ele pede localizacao.
+// Nao e reprovacao na revisao — e o app fechando na primeira corrida.
+const infoPlist = path.join(RAIZ, 'ios', 'App', 'App', 'Info.plist');
+if (fs.existsSync(infoPlist)) {
+  const plist = fs.readFileSync(infoPlist, 'utf8');
+  registrar(/NSLocationWhenInUseUsageDescription/.test(plist),
+    'C10b: o Info.plist descreve o uso de localização',
+    'sem esta chave o sistema encerra o app ao pedir GPS');
+
+  // Pedir permissao que o app nao usa e motivo de reprovacao. Nao ha
+  // plugin de localizacao em segundo plano aqui ainda.
+  registrar(!/NSLocationAlwaysAndWhenInUseUsageDescription/.test(plist),
+    'C10c: não declara localização em segundo plano, que ainda não existe',
+    'declarar permissão não usada é motivo de reprovação');
+}
+
+// Obrigatorio pela Apple desde 2024.
+const manifestoPrivacidade = path.join(RAIZ, 'ios', 'App', 'App', 'PrivacyInfo.xcprivacy');
+registrar(fs.existsSync(manifestoPrivacidade), 'C10d: o manifesto de privacidade do iOS existe');
+
+if (fs.existsSync(manifestoPrivacidade)) {
+  const xml = fs.readFileSync(manifestoPrivacidade, 'utf8');
+  // O app coleta dado de saude e localizacao precisa. Se o manifesto
+  // nao disser isso, ele esta mentindo por omissao.
+  for (const [chave, rotulo] of [
+    ['NSPrivacyCollectedDataTypeHealth', 'saúde'],
+    ['NSPrivacyCollectedDataTypePreciseLocation', 'localização precisa'],
+  ]) {
+    registrar(xml.includes(chave), `C10e: o manifesto declara ${rotulo}`);
+  }
+}
+
+// O icone precisa ser a MARCA, e nao o padrao que o Capacitor instala.
+// O padrao e um arquivo com data de criacao do template; a checagem
+// aqui e pelo conteudo: o PNG da marca tem fundo carbono.
+const iconeAndroid = path.join(RAIZ, 'android', 'app', 'src', 'main', 'res', 'mipmap-xxxhdpi', 'ic_launcher.png');
+if (fs.existsSync(iconeAndroid)) {
+  const png = fs.readFileSync(iconeAndroid);
+  // Largura/altura ficam nos bytes 16..24 do cabecalho IHDR.
+  const largura = png.readUInt32BE(16);
+  registrar(largura === 192, 'C10f: o ícone xxxhdpi tem a dimensão certa (192px)', `veio ${largura}px`);
+}
+
 // Os assets copiados para dentro do android/ sao build, nao fonte.
 const gitignoreAndroid = fs.existsSync(path.join(RAIZ, 'android', '.gitignore'))
   ? fs.readFileSync(path.join(RAIZ, 'android', '.gitignore'), 'utf8')

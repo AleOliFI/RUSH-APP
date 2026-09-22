@@ -63,18 +63,40 @@ npx cap open ios          # abre no Xcode
 
 No Xcode, configure o *Team* de assinatura, e então *Product → Archive*.
 
-## Ícones e splash
+## Ícones
 
-`resources/icon.png` (1024×1024) e `resources/splash.png` (2732×2732) estão
-gerados a partir da marca. Para espalhá-los em todas as densidades:
+Os ícones da marca já estão aplicados: Android em todas as densidades
+(`mipmap-*`, incluindo o `ic_launcher_foreground` do ícone adaptativo, com
+fundo transparente e o símbolo dentro da zona segura) e iOS no
+`AppIcon-512@2x.png` de 1024×1024. O fundo do adaptativo foi trocado de
+branco para o carbono da marca.
+
+O splash (`resources/splash.png`, 2732×2732) continua como master; as telas
+de abertura em cada densidade ainda são as padrão do Capacitor. Para
+gerá-las:
 
 ```bash
 npm install --save-dev @capacitor/assets
 npx capacitor-assets generate
 ```
 
-Até rodar isso, o app usa os ícones padrão do Capacitor — o que serve para
-testar, mas **não** para submeter.
+## ⚠️ Um passo manual no Xcode que só você pode dar
+
+`ios/App/App/PrivacyInfo.xcprivacy` existe no disco, mas **não está no
+target do Xcode**. O projeto do Capacitor usa referências explícitas de
+arquivo (`objectVersion = 60`, sem grupo sincronizado), então arquivo novo
+não entra sozinho no build.
+
+Editar o `project.pbxproj` programaticamente é possível, mas um erro ali
+impede o projeto de abrir — e não há como verificar isso sem um Mac. Então:
+
+1. abra `ios/App/App.xcworkspace` no Xcode;
+2. arraste `PrivacyInfo.xcprivacy` para dentro do grupo **App**;
+3. marque o target **App** em *Target Membership*;
+4. confira que ele aparece em *Build Phases → Copy Bundle Resources*.
+
+**Sem esse passo a Apple rejeita a submissão**, mesmo com o arquivo no
+repositório.
 
 ---
 
@@ -116,7 +138,9 @@ não atende o app empacotado.
 ## Antes de submeter
 
 - [ ] `VITE_API_URL` no build e `CORS_ORIGIN` no servidor
-- [ ] Ícones gerados em todas as densidades
+- [x] Ícones da marca em todas as densidades — feito
+- [ ] `PrivacyInfo.xcprivacy` adicionado ao target no Xcode (passo manual acima)
+- [ ] Telas de abertura (splash) por densidade
 - [ ] GPS em segundo plano resolvido, ou o app assumido como "corrida com a
       tela acesa"
 - [ ] Push nativo, se as notificações forem parte da proposta

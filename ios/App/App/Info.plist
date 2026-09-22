@@ -24,6 +24,25 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- ================================================================
+	     LOCALIZACAO
+
+	     Sem esta chave o iOS ENCERRA o app no instante em que ele pede
+	     localizacao. Nao e reprovacao na revisao: e o app fechando na
+	     primeira corrida, no aparelho de quem baixou.
+
+	     O texto e o que a pessoa le no pedido de permissao, e a Apple
+	     reprova justificativa vaga. Este diz o que o app faz com a
+	     posicao, em uma frase.
+
+	     Declaramos SO o uso em primeiro plano. NSLocationAlways... nao
+	     entra aqui de proposito: nao existe plugin de localizacao em
+	     segundo plano neste app ainda, e pedir permissao que nao se usa
+	     e motivo de reprovacao. Quando o background for implementado, a
+	     chave entra junto com ele.
+	     ================================================================ -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>O RUSH usa sua localização durante a corrida para medir distância, ritmo e traçar o percurso. Nada é registrado fora de uma corrida em andamento.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
