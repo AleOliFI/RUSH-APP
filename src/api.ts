@@ -342,7 +342,18 @@ export const academies = {
 export const subscriptions = {
   status: () => request('/subscriptions/status'),
   startTrial: () => request('/subscriptions/start-trial', { method: 'POST' }),
-  activate: (planType = 'monthly', provider = 'in_app') => request('/subscriptions/activate', { method: 'POST', body: JSON.stringify({ plan_type: planType, provider }) }),
+  /**
+   * A unica porta pela qual uma compra vira PRO. O `recibo` e o que a
+   * loja devolveu: a transacao assinada no iOS, o token de compra no
+   * Android. Quem decide se vale e o servidor, consultando a loja.
+   */
+  verificarCompra: (loja: 'apple' | 'google', recibo: string) =>
+    request('/subscriptions/verificar-compra', {
+      method: 'POST',
+      body: JSON.stringify({ loja, recibo }),
+    }),
+  /** Quais lojas tem verificacao configurada no servidor. */
+  lojas: () => request('/subscriptions/lojas'),
   cancel: () => request('/subscriptions/cancel', { method: 'POST' }),
 };
 

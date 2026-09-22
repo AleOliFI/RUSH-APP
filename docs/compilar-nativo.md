@@ -120,8 +120,9 @@ não atende o app empacotado.
 - [ ] GPS em segundo plano resolvido, ou o app assumido como "corrida com a
       tela acesa"
 - [ ] Push nativo, se as notificações forem parte da proposta
-- [ ] Compra in-app (Fase 3): hoje `/subscriptions/activate` responde 501 de
-      propósito, porque concedia PRO sem nenhuma comprovação de pagamento
+- [ ] Compra in-app: a verificação de recibo no servidor está pronta e
+      testada (`docs/compra-in-app.md`). Falta o plugin de compra nativo e as
+      credenciais das duas lojas
 - [ ] Política de privacidade publicada em URL acessível sem login
       (`/privacidade` já existe) e razão social preenchida em
       `src/data/textosLegais.ts`

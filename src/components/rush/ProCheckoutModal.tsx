@@ -49,9 +49,10 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
     setError(null);
     try {
       const result =
-        billingCycle === 'annual' ? await billing.purchaseYearly(userId) : await billing.purchaseMonthly(userId);
+        billingCycle === 'annual' ? await billing.assinarAnual() : await billing.assinarMensal();
 
-      if ((result as any)?.cancelled) {
+      // Desistir da compra na loja nao e erro: nao mostra alerta.
+      if ((result as any)?.cancelada) {
         setNotice('Compra cancelada.');
         return;
       }
@@ -67,7 +68,7 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
     setIsProcessing(true);
     setError(null);
     try {
-      await billing.startFreeTrial();
+      await billing.iniciarTesteGratis();
       onSuccess();
     } catch (err: any) {
       setError(err?.message || 'Não foi possível iniciar o teste gratuito.');
@@ -81,11 +82,13 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
     setError(null);
     setNotice(null);
     try {
-      const result = await billing.restorePurchases();
-      if (result.restored) {
+      const result: any = await billing.restaurarCompras();
+      // Restaurar passa pela verificacao no servidor: ou volta com a
+      // assinatura reconhecida (is_pro), ou diz que nao ha nenhuma.
+      if (result?.restaurada || result?.is_pro) {
         onSuccess();
       } else {
-        setNotice(result.message || 'Nenhuma assinatura ativa encontrada.');
+        setNotice(result?.mensagem || 'Nenhuma assinatura ativa encontrada.');
       }
     } catch (err: any) {
       setError(err?.message || 'Não foi possível restaurar compras.');

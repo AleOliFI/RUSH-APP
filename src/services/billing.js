@@ -1,146 +1,138 @@
 // ============================================================
-// RUSH PERFORMANCE — Unified Billing & In-App Purchase Service
+// RUSH RUNNING — Assinatura RUSH PRO
+// ------------------------------------------------------------
+// Este arquivo já foi escrito em volta do RevenueCat
+// (`window.Purchases`). Saiu: a decisão foi usar StoreKit e Play
+// Billing direto, sem intermediário. Todo aquele caminho virou
+// código morto no mesmo instante, e código morto que fala de
+// pagamento é pior do que inútil — parece que funciona.
 //
-// Suporta:
-// 1. RevenueCat SDK (Apple App Store + Google Play Store)
-// 2. Web Checkout & Pix Recorrente (Asaas / Stripe)
+// A REGRA QUE ORGANIZA TUDO AQUI
+//
+// O app NUNCA decide que alguém é PRO. Ele obtém da loja um
+// comprovante, manda para o servidor, e o servidor pergunta à
+// loja. A versão anterior chamava uma rota que concedia PRO só
+// porque o cliente pediu — bastava estar logado.
+//
+// O QUE AINDA FALTA, E ESTÁ MARCADO
+//
+// `comprarNaLoja` é a emenda com o plugin nativo de compra, que
+// precisa de um aparelho de verdade para ser ligado e testado.
+// Enquanto não existir, ela avisa em vez de fingir. O resto do
+// caminho — mandar o comprovante, tratar a resposta — está pronto
+// e é o mesmo para as duas lojas.
 // ============================================================
 
 import { subscriptions } from '../api';
 
-// ------------------------------------------------------------
-// A conclusao de compra esta suspensa de proposito.
-//
-// O caminho anterior chamava `subscriptions.activate`, que
-// concedia PRO no servidor SEM nenhuma comprovacao de pagamento —
-// bastava estar logado. A rota foi fechada, e a concessao passou a
-// exigir recibo verificado pelo servidor (StoreKit / Play Billing),
-// que ainda sera construido.
-//
-// Falhar aqui, com mensagem clara, e melhor do que chamar uma rota
-// que responde 501 e devolver "erro desconhecido" para quem tentou
-// pagar.
-// ------------------------------------------------------------
-const MENSAGEM_INDISPONIVEL =
-  'A assinatura ainda não pode ser concluída. A compra pelas lojas está em implementação.';
+/** Identificadores dos produtos, como cadastrados nas duas lojas. */
+export const PRODUTOS = {
+  mensal: 'rush_pro_monthly_2990',
+  anual: 'rush_pro_yearly_23880',
+};
 
-/**
- * Sempre lanca. O `@returns {never}` nao e enfeite: sem ele o
- * TypeScript infere `void` no retorno de quem chama e as telas
- * passam a achar que existe um caminho de sucesso aqui.
- *
- * @returns {never}
- */
-function compraIndisponivel() {
-  throw new Error(MENSAGEM_INDISPONIVEL);
+/** `true` quando o app está rodando empacotado, e não no navegador. */
+function ehAppNativo() {
+  return Boolean(window.Capacitor?.isNativePlatform?.());
 }
 
-const REVENUECAT_PUBLIC_KEY = import.meta.env.VITE_REVENUECAT_PUBLIC_KEY || 'test_QVdSKIsEdHtkQrZlFpYIDMDByiH';
-const RUSH_PRO_MONTHLY_ID = 'rush_pro_monthly_2990'; // R$ 29,90 / mês com 7 dias trial
-const RUSH_PRO_YEARLY_ID = 'rush_pro_yearly_23880'; // R$ 238,80 / ano
+/** Qual loja este aparelho usa. */
+function lojaDoAparelho() {
+  const plataforma = window.Capacitor?.getPlatform?.();
+  if (plataforma === 'ios') return 'apple';
+  if (plataforma === 'android') return 'google';
+  return null;
+}
+
+/**
+ * Abre a compra na loja do aparelho e devolve o comprovante.
+ *
+ * ⚠️ PONTO DE LIGAÇÃO COM O PLUGIN NATIVO — ainda não implementado.
+ *
+ * Quando o plugin de compra for instalado, é aqui que ele entra, e
+ * o contrato é curto: devolver a transação assinada (iOS) ou o
+ * token de compra (Android) como string. Nada mais. Quem julga o
+ * comprovante é o servidor.
+ *
+ * Até lá, lançar é o comportamento correto: um botão que parece
+ * comprar e não compra é pior do que um aviso honesto.
+ */
+async function comprarNaLoja(_produtoId) {
+  throw new Error(
+    'A compra pela loja ainda não está ligada neste aplicativo. '
+    + 'A verificação no servidor já está pronta; falta o plugin de compra nativo.',
+  );
+}
+
+async function assinar(produtoId) {
+  const loja = lojaDoAparelho();
+
+  if (!ehAppNativo() || !loja) {
+    throw new Error(
+      'A assinatura RUSH PRO é feita pelo aplicativo, na App Store ou no Google Play.',
+    );
+  }
+
+  let comprovante;
+  try {
+    comprovante = await comprarNaLoja(produtoId);
+  } catch (err) {
+    // Desistir da compra não é erro: a tela não deve mostrar alerta.
+    if (err?.cancelado || err?.userCancelled) return { cancelada: true };
+    throw err;
+  }
+
+  // O servidor confere com a loja. Só a resposta dele concede PRO.
+  return await subscriptions.verificarCompra(loja, comprovante);
+}
 
 export const billing = {
-  /**
-   * Inicializa o motor de pagamentos (detecta nativo vs web)
-   */
-  async init(userId) {
-    if (window.Purchases) {
-      try {
-        await window.Purchases.configure({
-          apiKey: REVENUECAT_PUBLIC_KEY,
-          appUserID: userId,
-        });
-        console.log('✅ RevenueCat IAP initialized successfully for user:', userId);
-      } catch (e) {
-        console.warn('RevenueCat init skipped (Web environment):', e.message);
-      }
-    }
-  },
-
-  /**
-   * Inicia o teste grátis de 7 dias (RUSH PRO)
-   */
-  async startFreeTrial() {
+  /** Sete dias de teste. Não envolve pagamento, e é de uso único por conta. */
+  async iniciarTesteGratis() {
     return await subscriptions.startTrial();
   },
 
-  /**
-   * Assinar Plano Mensal (R$ 29,90/mês)
-   */
-  async purchaseMonthly(userId) {
-    // 1. Se estiver rodando como app nativo (iOS / Android) via RevenueCat
-    if (window.Purchases) {
-      try {
-        const { customerInfo } = await window.Purchases.purchaseProduct(RUSH_PRO_MONTHLY_ID);
-        const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
-        if (isPro) {
-          return compraIndisponivel();
-        }
-      } catch (err) {
-        if (!err.userCancelled) {
-          throw new Error(err.message || 'Erro ao processar compra na App Store / Google Play');
-        }
-        return { cancelled: true };
-      }
-    }
+  async assinarMensal() {
+    return await assinar(PRODUTOS.mensal);
+  },
 
-    // 2. Ambiente Web: ativação direta ou redirecionamento de checkout
-    return compraIndisponivel();
+  async assinarAnual() {
+    return await assinar(PRODUTOS.anual);
   },
 
   /**
-   * Assinar Plano Anual com Desconto (R$ 238,80/ano)
+   * Restaurar compras — exigência da Apple para quem vende assinatura.
+   *
+   * Restaurar é reapresentar o comprovante que a loja já guarda: o
+   * servidor reconhece a assinatura, vê que ela pertence a esta
+   * conta e devolve o PRO. Por isso passa pelo mesmo caminho.
    */
-  async purchaseYearly(userId) {
-    if (window.Purchases) {
-      try {
-        const { customerInfo } = await window.Purchases.purchaseProduct(RUSH_PRO_YEARLY_ID);
-        const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
-        if (isPro) {
-          return compraIndisponivel();
-        }
-      } catch (err) {
-        if (!err.userCancelled) {
-          throw new Error(err.message || 'Erro ao processar compra anual');
-        }
-        return { cancelled: true };
-      }
+  async restaurarCompras() {
+    const loja = lojaDoAparelho();
+
+    if (!ehAppNativo() || !loja) {
+      // No navegador não há o que restaurar: basta ler o que o
+      // servidor já sabe desta conta.
+      const status = await subscriptions.status();
+      return {
+        sucesso: true,
+        restaurada: status.is_pro,
+        mensagem: status.is_pro
+          ? 'Sua assinatura está ativa.'
+          : 'Nenhuma assinatura ativa encontrada nesta conta.',
+      };
     }
 
-    return compraIndisponivel();
+    const comprovante = await comprarNaLoja(null);
+    return await subscriptions.verificarCompra(loja, comprovante);
   },
 
-  /**
-   * Restaurar Compras Anteriores (Obrigatório para Apple App Store)
-   */
-  async restorePurchases() {
-    if (window.Purchases) {
-      try {
-        const customerInfo = await window.Purchases.restorePurchases();
-        const isPro = Boolean(customerInfo?.entitlements?.active?.pro);
-        if (isPro) {
-          // Restaurar tambem passa a depender de recibo verificado.
-          return compraIndisponivel();
-        }
-        return { success: true, restored: false, message: 'Nenhuma assinatura ativa encontrada para este Apple ID.' };
-      } catch (err) {
-        throw new Error('Erro ao restaurar compras: ' + err.message);
-      }
-    }
-
-    // Web Fallback: consulta o backend
-    const status = await subscriptions.status();
-    return {
-      success: true,
-      restored: status.is_pro,
-      message: status.is_pro ? 'Sua assinatura foi restaurada com sucesso!' : 'Nenhuma assinatura ativa encontrada.',
-    };
+  /** Quais lojas o servidor consegue verificar hoje. */
+  async lojasDisponiveis() {
+    return await subscriptions.lojas();
   },
 
-  /**
-   * Cancelar Renovação
-   */
-  async cancelSubscription() {
+  async cancelar() {
     return await subscriptions.cancel();
   },
 };

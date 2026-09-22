@@ -7,6 +7,8 @@ const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
+const { verificarTransacaoApple, appleConfigurado } = require('../services/recibos/apple');
+const { verificarCompraGoogle, googleConfigurado } = require('../services/recibos/google');
 
 module.exports = function subscriptionsRoutes(db) {
   const router = express.Router();
@@ -130,6 +132,126 @@ module.exports = function subscriptionsRoutes(db) {
       detail:
         'A ativação do RUSH PRO passou a exigir comprovação de pagamento verificada pelo servidor. '
         + 'A compra pelas lojas está em implementação.',
+    });
+  });
+
+  // -------------------------------------------------------
+  // POST /api/subscriptions/verificar-compra
+  // -------------------------------------------------------
+  // A UNICA porta pela qual uma compra vira PRO.
+  //
+  // O que o app manda daqui e, do ponto de vista do servidor, texto
+  // de cliente — e cliente mente. Nada e concedido antes de a loja
+  // confirmar: a Apple pela assinatura do recibo, o Google pela
+  // consulta ao androidpublisher.
+  //
+  // Tres recusas que este endpoint precisa dar, e da:
+  //   1. recibo invalido, forjado ou de outro app;
+  //   2. assinatura expirada, revogada ou cancelada;
+  //   3. recibo VALIDO, mas ja usado por outra conta — senao uma
+  //      assinatura paga vira PRO para quantas contas quiserem.
+  router.post('/verificar-compra', authenticate, async (req, res) => {
+    try {
+      const { loja, recibo } = req.body || {};
+
+      if (!loja || !recibo) {
+        return res.status(400).json({ error: 'loja e recibo são obrigatórios' });
+      }
+      if (loja !== 'apple' && loja !== 'google') {
+        return res.status(400).json({ error: 'loja inválida. Valores aceitos: apple, google' });
+      }
+
+      const verificacao = loja === 'apple'
+        ? await verificarTransacaoApple(recibo)
+        : await verificarCompraGoogle(recibo);
+
+      if (!verificacao.valido) {
+        // O motivo vai no log; o cliente recebe um codigo, sem
+        // detalhe que ajude quem esta tentando forjar recibo.
+        console.warn(`💳 Compra recusada (${loja}): ${verificacao.motivo}`);
+        return res.status(402).json({
+          error: 'Não foi possível confirmar a compra com a loja.',
+          code: verificacao.motivo,
+        });
+      }
+
+      const { idDaAssinatura, idDaTransacao, produto, expiraEm, loja: provedor } = verificacao.dados;
+
+      // Anti-reaproveitamento: esta assinatura ja pertence a alguem?
+      const jaVinculada = await db
+        .prepare('SELECT user_id FROM subscriptions WHERE provider_subscription_id = ? LIMIT 1')
+        .get(idDaAssinatura);
+
+      if (jaVinculada && jaVinculada.user_id !== req.user.id) {
+        console.warn(`💳 Recibo ${provedor} ja vinculado a outra conta.`);
+        return res.status(409).json({
+          error: 'Esta compra já está vinculada a outra conta.',
+          code: 'RECIBO_DE_OUTRA_CONTA',
+        });
+      }
+
+      const anual = /year|anual|yearly/i.test(produto);
+      const valorEmCentavos = anual ? 23880 : 2990;
+
+      await db.transaction(async () => {
+        await db.prepare(`
+          UPDATE users SET
+            subscription_tier = 'pro',
+            subscription_status = 'active',
+            subscription_provider = ?,
+            subscription_expires_at = ?,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `).run(provedor, expiraEm, req.user.id);
+
+        if (jaVinculada) {
+          // Renovacao da mesma assinatura: atualiza, nao duplica.
+          await db.prepare(`
+            UPDATE subscriptions
+            SET status = 'active', current_period_end = ?, canceled_at = NULL
+            WHERE provider_subscription_id = ?
+          `).run(expiraEm, idDaAssinatura);
+        } else {
+          await db.prepare(`
+            INSERT INTO subscriptions
+              (id, user_id, plan_tier, status, amount_cents, currency, provider,
+               provider_subscription_id, current_period_end)
+            VALUES (?, ?, 'pro', 'active', ?, 'BRL', ?, ?, ?)
+          `).run(uuidv4(), req.user.id, valorEmCentavos, provedor, idDaAssinatura, expiraEm);
+
+          await criarNotificacao(db, {
+            userId: req.user.id,
+            type: 'system',
+            message: 'Sua assinatura RUSH PRO está ativa! Aproveite todos os recursos avançados.',
+          });
+        }
+      })();
+
+      res.json({
+        success: true,
+        tier: 'pro',
+        status: 'active',
+        is_pro: true,
+        provider: provedor,
+        expires_at: expiraEm,
+        transaction_id: idDaTransacao || null,
+      });
+    } catch (err) {
+      console.error('Verificar compra error:', err);
+      res.status(500).json({ error: 'Erro ao verificar a compra' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // GET /api/subscriptions/lojas — o que esta configurado
+  // -------------------------------------------------------
+  // O app precisa saber se ha caminho de compra ANTES de mostrar o
+  // botao. Sem isto, a pessoa toca em assinar e recebe um erro que
+  // nao e culpa dela.
+  router.get('/lojas', authenticate, async (_req, res) => {
+    res.json({
+      apple: appleConfigurado(),
+      google: googleConfigurado(),
     });
   });
 
