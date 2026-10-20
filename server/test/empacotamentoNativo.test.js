@@ -103,6 +103,15 @@ if (fs.existsSync(manifesto)) {
   registrar(/ACCESS_FINE_LOCATION/.test(xml),
     'C9: o Android declara permissão de localização',
     'sem ela o webview não recebe posição e toda corrida termina com 0 km');
+
+  const pacoteAndroid = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8'));
+  if (pacoteAndroid.dependencies?.['@transistorsoft/capacitor-background-geolocation']) {
+    // A partir do Android 14, usar localizacao num servico de primeiro
+    // plano sem esta permissao e crash na inicializacao do servico.
+    registrar(/ACCESS_BACKGROUND_LOCATION/.test(xml) && /FOREGROUND_SERVICE_LOCATION/.test(xml),
+      'C9b: o Android declara background e foreground service de localização',
+      'o plugin de background está instalado mas o manifesto não o autoriza');
+  }
 }
 
 registrar(fs.existsSync(path.join(RAIZ, 'ios', 'App')), 'C10: o projeto iOS foi gerado');
@@ -120,11 +129,28 @@ if (fs.existsSync(infoPlist)) {
     'C10b: o Info.plist descreve o uso de localização',
     'sem esta chave o sistema encerra o app ao pedir GPS');
 
-  // Pedir permissao que o app nao usa e motivo de reprovacao. Nao ha
-  // plugin de localizacao em segundo plano aqui ainda.
-  registrar(!/NSLocationAlwaysAndWhenInUseUsageDescription/.test(plist),
-    'C10c: não declara localização em segundo plano, que ainda não existe',
-    'declarar permissão não usada é motivo de reprovação');
+  // Permissao e capacidade andam juntas, nos DOIS sentidos:
+  //   • pedir "Always" sem plugin de background e permissao que o app
+  //     nao usa — motivo de reprovacao;
+  //   • ter o plugin sem pedir "Always" e o rastreamento morrendo com
+  //     a tela bloqueada, que e o bug que o plugin veio resolver.
+  // Entao a asserção compara os dois.
+  const pacote = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8'));
+  const temPluginDeBackground = Boolean(
+    pacote.dependencies?.['@transistorsoft/capacitor-background-geolocation'],
+  );
+  const pedeAlways = /NSLocationAlwaysAndWhenInUseUsageDescription/.test(plist);
+  registrar(temPluginDeBackground === pedeAlways,
+    'C10c: a permissão de localização em segundo plano acompanha o plugin',
+    temPluginDeBackground
+      ? 'o plugin existe mas o Info.plist não pede a permissão — o GPS morre com a tela bloqueada'
+      : 'pede permissão de background sem plugin que a use — motivo de reprovação');
+
+  if (temPluginDeBackground) {
+    registrar(/<string>location<\/string>/.test(plist),
+      'C10c2: o modo de segundo plano "location" está declarado',
+      'sem UIBackgroundModes o iOS suspende o app e a corrida para');
+  }
 }
 
 // Obrigatorio pela Apple desde 2024.
@@ -161,6 +187,24 @@ const gitignoreAndroid = fs.existsSync(path.join(RAIZ, 'android', '.gitignore'))
 registrar(/assets\/public/.test(gitignoreAndroid),
   'C11: a cópia do dist dentro do android/ fica fora do versionamento',
   'são 2,7 MB de build que mudam a cada compilação');
+
+// ------------------------------------------------------------
+// 4b. O rastreamento usa o caminho nativo quando ha um
+// ------------------------------------------------------------
+// Instalar o plugin e nao liga-lo seria o pior dos mundos: o custo
+// da dependencia sem o beneficio, e o bug seguindo de pe.
+const tracker = fs.readFileSync(path.join(RAIZ, 'src', 'hooks', 'useRunTracker.ts'), 'utf8');
+const trackerLimpo = tracker
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+registrar(/iniciarLocalizacaoNativa\(/.test(trackerLimpo),
+  'C11b: o rastreador usa a localização nativa quando o app é nativo',
+  'o plugin foi instalado mas o tracker continua só no navigator.geolocation');
+
+registrar(/navigator\.geolocation\.watchPosition/.test(trackerLimpo),
+  'C11c: e continua funcionando na web pelo navegador',
+  'o caminho web foi perdido ao adicionar o nativo');
 
 // ------------------------------------------------------------
 // 5. Os limites conhecidos estao ESCRITOS, nao escondidos

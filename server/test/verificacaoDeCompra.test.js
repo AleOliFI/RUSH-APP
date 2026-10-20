@@ -245,6 +245,58 @@ require.cache[caminhoGoogle] = {
     assert.strictEqual(g.valido, false, 'o Google passou sem configuração');
   });
 
+  await teste('C11b: o banco recusa duas assinaturas com o mesmo recibo', async () => {
+    // HONESTIDADE SOBRE O QUE ESTE TESTE MEDE.
+    //
+    // A primeira versao disparava duas requisicoes em paralelo e
+    // conferia que so uma vencia. Ela passava — e passava TAMBEM com
+    // o indice removido, porque o Node serializa as duas e, com
+    // SQLite num processo so, essa corrida nao acontece. O teste
+    // media nada.
+    //
+    // A corrida e real em producao: Postgres, varias instancias
+    // serverless, duas requisicoes de verdade ao mesmo tempo. O que
+    // da para verificar aqui nao e a corrida — e a GARANTIA que a
+    // torna impossivel: o indice unico. Entao o teste vai direto
+    // nele, sem fingir concorrencia.
+    const RECIBO = 'assinatura-indice-777';
+    await db.prepare(`
+      INSERT INTO subscriptions (id, user_id, plan_tier, status, provider, provider_subscription_id)
+      VALUES (?, ?, 'pro', 'active', 'google_play', ?)
+    `).run('sub-um', COMPRADOR, RECIBO);
+
+    let recusou = false;
+    try {
+      await db.prepare(`
+        INSERT INTO subscriptions (id, user_id, plan_tier, status, provider, provider_subscription_id)
+        VALUES (?, ?, 'pro', 'active', 'google_play', ?)
+      `).run('sub-dois', OPORTUNISTA, RECIBO);
+    } catch (_) {
+      recusou = true;
+    }
+    assert.ok(recusou,
+      'o banco aceitou a mesma assinatura de loja em duas contas — o índice único não está lá');
+  });
+
+  await teste('C11c: e o índice é PARCIAL, para não travar assinaturas sem loja', async () => {
+    // Linhas sem provider_subscription_id sao assinaturas que nao
+    // vieram de loja. Pode haver varias, e um indice unico total
+    // deixaria apenas uma existir no sistema inteiro.
+    await db.prepare(`
+      INSERT INTO subscriptions (id, user_id, plan_tier, status, provider)
+      VALUES ('sub-sem-loja-1', ?, 'pro', 'active', 'manual')
+    `).run(COMPRADOR);
+    await db.prepare(`
+      INSERT INTO subscriptions (id, user_id, plan_tier, status, provider)
+      VALUES ('sub-sem-loja-2', ?, 'pro', 'active', 'manual')
+    `).run(OPORTUNISTA);
+
+    const n = await db.prepare(
+      "SELECT COUNT(*) as n FROM subscriptions WHERE provider_subscription_id IS NULL",
+    ).get();
+    assert.ok(Number(n.n) >= 2, 'o índice bloqueou assinaturas que não vieram de loja');
+  });
+
   await teste('C12: /activate continua fechada', async () => {
     const r = await fetch(`${BASE}/subscriptions/activate`, {
       method: 'POST', headers: cab(OPORTUNISTA), body: JSON.stringify({ plan_type: 'yearly' }),

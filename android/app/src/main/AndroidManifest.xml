@@ -60,4 +60,24 @@
          ================================================================ -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- ================================================================
+         LOCALIZACAO EM SEGUNDO PLANO
+
+         Estas tres fazem o rastreamento sobreviver a tela bloqueada —
+         que e o estado normal de uma corrida, com o celular no bolso.
+
+         ACCESS_BACKGROUND_LOCATION e analisada com RIGOR pela Play
+         Console: e preciso justificar por escrito, e a justificativa
+         vaga e reprovada. A nossa e direta: medir a corrida inteira
+         sem a pessoa precisar manter a tela acesa.
+
+         FOREGROUND_SERVICE_LOCATION e obrigatoria a partir do Android
+         14 para quem usa localizacao em servico de primeiro plano. O
+         servico mantem uma notificacao VISIVEL enquanto a corrida
+         corre — e isso e bom: a pessoa ve que esta sendo rastreada.
+         ================================================================ -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 </manifest>

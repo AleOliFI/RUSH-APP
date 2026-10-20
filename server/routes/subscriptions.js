@@ -237,6 +237,20 @@ module.exports = function subscriptionsRoutes(db) {
         transaction_id: idDaTransacao || null,
       });
     } catch (err) {
+      // A consulta acima cobre o caso comum, mas duas requisicoes
+      // SIMULTANEAS passariam juntas por ela — em producao sao
+      // instancias serverless diferentes falando com o mesmo
+      // Postgres. Quem fecha a janela e o indice unico, e quando ele
+      // dispara o significado e o mesmo do 409: este recibo ja e de
+      // outra conta. Devolver 500 aqui transformaria uma regra de
+      // negocio funcionando em "erro do servidor".
+      const texto = String(err?.message || '');
+      if (/UNIQUE|duplicate key|idx_subscriptions_provider_sub_id/i.test(texto)) {
+        return res.status(409).json({
+          error: 'Esta compra já está vinculada a outra conta.',
+          code: 'RECIBO_DE_OUTRA_CONTA',
+        });
+      }
       console.error('Verificar compra error:', err);
       res.status(500).json({ error: 'Erro ao verificar a compra' });
     }

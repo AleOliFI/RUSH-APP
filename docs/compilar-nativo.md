@@ -105,24 +105,30 @@ repositório.
 Nenhum dos dois é configuração esquecida. São trabalho que falta, e é melhor
 saber agora do que numa reprovação.
 
-### 1. GPS em segundo plano — o mais grave
+### 1. GPS em segundo plano — implementado, nunca testado
 
-`src/hooks/useRunTracker.ts` usa `navigator.geolocation`. Dentro do webview,
-isso funciona **enquanto o app está na frente e a tela acesa**. Quando a
-pessoa bloqueia o celular e o põe no bolso — ou seja, numa corrida de verdade
-— o sistema suspende a geolocalização do webview e a distância para de
-acumular.
+`src/hooks/useRunTracker.ts` usava só `navigator.geolocation`, que o sistema
+suspende quando a tela bloqueia — justamente a situação de uma corrida real.
+Agora, quando o app é nativo, ele usa
+`@transistorsoft/capacitor-background-geolocation`
+(`src/services/localizacaoEmSegundoPlano.ts`); na web segue pelo navegador.
 
-O manifesto já declara `ACCESS_FINE_LOCATION` e `ACCESS_COARSE_LOCATION`, que
-cobrem o primeiro plano. O que falta:
+Já declarados: `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE` e
+`FOREGROUND_SERVICE_LOCATION` no Android; `UIBackgroundModes: location` e
+`NSLocationAlwaysAndWhenInUseUsageDescription` no iOS.
 
-- um plugin de localização em segundo plano;
-- no Android, `ACCESS_BACKGROUND_LOCATION` e um *foreground service* com
-  notificação persistente;
-- no iOS, o modo de background `location` e a chave
-  `NSLocationAlwaysAndWhenInUseUsageDescription`;
-- justificativa escrita nas duas lojas — a Google analisa pedido de
-  localização em segundo plano com rigor, e reprova justificativa vaga.
+**O que ainda é seu:**
+
+- **A licença.** O plugin é comercial (licença `CUSTOM`). Confira os termos e
+  o custo com a Transistor Software e aplique a chave de licença conforme as
+  instruções deles — não inventei o nome da chave aqui porque não consegui
+  abrir a documentação deles desta sessão.
+- **A justificativa de background nas duas lojas.** A Google analisa pedido de
+  localização em segundo plano com rigor e reprova justificativa vaga. A do
+  app: medir a corrida inteira sem a pessoa precisar manter a tela acesa.
+- **Testar correndo.** Nada disto rodou num aparelho. Localização em segundo
+  plano só se prova com o celular no bolso, tela apagada, na rua. Compare a
+  distância do RUSH com a de um relógio ou outro app na mesma corrida.
 
 ### 2. Notificações
 
@@ -141,8 +147,7 @@ não atende o app empacotado.
 - [x] Ícones da marca em todas as densidades — feito
 - [ ] `PrivacyInfo.xcprivacy` adicionado ao target no Xcode (passo manual acima)
 - [ ] Telas de abertura (splash) por densidade
-- [ ] GPS em segundo plano resolvido, ou o app assumido como "corrida com a
-      tela acesa"
+- [x] GPS em segundo plano implementado — **falta licenciar e testar na rua**
 - [ ] Push nativo, se as notificações forem parte da proposta
 - [ ] Compra in-app: a verificação de recibo no servidor está pronta e
       testada (`docs/compra-in-app.md`). Falta o plugin de compra nativo e as

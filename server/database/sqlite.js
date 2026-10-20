@@ -14,6 +14,8 @@
 // ============================================================
 
 const BetterSqlite3 = require('better-sqlite3');
+const fs = require('node:fs');
+const path = require('node:path');
 
 class Statement {
   constructor(stmt) {
@@ -38,6 +40,17 @@ class Statement {
 
 class Database {
   constructor(caminho) {
+    // O better-sqlite3 nao cria o diretorio: ele falha com
+    // "directory does not exist". E `data/` e ignorado pelo git —
+    // tem .db dentro —, entao num clone limpo, ou depois de o
+    // ambiente ser recriado, ele simplesmente nao esta la e TODA a
+    // suite quebra por um motivo que nao tem nada a ver com o
+    // codigo em teste.
+    const pasta = path.dirname(caminho);
+    if (pasta && pasta !== '.') {
+      try { fs.mkdirSync(pasta, { recursive: true }); } catch (_) {}
+    }
+
     this.raw = new BetterSqlite3(caminho);
     this.dialect = 'sqlite';
     this._profundidade = 0;

@@ -11,6 +11,11 @@
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ehAppNativo,
+  iniciarLocalizacaoNativa,
+  pararLocalizacaoNativa,
+} from '../services/localizacaoEmSegundoPlano';
 
 export type RunStage = 'idle' | 'acquiring' | 'ready' | 'running' | 'paused' | 'finished' | 'error';
 
@@ -198,22 +203,63 @@ export function useRunTracker(): RunTrackerState {
     if (stageRef.current === 'acquiring') setStage('error');
   }, []);
 
+  /**
+   * No app nativo, o rastreamento precisa SOBREVIVER à tela
+   * bloqueada — que é o estado normal de uma corrida, com o celular
+   * no bolso. `navigator.geolocation` não sobrevive: o sistema
+   * suspende o webview e a distância para de acumular em silêncio.
+   *
+   * Por isso o nativo usa plugin. A web continua no navegador, que
+   * é onde `navigator.geolocation` é a resposta certa.
+   */
+  const usandoNativoRef = useRef(false);
+
+  /** Erro vindo do caminho nativo, que não tem GeolocationPositionError. */
+  const relatarErro = useCallback((mensagem: string) => {
+    setErrorMessage(mensagem);
+    if (stageRef.current === 'acquiring') setStage('error');
+  }, []);
+
   const startWatching = useCallback(() => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setErrorMessage('Este navegador não expõe a API de geolocalização.');
-      setStage('error');
+    if (watchIdRef.current != null || usandoNativoRef.current) return;
+
+    if (ehAppNativo()) {
+      // Marcado ANTES do await: duas chamadas seguidas de
+      // startWatching nao podem ligar dois rastreamentos.
+      usandoNativoRef.current = true;
+      iniciarLocalizacaoNativa(handlePosition, relatarErro).then((ligou) => {
+        if (ligou) return;
+        // Plugin ausente ou recusado: cai para o navegador, que ao
+        // menos mede enquanto a tela estiver acesa.
+        usandoNativoRef.current = false;
+        iniciarPeloNavegador();
+      });
       return;
     }
-    if (watchIdRef.current != null) return;
 
-    watchIdRef.current = navigator.geolocation.watchPosition(handlePosition, handlePositionError, {
-      enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 20000,
-    });
-  }, [handlePosition, handlePositionError]);
+    iniciarPeloNavegador();
+
+    function iniciarPeloNavegador() {
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        setErrorMessage('Este navegador não expõe a API de geolocalização.');
+        setStage('error');
+        return;
+      }
+      if (watchIdRef.current != null) return;
+
+      watchIdRef.current = navigator.geolocation.watchPosition(handlePosition, handlePositionError, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 20000,
+      });
+    }
+  }, [handlePosition, handlePositionError, relatarErro]);
 
   const stopWatching = useCallback(() => {
+    if (usandoNativoRef.current) {
+      usandoNativoRef.current = false;
+      pararLocalizacaoNativa();
+    }
     if (watchIdRef.current != null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;

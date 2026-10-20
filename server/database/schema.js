@@ -61,6 +61,21 @@ module.exports = async function initializeDatabase(db) {
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id);
+
+    -- Uma assinatura da loja pertence a UMA conta, e so.
+    --
+    -- A rota de verificacao de compra ja consulta antes de gravar,
+    -- e isso cobre o caso real: alguem repassar um recibo. Mas duas
+    -- requisicoes SIMULTANEAS com o mesmo recibo passariam juntas
+    -- pela consulta, e uma assinatura paga viraria PRO em duas
+    -- contas. O indice fecha a janela no banco, que e o unico lugar
+    -- onde ela fecha de verdade.
+    --
+    -- Parcial de proposito: linhas sem provider_subscription_id sao
+    -- assinaturas que nao vieram de loja, e podem ser varias.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_provider_sub_id
+      ON subscriptions(provider_subscription_id)
+      WHERE provider_subscription_id IS NOT NULL;
   `);
 
   await db.exec(`

@@ -43,6 +43,16 @@
 	     ================================================================ -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>O RUSH usa sua localização durante a corrida para medir distância, ritmo e traçar o percurso. Nada é registrado fora de uma corrida em andamento.</string>
+	<!-- Agora existe plugin de localizacao em segundo plano, entao esta
+	     chave passa a ser usada DE VERDADE. Ela so entrou junto com o
+	     plugin: pedir permissao que o app nao usa e motivo de
+	     reprovacao, e antes disto o app nao usava. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Para medir a corrida inteira com o celular no bolso e a tela bloqueada, o RUSH precisa acompanhar sua localização em segundo plano. O rastreamento começa quando você inicia uma corrida e termina quando você a encerra.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
