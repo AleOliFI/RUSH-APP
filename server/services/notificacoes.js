@@ -12,6 +12,7 @@
 // ============================================================
 
 const { randomUUID: uuidv4 } = require('node:crypto');
+const { enviarPushNativo } = require('./pushNativo');
 
 let webpush = null;
 let pushConfigurado = false;
@@ -121,12 +122,24 @@ async function entregar(inscricao, payload) {
  * Exportada à parte para a rota de teste da tela de ajustes.
  */
 async function enviarPush(db, userId, notificacao) {
-  if (!pushConfigurado || !(await querPush(db, userId))) return { enviados: 0, removidos: 0 };
+  if (!(await querPush(db, userId))) return { enviados: 0, removidos: 0 };
+
+  // Dois caminhos, e eles nao se substituem: a mesma pessoa pode ter
+  // o site aberto no computador E o app no celular. O nativo sai
+  // primeiro porque independe das chaves VAPID — sem elas o Web Push
+  // nao existe, mas o app continua recebendo.
+  const nativo = await enviarPushNativo(db, userId, { ...notificacao, url: rotaDe(notificacao) })
+    .catch((err) => {
+      console.error('Push nativo falhou:', err?.message || err);
+      return { enviados: 0, removidos: 0 };
+    });
+
+  if (!pushConfigurado) return nativo;
 
   const inscricoes = await db
     .prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?')
     .all(userId);
-  if (inscricoes.length === 0) return { enviados: 0, removidos: 0 };
+  if (inscricoes.length === 0) return nativo;
 
   const payload = JSON.stringify({
     title: notificacao.title || TITULO_POR_TIPO[notificacao.type] || 'RUSH RUNNING',
@@ -153,7 +166,7 @@ async function enviarPush(db, userId, notificacao) {
     }
   }
 
-  return { enviados, removidos };
+  return { enviados: enviados + nativo.enviados, removidos: removidos + nativo.removidos };
 }
 
 /**

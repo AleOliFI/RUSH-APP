@@ -60,16 +60,18 @@ A conta de serviço precisa do papel adequado no Play Console e do escopo
 
 ## O que ainda falta
 
-### 1. O plugin de compra nativo
+### 1. O plugin de compra — ligado, nunca executado
 
-`src/services/billing.js` tem a função `comprarNaLoja`, e ela é o único ponto
-que falta. O contrato é curto: abrir a compra e **devolver o comprovante como
-string** — transação assinada no iOS, token no Android. Nada mais; quem julga
-é o servidor.
+`src/services/compraNaLoja.ts` abre a compra com `cordova-plugin-purchase`
+(MIT) e devolve o comprovante: `jwsRepresentation` no iOS, `purchaseToken` no
+Android. Os dois campos foram lidos dos tipos do plugin, não de memória.
 
-Hoje ela lança um aviso honesto em vez de fingir que comprou. Ligar um plugin
-de compra exige aparelho de verdade e conta de desenvolvedor, então não foi
-feito aqui.
+**Nunca rodou.** Compra in-app exige aparelho de verdade, conta de
+desenvolvedor e produto aprovado na loja. Compila; funcionar é outra coisa.
+
+Um detalhe que vale conhecer ao depurar: o plugin entrega a transação por
+**evento** (`approved`), não pelo retorno de `order()`. Tratar o retorno como
+sucesso faria a compra "funcionar" e o PRO nunca chegar.
 
 ### 2. Produtos cadastrados nas duas lojas
 

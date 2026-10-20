@@ -644,6 +644,24 @@ module.exports = async function initializeDatabase(db) {
       last_success_at TEXT DEFAULT NULL
     );
 
+    -- Push NATIVO, que e outra coisa do que Web Push.
+    --
+    -- A tabela acima guarda inscricao de navegador: endpoint mais
+    -- duas chaves de criptografia. O app empacotado nao tem nada
+    -- disso — ele recebe um TOKEN de dispositivo do APNs (iOS) ou
+    -- do FCM (Android), e o envio sai por outro caminho.
+    --
+    -- Tabela separada de proposito: a de cima continua servindo o
+    -- site sem alteracao nenhuma.
+    CREATE TABLE IF NOT EXISTS push_devices (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      platform TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      last_success_at TEXT DEFAULT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
+
     CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
   `);
 

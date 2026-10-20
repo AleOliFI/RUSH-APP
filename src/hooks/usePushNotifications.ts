@@ -11,8 +11,14 @@
 // revertida nas configurações do navegador, não por um botão nosso.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { notifications as notificationsApi } from '../api';
+import {
+  desligarPushNativo,
+  ehAppNativo,
+  ligarPushNativo,
+  permissaoNativaConcedida,
+} from '../services/pushNativoCliente';
 
 export type PushStatus =
   /** Ainda verificando o que o navegador e o servidor suportam. */
@@ -69,6 +75,16 @@ export function usePushNotifications(enabled = true): PushData {
 
   /** Descobre em qual das três portas estamos, sem pedir nada ao atleta. */
   const verificar = useCallback(async () => {
+    // No app empacotado os dois diagnosticos abaixo mentiriam:
+    // "sem_suporte" porque o webview nao faz Web Push, e
+    // "servidor_sem_chaves" porque push nativo nao usa VAPID. Os
+    // dois mandariam a tela dizer que nao da, quando da.
+    if (ehAppNativo()) {
+      const permitido = await permissaoNativaConcedida();
+      setStatus(permitido === 'granted' ? 'ligado' : permitido === 'denied' ? 'bloqueado' : 'desligado');
+      return;
+    }
+
     if (!navegadorSuporta()) {
       setStatus('sem_suporte');
       return;
@@ -102,11 +118,39 @@ export function usePushNotifications(enabled = true): PushData {
     if (enabled) verificar();
   }, [enabled, verificar]);
 
+  /** Token do aparelho, para conseguir removê-lo ao desligar. */
+  const tokenNativoRef = useRef<string | null>(null);
+
   const enable = useCallback(async () => {
-    if (!publicKey) return;
     setIsBusy(true);
     setError(null);
     setTestMessage(null);
+
+    // No app empacotado o caminho e outro: nao ha service worker nem
+    // VAPID, ha token de dispositivo. E ele NAO depende das chaves
+    // VAPID do servidor — por isso a checagem de publicKey so vale
+    // para o navegador, e fica depois deste desvio.
+    if (ehAppNativo()) {
+      try {
+        const r = await ligarPushNativo();
+        if (r.estado === 'ligado') {
+          tokenNativoRef.current = r.token;
+          setStatus('ligado');
+        } else if (r.estado === 'bloqueado') {
+          setStatus('bloqueado');
+        } else if (r.estado === 'erro') {
+          setError(r.mensagem);
+        }
+      } finally {
+        setIsBusy(false);
+      }
+      return;
+    }
+
+    if (!publicKey) {
+      setIsBusy(false);
+      return;
+    }
 
     try {
       const permissao = await Notification.requestPermission();
@@ -141,6 +185,19 @@ export function usePushNotifications(enabled = true): PushData {
     setIsBusy(true);
     setError(null);
     setTestMessage(null);
+
+    if (ehAppNativo()) {
+      try {
+        await desligarPushNativo(tokenNativoRef.current);
+        tokenNativoRef.current = null;
+        setStatus('desligado');
+      } catch (err: any) {
+        setError(err?.message || 'Não foi possível desativar as notificações');
+      } finally {
+        setIsBusy(false);
+      }
+      return;
+    }
 
     try {
       const registro = await navigator.serviceWorker.getRegistration('/sw.js');

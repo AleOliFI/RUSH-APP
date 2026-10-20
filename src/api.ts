@@ -324,6 +324,11 @@ export const notifications = {
     request('/notifications/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
   pushUnsubscribe: (endpoint: string) =>
     request('/notifications/push/subscribe', { method: 'DELETE', body: JSON.stringify({ endpoint }) }),
+  /** App nativo: registra o token de dispositivo (APNs/FCM). */
+  pushRegistrarDispositivo: (token: string, platform: 'ios' | 'android') =>
+    request('/notifications/push/device', { method: 'POST', body: JSON.stringify({ token, platform }) }),
+  pushRemoverDispositivo: (token: string) =>
+    request('/notifications/push/device', { method: 'DELETE', body: JSON.stringify({ token }) }),
   pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 };
 

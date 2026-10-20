@@ -130,14 +130,24 @@ Já declarados: `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE` e
   plano só se prova com o celular no bolso, tela apagada, na rua. Compare a
   distância do RUSH com a de um relógio ou outro app na mesma corrida.
 
-### 2. Notificações
+### 2. Notificações — implementado, nunca testado
 
-`src/hooks/usePushNotifications.ts` é Web Push puro: service worker em
-`/sw.js` e chaves VAPID. Isso **não funciona** dentro do app nativo, que
-precisa de APNs no iOS e FCM no Android, via plugin de push do Capacitor.
+O app nativo agora registra um token de dispositivo
+(`@capacitor/push-notifications`) e o servidor envia por FCM
+(`server/services/pushNativo.js`, tabela `push_devices`). O Web Push do site
+continua intacto, em tabela e caminho próprios: a mesma pessoa pode ter o
+site aberto no computador e o app no celular, e recebe nos dois.
 
-O caminho web continua valendo para o site — o que existe hoje não some, só
-não atende o app empacotado.
+A credencial é a **mesma conta de serviço** usada para verificar compras na
+Play — muda só o escopo. Uma credencial a menos para administrar.
+
+**O que ainda é seu:**
+
+- `FCM_PROJECT_ID` e `GOOGLE_SERVICE_ACCOUNT_JSON` no servidor.
+- Um projeto **Firebase**, com o `google-services.json` no Android.
+- No **iOS**, a chave do **APNs** carregada no Firebase — sem ela o FCM não
+  tem como entregar ao iPhone.
+- Testar num aparelho. Nada disto falou com o FCM de verdade.
 
 ---
 
@@ -148,7 +158,7 @@ não atende o app empacotado.
 - [ ] `PrivacyInfo.xcprivacy` adicionado ao target no Xcode (passo manual acima)
 - [ ] Telas de abertura (splash) por densidade
 - [x] GPS em segundo plano implementado — **falta licenciar e testar na rua**
-- [ ] Push nativo, se as notificações forem parte da proposta
+- [x] Push nativo implementado — **falta Firebase, chave do APNs e testar**
 - [ ] Compra in-app: a verificação de recibo no servidor está pronta e
       testada (`docs/compra-in-app.md`). Falta o plugin de compra nativo e as
       credenciais das duas lojas

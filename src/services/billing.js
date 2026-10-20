@@ -14,16 +14,16 @@
 // loja. A versão anterior chamava uma rota que concedia PRO só
 // porque o cliente pediu — bastava estar logado.
 //
-// O QUE AINDA FALTA, E ESTÁ MARCADO
+// O QUE AINDA NÃO FOI PROVADO
 //
-// `comprarNaLoja` é a emenda com o plugin nativo de compra, que
-// precisa de um aparelho de verdade para ser ligado e testado.
-// Enquanto não existir, ela avisa em vez de fingir. O resto do
-// caminho — mandar o comprovante, tratar a resposta — está pronto
-// e é o mesmo para as duas lojas.
+// A emenda com a loja vive em `compraNaLoja.ts` e está escrita
+// contra os tipos reais do plugin — mas nunca rodou num aparelho.
+// Compra in-app exige celular de verdade, conta de desenvolvedor e
+// produto cadastrado na loja. Compila; funcionar é outra coisa.
 // ============================================================
 
 import { subscriptions } from '../api';
+import { comprarNaLoja, restaurarNaLoja } from './compraNaLoja';
 
 /** Identificadores dos produtos, como cadastrados nas duas lojas. */
 export const PRODUTOS = {
@@ -42,26 +42,6 @@ function lojaDoAparelho() {
   if (plataforma === 'ios') return 'apple';
   if (plataforma === 'android') return 'google';
   return null;
-}
-
-/**
- * Abre a compra na loja do aparelho e devolve o comprovante.
- *
- * ⚠️ PONTO DE LIGAÇÃO COM O PLUGIN NATIVO — ainda não implementado.
- *
- * Quando o plugin de compra for instalado, é aqui que ele entra, e
- * o contrato é curto: devolver a transação assinada (iOS) ou o
- * token de compra (Android) como string. Nada mais. Quem julga o
- * comprovante é o servidor.
- *
- * Até lá, lançar é o comportamento correto: um botão que parece
- * comprar e não compra é pior do que um aviso honesto.
- */
-async function comprarNaLoja(_produtoId) {
-  throw new Error(
-    'A compra pela loja ainda não está ligada neste aplicativo. '
-    + 'A verificação no servidor já está pronta; falta o plugin de compra nativo.',
-  );
 }
 
 async function assinar(produtoId) {
@@ -123,7 +103,7 @@ export const billing = {
       };
     }
 
-    const comprovante = await comprarNaLoja(null);
+    const comprovante = await restaurarNaLoja();
     return await subscriptions.verificarCompra(loja, comprovante);
   },
 

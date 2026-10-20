@@ -148,6 +148,61 @@ module.exports = function notificationsRoutes(db) {
   });
 
   // -------------------------------------------------------
+  // POST /api/notifications/push/device — Registrar app nativo
+  // -------------------------------------------------------
+  // O app empacotado nao tem endpoint nem chaves de Web Push: ele
+  // tem um TOKEN de dispositivo. Rota separada, tabela separada, e
+  // o caminho do navegador segue intocado.
+  router.post('/push/device', authenticate, async (req, res) => {
+    try {
+      const { token, platform } = req.body || {};
+
+      if (!token || typeof token !== 'string' || token.length < 10 || token.length > 500) {
+        return res.status(400).json({ error: 'Token de dispositivo inválido' });
+      }
+      if (platform !== 'ios' && platform !== 'android') {
+        return res.status(400).json({ error: 'platform deve ser ios ou android' });
+      }
+
+      // Mesmo cuidado da inscricao de navegador: o token e a chave, e
+      // um aparelho que trocou de dono passa a apontar para quem esta
+      // logado agora. Manter o dono antigo mandaria notificacao dele
+      // para a tela de outra pessoa.
+      await db.prepare(`
+        INSERT INTO push_devices (token, user_id, platform)
+        VALUES (?, ?, ?)
+        ON CONFLICT(token) DO UPDATE SET
+          user_id = excluded.user_id,
+          platform = excluded.platform
+      `).run(token, req.user.id, platform);
+
+      res.status(201).json({ registered: true });
+    } catch (err) {
+      console.error('Push device error:', err);
+      res.status(500).json({ error: 'Erro ao registrar o aparelho' });
+    }
+  });
+
+  // -------------------------------------------------------
+  // DELETE /api/notifications/push/device — Remover app nativo
+  // -------------------------------------------------------
+  router.delete('/push/device', authenticate, async (req, res) => {
+    try {
+      const { token } = req.body || {};
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ error: 'Token de dispositivo inválido' });
+      }
+      // Só o dono remove o próprio aparelho.
+      await db.prepare('DELETE FROM push_devices WHERE token = ? AND user_id = ?')
+        .run(token, req.user.id);
+      res.json({ removed: true });
+    } catch (err) {
+      console.error('Push device remove error:', err);
+      res.status(500).json({ error: 'Erro ao remover o aparelho' });
+    }
+  });
+
+  // -------------------------------------------------------
   // DELETE /api/notifications/push/subscribe — Remover aparelho
   // -------------------------------------------------------
   router.delete('/push/subscribe', authenticate, async (req, res) => {
