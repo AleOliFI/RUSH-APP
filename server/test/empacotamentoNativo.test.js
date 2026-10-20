@@ -173,6 +173,55 @@ if (fs.existsSync(manifestoPrivacidade)) {
 // O padrao e um arquivo com data de criacao do template; a checagem
 // aqui e pelo conteudo: o PNG da marca tem fundo carbono.
 const iconeAndroid = path.join(RAIZ, 'android', 'app', 'src', 'main', 'res', 'mipmap-xxxhdpi', 'ic_launcher.png');
+/**
+ * Cor do primeiro pixel de um PNG.
+ *
+ * Funciona para qualquer filtro de linha: no PRIMEIRO pixel da
+ * PRIMEIRA linha não há vizinho à esquerda nem linha anterior, então
+ * Sub, Up, Average e Paeth se reduzem todos ao valor bruto. Só o
+ * byte do filtro precisa ser pulado.
+ */
+function primeiroPixel(caminho) {
+  const zlib = require('zlib');
+  const png = fs.readFileSync(caminho);
+  const cor = png[25]; // byte 25 do IHDR: tipo de cor
+  const canais = cor === 6 ? 4 : cor === 2 ? 3 : 0;
+  if (!canais) return null;
+
+  const pedacos = [];
+  let i = 8;
+  while (i < png.length - 8) {
+    const tamanho = png.readUInt32BE(i);
+    const tipo = png.toString('ascii', i + 4, i + 8);
+    if (tipo === 'IDAT') pedacos.push(png.subarray(i + 8, i + 8 + tamanho));
+    if (tipo === 'IEND') break;
+    i += 12 + tamanho;
+  }
+  if (!pedacos.length) return null;
+
+  const cru = zlib.inflateSync(Buffer.concat(pedacos));
+  // cru[0] é o byte do filtro da primeira linha.
+  return [cru[1], cru[2], cru[3]];
+}
+
+// A tela de abertura precisa ser a MARCA. A que o Capacitor instala é
+// um logo azul em fundo BRANCO — e é a primeira coisa que a pessoa vê
+// ao abrir o app. Passou despercebida até o levantamento final, então
+// aqui a verificação é do pixel, não do nome do arquivo.
+const splash = path.join(RAIZ, 'android', 'app', 'src', 'main', 'res', 'drawable-port-xxhdpi', 'splash.png');
+if (fs.existsSync(splash)) {
+  const png = fs.readFileSync(splash);
+  registrar(png.readUInt32BE(16) === 960 && png.readUInt32BE(20) === 1600,
+    'C10g: a tela de abertura tem a dimensão da densidade',
+    `veio ${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`);
+
+  const [r, g, b] = primeiroPixel(splash) || [255, 255, 255];
+  // Carbono da marca é #0D0D0D. O padrão do Capacitor é branco.
+  registrar(r < 40 && g < 40 && b < 40,
+    'C10h: e fundo carbono, não o branco padrão do Capacitor',
+    `o canto da imagem é rgb(${r}, ${g}, ${b})`);
+}
+
 if (fs.existsSync(iconeAndroid)) {
   const png = fs.readFileSync(iconeAndroid);
   // Largura/altura ficam nos bytes 16..24 do cabecalho IHDR.
@@ -209,6 +258,41 @@ registrar(/navigator\.geolocation\.watchPosition/.test(trackerLimpo),
 // ------------------------------------------------------------
 // 5. Os limites conhecidos estao ESCRITOS, nao escondidos
 // ------------------------------------------------------------
+
+// Materiais das lojas: capturas nos tamanhos exigidos e os textos.
+const CAPTURAS = [
+  ['apple-6.7', 1290, 2796],
+  ['android', 1080, 1920],
+];
+for (const [pasta, larguraEsperada, alturaEsperada] of CAPTURAS) {
+  const dir = path.join(RAIZ, 'resources', 'lojas', pasta);
+  if (!fs.existsSync(dir)) {
+    registrar(false, `C12a: há capturas para ${pasta}`, 'pasta ausente');
+    continue;
+  }
+  const arquivos = fs.readdirSync(dir).filter((f) => f.endsWith('.png'));
+  const erradas = arquivos.filter((f) => {
+    const png = fs.readFileSync(path.join(dir, f));
+    return png.readUInt32BE(16) !== larguraEsperada || png.readUInt32BE(20) !== alturaEsperada;
+  });
+  // Tamanho errado e recusa automatica no envio, antes de qualquer
+  // analise humana.
+  registrar(arquivos.length >= 3 && erradas.length === 0,
+    `C12a: capturas de ${pasta} em ${larguraEsperada}x${alturaEsperada}`,
+    erradas.length ? `fora do tamanho: ${erradas.join(', ')}` : `só ${arquivos.length} capturas`);
+}
+
+const fichas = path.join(RAIZ, 'docs', 'fichas-das-lojas.md');
+registrar(fs.existsSync(fichas), 'C12b: os textos das fichas foram escritos');
+if (fs.existsSync(fichas)) {
+  const texto = fs.readFileSync(fichas, 'utf8');
+  // O app calcula prontidao a partir de VFC. A ficha NAO pode
+  // prometer diagnostico ou tratamento — os termos ja dizem que ele
+  // nao e dispositivo medico, e a loja compara as duas coisas.
+  registrar(/n[ãa]o é um dispositivo médico/i.test(texto),
+    'C12c: a descrição da loja repete que o app não é dispositivo médico',
+    'a ficha promete mais do que os termos admitem');
+}
 
 const guia = path.join(RAIZ, 'docs', 'compilar-nativo.md');
 registrar(fs.existsSync(guia), 'C12: existe guia de compilação');
