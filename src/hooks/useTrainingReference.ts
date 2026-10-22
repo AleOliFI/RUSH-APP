@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
-import { hrv, training } from '../api';
+import { challenges, hrv, training } from '../api';
 
 export interface HrZone {
   name: string;
@@ -135,6 +135,67 @@ export function usePlanoCompleto(planId: string | null): PlanoCompletoData {
     assignment: dados?.assignment ?? null,
     completedIds: Array.isArray(dados?.completed_session_ids) ? dados.completed_session_ids : [],
     completedKm: Number(dados?.completed_km) || 0,
+    isLoading,
+    error,
+    reload,
+  };
+}
+
+/** Uma linha da classificação do desafio. */
+export interface LinhaDaClassificacao {
+  user_id: string;
+  name: string;
+  username: string;
+  avatar_url: string | null;
+  progress_value: number;
+  progress_pct: number;
+  rank: number;
+  /** `true` na linha de quem está olhando. */
+  is_me: boolean;
+}
+
+export interface ClassificacaoData {
+  challenge: any | null;
+  linhas: LinhaDaClassificacao[];
+  isLoading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
+}
+
+/**
+ * Classificação de um desafio.
+ *
+ * A rota existia, `challenges.leaderboard` existia no cliente, e
+ * nenhuma tela chamava: o atleta entrava no desafio e não tinha como
+ * ver onde estava. Carrega sob demanda, só quando alguém abre a
+ * classificação — ela não faz parte do carregamento inicial.
+ */
+export function useClassificacaoDoDesafio(challengeId: string | null): ClassificacaoData {
+  const [dados, setDados] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!challengeId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      setDados(await challenges.leaderboard(challengeId));
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao carregar a classificação');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [challengeId]);
+
+  useEffect(() => {
+    if (challengeId) reload();
+    else setDados(null);
+  }, [challengeId, reload]);
+
+  return {
+    challenge: dados?.challenge ?? null,
+    linhas: Array.isArray(dados?.leaderboard) ? dados.leaderboard : [],
     isLoading,
     error,
     reload,

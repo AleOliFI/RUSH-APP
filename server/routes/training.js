@@ -234,9 +234,18 @@ module.exports = function trainingRoutes(db) {
         return res.status(400).json({ error: 'start_date deve ser uma data válida (YYYY-MM-DD)' });
       }
 
-      const athlete = await db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(user_id);
+      // O atleta tem de ser da assessoria de quem está atribuindo.
+      //
+      // Sem esta conferência, um treinador atribuía plano a QUALQUER
+      // conta do app só sabendo o id — e, pior, a atribuição cancela
+      // o plano ativo de quem recebe. Dava para apagar o plano de um
+      // desconhecido. A rota de prescrição já fazia a conferência;
+      // esta não.
+      const athlete = await db
+        .prepare('SELECT id FROM users WHERE id = ? AND academy_id = ? AND deleted_at IS NULL')
+        .get(user_id, req.user.academy_id);
       if (!athlete) {
-        return res.status(404).json({ error: 'Atleta não encontrado' });
+        return res.status(404).json({ error: 'Atleta não encontrado na sua assessoria' });
       }
 
       const plan = await db.prepare('SELECT * FROM training_plans WHERE id = ?').get(plan_id);
@@ -350,7 +359,31 @@ module.exports = function trainingRoutes(db) {
   // -------------------------------------------------------
   router.post('/generate-plan', authenticate, async (req, res) => {
     try {
-      const { distance_km, level, duration_weeks = 12 } = req.body;
+      const { distance_km, level, duration_weeks = 12, user_id } = req.body;
+
+      // Para quem o plano é. Sem `user_id`, é para quem chamou — o
+      // caminho do atleta montando o próprio plano, que já existia.
+      //
+      // Com `user_id`, é o treinador montando para um aluno. Era a
+      // peça que faltava: POST /training/plans aceita um plano com
+      // sessões, mas montar doze semanas num formulário é outro
+      // aplicativo. O gerador periodizado já está aqui, testado e em
+      // uso — o treinador usa o mesmo, em vez de o app ganhar uma
+      // segunda lógica de prescrição para divergir da primeira.
+      let destinatario = req.user.id;
+
+      if (user_id && user_id !== req.user.id) {
+        if (!['coach', 'owner', 'admin'].includes(req.user.role)) {
+          return res.status(403).json({ error: 'Apenas treinadores montam plano para outra pessoa' });
+        }
+        const aluno = await db
+          .prepare('SELECT id FROM users WHERE id = ? AND academy_id = ? AND deleted_at IS NULL')
+          .get(user_id, req.user.academy_id);
+        if (!aluno) {
+          return res.status(404).json({ error: 'Atleta não encontrado na sua assessoria' });
+        }
+        destinatario = aluno.id;
+      }
 
       if (distance_km == null || !level) {
         return res.status(400).json({ error: 'distance_km e level são obrigatórios' });
@@ -406,13 +439,24 @@ module.exports = function trainingRoutes(db) {
       const startDate = new Date().toISOString().split('T')[0];
       const endDate = new Date(Date.now() + numWeeks * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      await db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(req.user.id);
+      await db.prepare("UPDATE assigned_plans SET status = 'cancelled', updated_at = datetime('now') WHERE user_id = ? AND status = 'active'").run(destinatario);
 
       const assignId = uuidv4();
       await db.prepare(`
         INSERT INTO assigned_plans (id, user_id, plan_id, start_date, end_date, status)
         VALUES (?, ?, ?, ?, ?, 'active')
-      `).run(assignId, req.user.id, planId, startDate, endDate);
+      `).run(assignId, destinatario, planId, startDate, endDate);
+
+      // Quando foi o treinador que montou, o atleta precisa saber: o
+      // plano dele acabou de ser trocado sem que ele pedisse.
+      if (destinatario !== req.user.id) {
+        await criarNotificacao(db, {
+          userId: destinatario,
+          type: 'plan_assigned',
+          sourceUserId: req.user.id,
+          message: `Novo plano atribuído: ${planName}`,
+        });
+      }
 
       const plan = await db.prepare('SELECT * FROM training_plans WHERE id = ?').get(planId);
       const sessions = await db.prepare('SELECT * FROM training_sessions WHERE plan_id = ? ORDER BY week_number, day_of_week').all(planId);

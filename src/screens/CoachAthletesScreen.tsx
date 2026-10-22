@@ -18,6 +18,7 @@
 
 import React, { useState } from 'react';
 import type { GestaoAtletasData, PainelData } from '../hooks/useAssessoria';
+import { challenges } from '../api';
 
 interface CoachAthletesScreenProps {
   painel: PainelData;
@@ -26,7 +27,7 @@ interface CoachAthletesScreenProps {
   onConcluido: () => void;
 }
 
-type Aba = 'convite' | 'cadastro';
+type Aba = 'convite' | 'cadastro' | 'desafio';
 
 const NIVEIS = [
   { valor: 'beginner', rotulo: 'Iniciante' },
@@ -35,6 +36,27 @@ const NIVEIS = [
 ] as const;
 
 const DISTANCIAS = [5, 10, 21, 42] as const;
+
+/**
+ * Tipos aceitos pelo servidor (server/routes/challenges.js). Lista
+ * fechada: texto livre aqui vira 400, e o treinador não saberia por quê.
+ */
+const TIPOS_DE_DESAFIO = [
+  { valor: 'distance', rotulo: 'Distância' },
+  { valor: 'consistency', rotulo: 'Constância' },
+  { valor: 'elevation', rotulo: 'Altimetria' },
+  { valor: 'pace', rotulo: 'Ritmo' },
+  { valor: 'time', rotulo: 'Tempo' },
+] as const;
+
+/** Unidade que combina com cada tipo — vai junto para o servidor. */
+const UNIDADE_DO_TIPO: Record<string, string> = {
+  distance: 'km',
+  consistency: 'treinos',
+  elevation: 'm',
+  pace: 'min/km',
+  time: 'min',
+};
 
 const Campo: React.FC<{
   rotulo: string;
@@ -78,6 +100,18 @@ export const CoachAthletesScreen: React.FC<CoachAthletesScreenProps> = ({
   const [peso, setPeso] = useState('');
   const [genero, setGenero] = useState('');
 
+  // Desafio. A rota POST /challenges existia e nenhuma tela a
+  // chamava: os desafios que apareciam no feed só podiam ter nascido
+  // da semeadura do banco.
+  const [desafioNome, setDesafioNome] = useState('');
+  const [desafioDescricao, setDesafioDescricao] = useState('');
+  const [desafioTipo, setDesafioTipo] = useState<string>('distance');
+  const [desafioMeta, setDesafioMeta] = useState('');
+  const [desafioInicio, setDesafioInicio] = useState(new Date().toISOString().split('T')[0]);
+  const [desafioFim, setDesafioFim] = useState('');
+  const [salvandoDesafio, setSalvandoDesafio] = useState(false);
+  const [desafioCriado, setDesafioCriado] = useState<string | null>(null);
+
   const vagas = painel.vagas;
   const lotado = vagas ? vagas.usadas >= vagas.limite : false;
 
@@ -85,6 +119,46 @@ export const CoachAthletesScreen: React.FC<CoachAthletesScreenProps> = ({
     setAba(nova);
     setErroLocal(null);
     gestao.limpar();
+  };
+
+  const criarDesafio = async () => {
+    setErroLocal(null);
+    setDesafioCriado(null);
+    gestao.limpar();
+
+    if (!desafioNome.trim()) { setErroLocal('Dê um nome ao desafio.'); return; }
+
+    const meta = Number(String(desafioMeta).replace(',', '.'));
+    if (!Number.isFinite(meta) || meta <= 0) {
+      setErroLocal('A meta precisa ser um número maior que zero.'); return;
+    }
+    if (!desafioInicio || !desafioFim) {
+      setErroLocal('Informe início e fim.'); return;
+    }
+    // O servidor recusa fim antes do início; conferir aqui evita
+    // preencher tudo para receber um 400 seco depois.
+    if (new Date(desafioFim) < new Date(desafioInicio)) {
+      setErroLocal('O fim não pode ser antes do início.'); return;
+    }
+
+    setSalvandoDesafio(true);
+    try {
+      const criado = await challenges.criar({
+        name: desafioNome.trim(),
+        description: desafioDescricao.trim() || undefined,
+        type: desafioTipo,
+        target_value: meta,
+        target_unit: UNIDADE_DO_TIPO[desafioTipo] || 'km',
+        start_date: desafioInicio,
+        end_date: desafioFim,
+      });
+      setDesafioCriado(`Desafio "${criado?.name || desafioNome.trim()}" criado.`);
+      setDesafioNome(''); setDesafioDescricao(''); setDesafioMeta(''); setDesafioFim('');
+    } catch (err: any) {
+      setErroLocal(err?.message || 'Não foi possível criar o desafio');
+    } finally {
+      setSalvandoDesafio(false);
+    }
   };
 
   const validarEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -183,7 +257,7 @@ export const CoachAthletesScreen: React.FC<CoachAthletesScreenProps> = ({
       )}
 
       {/* Abas */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {/* `icone:` como campo, e nao como terceiro item de uma tupla:
             o extrator de icones le esse formato, e a tupla ele nao ve.
             Com a tupla, R2.5 passava sem o glifo existir na fonte — e a
@@ -191,6 +265,7 @@ export const CoachAthletesScreen: React.FC<CoachAthletesScreenProps> = ({
         {([
           { chave: 'convite', rotulo: 'Convidar', icone: 'mail' },
           { chave: 'cadastro', rotulo: 'Cadastrar', icone: 'person_add' },
+          { chave: 'desafio', rotulo: 'Desafio', icone: 'flag' },
         ] as const).map(
           ({ chave, rotulo, icone }) => (
             <button
@@ -392,6 +467,74 @@ export const CoachAthletesScreen: React.FC<CoachAthletesScreenProps> = ({
             <span className="material-symbols-outlined text-[#0D0D0D] text-[20px]">person_add</span>
             <span className="text-xs font-bold uppercase tracking-wider text-[#0D0D0D]">
               {gestao.isSaving ? 'Cadastrando…' : 'Cadastrar atleta'}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {aba === 'desafio' && (
+        <div className="space-y-3.5">
+          <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
+            O desafio aparece para os atletas da sua assessoria, que entram por conta própria. O
+            progresso de cada um sobe conforme eles treinam.
+          </p>
+
+          <Campo rotulo="Nome" valor={desafioNome} onChange={setDesafioNome} obrigatorio
+            placeholder="Desafio de outubro" />
+
+          <Campo rotulo="Descrição" valor={desafioDescricao} onChange={setDesafioDescricao}
+            placeholder="O que vale e o que não vale" />
+
+          <div>
+            <span className="text-[10px] text-[#A1A1AA] uppercase tracking-widest block mb-1.5">
+              Tipo<span className="text-[#FF5500] ml-1">*</span>
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {TIPOS_DE_DESAFIO.map((t) => (
+                <button
+                  key={t.valor}
+                  type="button"
+                  onClick={() => setDesafioTipo(t.valor)}
+                  aria-pressed={desafioTipo === t.valor}
+                  className={`min-h-[44px] rounded-lg border text-[11px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                    desafioTipo === t.valor
+                      ? 'bg-[#FF5500] border-[#FF5500] text-[#0D0D0D]'
+                      : 'bg-[#101010] border-[#262626] text-[#A1A1AA] hover:border-[#353534]'
+                  }`}
+                >
+                  {t.rotulo}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Campo
+            rotulo={`Meta (${UNIDADE_DO_TIPO[desafioTipo] || 'km'})`}
+            valor={desafioMeta}
+            onChange={setDesafioMeta}
+            tipo="number"
+            obrigatorio
+            dica="A unidade acompanha o tipo escolhido."
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <Campo rotulo="Início" valor={desafioInicio} onChange={setDesafioInicio} tipo="date" obrigatorio />
+            <Campo rotulo="Fim" valor={desafioFim} onChange={setDesafioFim} tipo="date" obrigatorio />
+          </div>
+
+          {desafioCriado && (
+            <p className="text-xs text-[#22C55E] font-bold" role="status">{desafioCriado}</p>
+          )}
+
+          <button
+            type="button"
+            onClick={criarDesafio}
+            disabled={salvandoDesafio}
+            className="w-full min-h-[52px] bg-[#FF5500] hover:bg-[#FF6A1F] rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >
+            <span className="material-symbols-outlined text-[#0D0D0D] text-[20px]">flag</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-[#0D0D0D]">
+              {salvandoDesafio ? 'Criando…' : 'Criar desafio'}
             </span>
           </button>
         </div>

@@ -24,6 +24,7 @@ interface CoachAthleteScreenProps {
   ficha: FichaAtletaData;
   onVoltar: () => void;
   onPrescrever: () => void;
+  onPlano: () => void;
 }
 
 const COR_ESTADO: Record<string, string> = {
@@ -171,7 +172,7 @@ const GraficoVfc: React.FC<{ historico: any[] }> = ({ historico }) => {
 // ------------------------------------------------------------
 
 export const CoachAthleteScreen: React.FC<CoachAthleteScreenProps> = ({
-  ficha, onVoltar, onPrescrever,
+  ficha, onVoltar, onPrescrever, onPlano,
 }) => {
   const { athlete, hrvHistory, recentActivities, vo2max, plan, isLoading, error } = ficha;
 
@@ -404,16 +405,32 @@ export const CoachAthleteScreen: React.FC<CoachAthleteScreenProps> = ({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onPrescrever}
-        className="w-full min-h-[52px] bg-[#FF5500] hover:bg-[#FF6A1F] rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
-      >
-        <span className="material-symbols-outlined text-[#0D0D0D] text-[20px]">edit</span>
-        <span className="text-xs font-bold uppercase tracking-wider text-[#0D0D0D]">
-          Prescrever treino
-        </span>
-      </button>
+      <div className="space-y-2.5">
+        <button
+          type="button"
+          onClick={onPrescrever}
+          className="w-full min-h-[52px] bg-[#FF5500] hover:bg-[#FF6A1F] rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
+        >
+          <span className="material-symbols-outlined text-[#0D0D0D] text-[20px]">edit</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#0D0D0D]">
+            Prescrever treino
+          </span>
+        </button>
+
+        {/* Prescrever troca o treino de um dia; o plano é o ciclo
+            inteiro. Duas ações diferentes, e a de baixo é a que
+            faltava ter tela. */}
+        <button
+          type="button"
+          onClick={onPlano}
+          className="w-full min-h-[48px] bg-[#262626] hover:bg-[#353534] border border-[#353534] rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
+        >
+          <span className="material-symbols-outlined text-[#F7F5F3] text-[20px]">calendar_month</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#F7F5F3]">
+            Plano de treino
+          </span>
+        </button>
+      </div>
     </div>
   );
 };

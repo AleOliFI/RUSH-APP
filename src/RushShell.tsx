@@ -83,6 +83,7 @@ const CoachDashboardScreen = lazy(() => import('./screens/CoachDashboardScreen')
 const CoachAthleteScreen = lazy(() => import('./screens/CoachAthleteScreen').then((m) => ({ default: m.CoachAthleteScreen })));
 const CoachAthletesScreen = lazy(() => import('./screens/CoachAthletesScreen').then((m) => ({ default: m.CoachAthletesScreen })));
 const CoachPrescribeScreen = lazy(() => import('./screens/CoachPrescribeScreen').then((m) => ({ default: m.CoachPrescribeScreen })));
+const CoachPlanScreen = lazy(() => import('./screens/CoachPlanScreen').then((m) => ({ default: m.CoachPlanScreen })));
 const GearGarageModal = lazy(() => import('./components/rush/GearGarageModal').then((m) => ({ default: m.GearGarageModal })));
 const ActiveRunModal = lazy(() => import('./components/rush/ActiveRunModal').then((m) => ({ default: m.ActiveRunModal })));
 const WorkoutSummaryModal = lazy(() => import('./components/rush/WorkoutSummaryModal').then((m) => ({ default: m.WorkoutSummaryModal })));
@@ -228,14 +229,14 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   // Vive dentro da aba Perfil, como Ajustes: a BottomNav e fixa em
   // seis colunas e o desenho do treinador pede outra barra inteira.
   // Enfiar uma setima coluna la mudaria a navegacao de todo mundo.
-  const [coachView, setCoachView] = useState<null | 'painel' | 'atleta' | 'gestao' | 'prescrever'>(null);
+  const [coachView, setCoachView] = useState<null | 'painel' | 'atleta' | 'gestao' | 'prescrever' | 'plano'>(null);
   const [coachAtletaId, setCoachAtletaId] = useState<string | null>(null);
 
   const ehTreinador = ['coach', 'owner', 'admin'].includes(String(meRaw?.role || ''));
 
   const painelAssessoria = usePainelAssessoria(ehTreinador && coachView !== null);
   const fichaAtleta = useFichaAtleta(
-    coachView === 'atleta' || coachView === 'prescrever' ? coachAtletaId : null,
+    coachView === 'atleta' || coachView === 'prescrever' || coachView === 'plano' ? coachAtletaId : null,
   );
   const gestaoAtletas = useGestaoAtletas();
   // Os ajustes e a exclusao leem os mesmos dados: o hook carrega para as duas.
@@ -594,6 +595,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
               ficha={fichaAtleta}
               onVoltar={() => setCoachView('painel')}
               onPrescrever={() => setCoachView('prescrever')}
+              onPlano={() => setCoachView('plano')}
             />
           </Adiado>
         )}
@@ -605,6 +607,17 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
               gestao={gestaoAtletas}
               onVoltar={() => setCoachView(coachAtletaId ? 'atleta' : 'painel')}
               onPrescrito={() => { fichaAtleta.reload(); setCoachView('atleta'); }}
+            />
+          </Adiado>
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && ehTreinador && coachView === 'plano' && (
+          <Adiado>
+            <CoachPlanScreen
+              ficha={fichaAtleta}
+              gestao={gestaoAtletas}
+              onVoltar={() => setCoachView(coachAtletaId ? 'atleta' : 'painel')}
+              onAtribuido={() => { fichaAtleta.reload(); setCoachView('atleta'); }}
             />
           </Adiado>
         )}

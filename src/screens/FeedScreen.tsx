@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FeedPost, ImageViewerItem } from '../types';
 import { Avatar } from '../components/rush/Avatar';
+import { ChallengeLeaderboard } from '../components/rush/ChallengeLeaderboard';
 import type { FeedChannel } from '../hooks/useRushData';
 
 interface FeedScreenProps {
@@ -37,6 +38,9 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
   onViewImage,
   onOpenSearch,
 }) => {
+  // A classificação só é buscada quando alguém abre.
+  const [classificacaoAberta, setClassificacaoAberta] = useState(false);
+
   const allPosts = posts;
 
   /** Compartilha via Web Share API, com cópia do link como alternativa. */
@@ -351,10 +355,19 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             )}
 
             <div className="flex items-center justify-between text-xs pt-1 border-t border-[#262626]">
-              <span className="text-[#A1A1AA]">
-                {activeChallenge.participants_count} participante
-                {activeChallenge.participants_count === 1 ? '' : 's'}
-              </span>
+              <button
+                onClick={() => setClassificacaoAberta((aberta) => !aberta)}
+                className="text-[#A1A1AA] hover:text-[#F7F5F3] cursor-pointer flex items-center gap-1 transition-colors"
+                aria-expanded={classificacaoAberta}
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {classificacaoAberta ? 'expand_less' : 'leaderboard'}
+                </span>
+                <span>
+                  {activeChallenge.participants_count} participante
+                  {activeChallenge.participants_count === 1 ? '' : 's'}
+                </span>
+              </button>
               {!activeChallenge.is_participating && (
                 <button
                   onClick={() => onJoinChallenge(activeChallenge.id)}
@@ -364,6 +377,15 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Num desafio, saber onde você está é a informação
+                principal — e era a que não tinha tela. */}
+            {classificacaoAberta && (
+              <ChallengeLeaderboard
+                challengeId={activeChallenge.id}
+                unidade={activeChallenge.unit || undefined}
+              />
+            )}
           </div>
         )}
       </div>

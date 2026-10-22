@@ -15,6 +15,8 @@ bluetooth
 bluetooth_connected
 bluetooth_searching
 bolt
+calendar_add_on
+calendar_month
 calendar_view_week
 chat_bubble
 chat_bubble_outline
@@ -58,6 +60,7 @@ image
 info
 keyboard
 landscape
+leaderboard
 local_fire_department
 location_on
 lock

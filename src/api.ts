@@ -251,6 +251,30 @@ export const training = {
   myPlan: () => request('/training/my-plan'),
   planDetails: (id: string) => request(`/training/plans/${id}`),
   generatePlan: (data: any) => request('/training/generate-plan', { method: 'POST', body: JSON.stringify(data) }),
+
+  /** Biblioteca de planos. O servidor filtra pelo que a conta pode ver. */
+  planos: () => request('/training/plans'),
+
+  /**
+   * Monta um plano periodizado PARA UM ATLETA e já o atribui.
+   *
+   * É `generatePlan` com destinatário: o treinador usa o mesmo gerador
+   * do atleta em vez de o app ganhar uma segunda lógica de prescrição.
+   * Atribuir cancela o plano ativo de quem recebe — por isso a tela
+   * avisa antes.
+   */
+  gerarParaAtleta: (athleteId: string, dados: { distance_km: number; level: string; duration_weeks?: number }) =>
+    request('/training/generate-plan', {
+      method: 'POST',
+      body: JSON.stringify({ ...dados, user_id: athleteId }),
+    }),
+
+  /** Atribui um plano que já existe na biblioteca. */
+  atribuir: (athleteId: string, planId: string, startDate: string) =>
+    request('/training/assign', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: athleteId, plan_id: planId, start_date: startDate }),
+    }),
 };
 
 // Activities
@@ -334,6 +358,9 @@ export const social = {
 // Challenges
 export const challenges = {
   list: () => request('/challenges'),
+  /** Criar desafio — só treinador, dono ou administrador (o servidor confere). */
+  criar: (dados: Record<string, any>) =>
+    request('/challenges', { method: 'POST', body: JSON.stringify(dados) }),
   join: (id: string) => request(`/challenges/${id}/join`, { method: 'POST' }),
   leaderboard: (id: string) => request(`/challenges/${id}/leaderboard`),
   achievements: () => request('/challenges/achievements/my'),

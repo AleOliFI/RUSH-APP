@@ -12,7 +12,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
-import { academies } from '../api';
+import { academies, training } from '../api';
 
 /** O que o atleta reporta no dashboard da equipe. */
 export interface AtletaDoPainel {
@@ -193,6 +193,16 @@ export interface GestaoAtletasData {
    */
   criarAssessoria: (dados: Record<string, any>) => Promise<any>;
   prescrever: (athleteId: string, dados: Record<string, any>) => Promise<any>;
+  /**
+   * Monta um plano periodizado para o atleta e já o atribui.
+   *
+   * Usa o mesmo gerador do plano automático do atleta, em vez de uma
+   * segunda lógica de prescrição no cliente. ATRIBUIR CANCELA o plano
+   * ativo de quem recebe — a tela avisa antes.
+   */
+  gerarPlano: (athleteId: string, dados: { distance_km: number; level: string; duration_weeks: number }) => Promise<any>;
+  /** Atribui ao atleta um plano que já existe na biblioteca. */
+  atribuirPlano: (athleteId: string, planId: string, startDate: string) => Promise<any>;
   limpar: () => void;
 }
 
@@ -244,6 +254,38 @@ export function useGestaoAtletas(): GestaoAtletasData {
     } finally { setIsSaving(false); }
   }, []);
 
+  const gerarPlano = useCallback(async (athleteId: string, dados: { distance_km: number; level: string; duration_weeks: number }) => {
+    setIsSaving(true); setError(null); setResultado(null);
+    try {
+      const r = await training.gerarParaAtleta(athleteId, dados);
+      const semanas = r?.plan?.duration_weeks ?? dados.duration_weeks;
+      const sessoes = Array.isArray(r?.sessions) ? r.sessions.length : 0;
+      setResultado(
+        `Plano "${r?.plan?.name || 'novo'}" criado: ${semanas} semanas, ${sessoes} sessões. `
+        + 'O atleta foi avisado.',
+      );
+      return r;
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível montar o plano');
+      throw err;
+    } finally { setIsSaving(false); }
+  }, []);
+
+  const atribuirPlano = useCallback(async (athleteId: string, planId: string, startDate: string) => {
+    setIsSaving(true); setError(null); setResultado(null);
+    try {
+      const r = await training.atribuir(athleteId, planId, startDate);
+      setResultado(
+        `Plano "${r?.plan?.name || 'selecionado'}" atribuído, de ${r?.assignment?.start_date} `
+        + `a ${r?.assignment?.end_date}. O atleta foi avisado.`,
+      );
+      return r;
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível atribuir o plano');
+      throw err;
+    } finally { setIsSaving(false); }
+  }, []);
+
   const prescrever = useCallback(async (athleteId: string, dados: Record<string, any>) => {
     setIsSaving(true); setError(null); setResultado(null);
     try {
@@ -256,5 +298,5 @@ export function useGestaoAtletas(): GestaoAtletasData {
     } finally { setIsSaving(false); }
   }, []);
 
-  return { isSaving, error, resultado, convidar, cadastrar, criarAssessoria, prescrever, limpar };
+  return { isSaving, error, resultado, convidar, cadastrar, criarAssessoria, prescrever, gerarPlano, atribuirPlano, limpar };
 }
