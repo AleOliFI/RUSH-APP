@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth, users, setAuth, clearAuth, getUser, getToken } from '../api';
-import UpgradeProModal from '../components/UpgradeProModal';
 
 const AuthContext = createContext<any>(null);
 
@@ -8,7 +7,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(() => getUser());
   const [token, setToken] = useState<string | null>(() => getToken());
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
   // Synchronize and validate active session on mount
   const refreshUser = useCallback(async () => {
@@ -111,9 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const openUpgradeModal = () => setIsUpgradeModalOpen(true);
-  const closeUpgradeModal = () => setIsUpgradeModalOpen(false);
-
   const isAuthenticated = Boolean(user && token);
   // Quem decide é o servidor (server/services/acessoPro.js). A versão
   // anterior recalculava aqui a partir do `subscription_tier` e ignorava
@@ -127,8 +122,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated,
     isLoading,
     isPro,
-    openUpgradeModal,
-    closeUpgradeModal,
     login,
     register,
     logout,
@@ -139,11 +132,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <UpgradeProModal
-        isOpen={isUpgradeModalOpen}
-        onClose={closeUpgradeModal}
-        onUpgraded={refreshUser}
-      />
     </AuthContext.Provider>
   );
 }
