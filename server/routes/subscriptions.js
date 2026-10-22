@@ -7,6 +7,7 @@ const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
 const { ehPro, diasDeTesteRestantes } = require('../services/acessoPro');
+const { classificarEvento, conferirOrigem, lerEvento } = require('../services/pagamentos/cakto');
 const { criarNotificacao } = require('../services/notificacoes');
 const { verificarTransacaoApple, appleConfigurado } = require('../services/recibos/apple');
 const { verificarCompraGoogle, googleConfigurado } = require('../services/recibos/google');
@@ -384,6 +385,128 @@ module.exports = function subscriptionsRoutes(db) {
     } catch (err) {
       console.error('Webhook processing error:', err);
       res.status(500).json({ error: 'Erro ao processar webhook de pagamento' });
+    }
+  });
+
+
+  // -------------------------------------------------------
+  // POST /api/subscriptions/webhook/cakto — Assinatura pela web
+  //
+  // Rota separada da de cima de propósito: aquela autentica por
+  // cabeçalho, e a Cakto manda o segredo no corpo. Pior, o payload da
+  // Cakto também tem um campo `event`, e aquela rota decide o formato
+  // por `if (body.event)` — o aviso cairia no ramo do RevenueCat,
+  // não acharia `event.type` e devolveria 200 sem fazer nada. A
+  // pessoa pagaria e nada aconteceria, sem erro em lugar nenhum.
+  // -------------------------------------------------------
+  router.post('/webhook/cakto', async (req, res) => {
+    try {
+      // Fecha por falta de configuração, como a outra: um webhook de
+      // pagamento que atende sem credencial não é webhook, é porta.
+      const segredo = process.env.CAKTO_WEBHOOK_SECRET;
+      if (!segredo) {
+        console.error('⚠️  CAKTO_WEBHOOK_SECRET não definido — webhook da Cakto recusando tudo.');
+        return res.status(503).json({ error: 'Webhook da Cakto não configurado' });
+      }
+
+      const origem = conferirOrigem(req.body, req.rawBody, req.headers, segredo);
+      if (!origem.ok) {
+        return res.status(401).json({ error: 'Aviso não autenticado' });
+      }
+
+      const aviso = lerEvento(req.body);
+      if (!aviso.evento) {
+        return res.status(400).json({ error: 'Aviso sem evento' });
+      }
+
+      const { acao, status } = classificarEvento(aviso.evento);
+      if (acao === 'ignorar') {
+        return res.json({ received: true, evento: aviso.evento, acao: 'ignorado' });
+      }
+
+      // De quem é este pagamento? Primeiro a referência que o app
+      // manda no link do checkout; depois o e-mail de quem pagou.
+      let usuario = null;
+      if (aviso.referencia) {
+        usuario = await db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(aviso.referencia);
+      }
+      if (!usuario && aviso.email) {
+        usuario = await db.prepare('SELECT id FROM users WHERE lower(email) = ? AND deleted_at IS NULL').get(aviso.email);
+      }
+
+      if (!usuario) {
+        // Alguém pagou e não dá para saber por qual conta. Devolver
+        // erro faria a Cakto repetir o aviso para sempre sem resolver
+        // nada; engolir calado perderia o pagamento. Fica registrado,
+        // com os caminhos que foram lidos, para conferência no painel.
+        console.error(
+          '⚠️  Pagamento da Cakto sem conta correspondente — conferir manualmente.',
+          JSON.stringify({
+            evento: aviso.evento,
+            pedido: aviso.pedidoId,
+            email: aviso.email,
+            referencia: aviso.referencia,
+            origens: aviso.origens,
+          }),
+        );
+        return res.status(202).json({ received: true, conciliar: true, pedido: aviso.pedidoId });
+      }
+
+      if (acao === 'suspender') {
+        const novoTier = status === 'expired' ? 'free' : 'pro';
+        await db.prepare(
+          "UPDATE users SET subscription_tier = ?, subscription_status = ?, updated_at = datetime('now') WHERE id = ?",
+        ).run(novoTier, status, usuario.id);
+        if (aviso.pedidoId) {
+          await db.prepare(
+            "UPDATE subscriptions SET status = ?, canceled_at = datetime('now') WHERE provider_subscription_id = ?",
+          ).run(status, aviso.pedidoId);
+        }
+        return res.json({ received: true, evento: aviso.evento, acao: 'suspenso' });
+      }
+
+      // Liberar. O id do pedido tem índice único em
+      // provider_subscription_id: se o mesmo aviso chegar duas vezes —
+      // e webhook repete — a segunda esbarra no banco em vez de gravar
+      // uma assinatura duplicada.
+      const fim = aviso.fimDoPeriodo || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      if (aviso.pedidoId) {
+        const jaProcessado = await db
+          .prepare('SELECT 1 FROM subscriptions WHERE provider_subscription_id = ?')
+          .get(aviso.pedidoId);
+        if (jaProcessado) {
+          return res.json({ received: true, evento: aviso.evento, acao: 'repetido' });
+        }
+      }
+
+      try {
+        await db.prepare(`
+          INSERT INTO subscriptions (id, user_id, plan_tier, status, amount_cents, currency, provider, provider_subscription_id, current_period_end)
+          VALUES (?, ?, 'pro', 'active', ?, 'BRL', 'cakto', ?, ?)
+        `).run(uuidv4(), usuario.id, aviso.valorCentavos ?? 2990, aviso.pedidoId, fim);
+      } catch (err) {
+        // Índice único: outro aviso igual chegou ao mesmo tempo.
+        if (/UNIQUE|duplicate key/i.test(err.message || '')) {
+          return res.json({ received: true, evento: aviso.evento, acao: 'repetido' });
+        }
+        throw err;
+      }
+
+      await db.prepare(`
+        UPDATE users SET
+          subscription_tier = 'pro',
+          subscription_status = 'active',
+          subscription_provider = 'cakto',
+          subscription_expires_at = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).run(fim, usuario.id);
+
+      return res.json({ received: true, evento: aviso.evento, acao: 'liberado' });
+    } catch (err) {
+      console.error('Erro no webhook da Cakto:', err);
+      return res.status(500).json({ error: 'Erro ao processar aviso da Cakto' });
     }
   });
 

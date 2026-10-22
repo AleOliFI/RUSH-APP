@@ -180,7 +180,16 @@ app.use((req, res, next) => {
   }, next);
 });
 
-app.use(express.json({ limit: '10mb' }));
+// `verify` guarda o corpo exatamente como chegou. A conferência de
+// assinatura HMAC de webhook calcula o resumo sobre os bytes
+// originais: reconstruir o JSON a partir do objeto já convertido muda
+// espaços e ordem de chaves, e a assinatura passa a nunca bater.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buffer) => {
+    if (buffer && buffer.length) req.rawBody = buffer.toString('utf8');
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Request logging

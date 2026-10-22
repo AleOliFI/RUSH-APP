@@ -8,7 +8,8 @@
 // ============================================================
 
 import React, { useState } from 'react';
-import { billing } from '../../services/billing';
+import { billing, linkDoCheckoutWeb } from '../../services/billing';
+import { useAuth } from '../../context/AuthContext';
 
 interface ProCheckoutModalProps {
   isOpen: boolean;
@@ -34,6 +35,9 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // A conta logada vem do contexto: o link do checkout web precisa do
+  // e-mail para o aviso de pagamento conseguir casar a compra.
+  const { user } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'annual' | 'monthly'>('annual');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -43,6 +47,20 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
   if (!isOpen) return null;
 
   const canStartTrial = !subscription?.is_pro && subscription?.status === 'free';
+
+  // No navegador a compra vai pelo checkout da Cakto; no aplicativo
+  // empacotado, pela loja. `linkDoCheckoutWeb` devolve null quando
+  // está rodando nativo — a Apple e o Google proíbem o app da loja de
+  // apontar para pagamento externo, e um link desses reprova a
+  // submissão. Devolve null também sem VITE_CAKTO_CHECKOUT_URL.
+  const checkoutWeb = linkDoCheckoutWeb({ id: userId, email: user?.email, name: user?.name });
+
+  const irParaCheckoutWeb = () => {
+    if (!checkoutWeb) return;
+    // Abre na mesma aba: bloqueador de pop-up engole janela nova, e
+    // um botão de pagar que não faz nada é pior do que não ter botão.
+    window.location.href = checkoutWeb;
+  };
 
   const handleCheckout = async () => {
     setIsProcessing(true);
@@ -237,7 +255,7 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
           {/* Ações */}
           <div className="pt-2 space-y-2.5">
             <button
-              onClick={handleCheckout}
+              onClick={checkoutWeb ? irParaCheckoutWeb : handleCheckout}
               disabled={isProcessing || isRestoring}
               className="w-full min-h-[54px] py-4 px-6 bg-[#FF5500] hover:bg-[#FF6B00] disabled:opacity-60 disabled:cursor-wait active:scale-[0.98] text-[#0D0D0D] rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-[#FF5500]/30 font-headline text-lg uppercase tracking-wider transition-all cursor-pointer"
             >

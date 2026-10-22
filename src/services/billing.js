@@ -66,6 +66,55 @@ async function assinar(produtoId) {
   return await subscriptions.verificarCompra(loja, comprovante);
 }
 
+/**
+ * Link do checkout da Cakto, para quem está no navegador.
+ *
+ * REGRA DAS LOJAS: isto é só para a web. A Apple (diretriz 3.1.1) e o
+ * Google proíbem o aplicativo da loja de apontar para pagamento
+ * externo de conteúdo digital — um link desses dentro do app
+ * empacotado é motivo conhecido de reprovação na revisão. Por isso a
+ * função devolve `null` quando está rodando empacotado, e a tela não
+ * mostra nem menciona o caminho web.
+ *
+ * O endereço vem de VITE_CAKTO_CHECKOUT_URL (o link de pagamento que
+ * a Cakto gera ao criar o produto no painel). Sem a variável, não há
+ * checkout web: a função devolve `null` e a tela volta a dizer que a
+ * assinatura é feita pelo aplicativo.
+ *
+ * O identificador da conta vai junto na URL para o aviso de pagamento
+ * conseguir dizer de quem foi a compra. QUAL parâmetro a Cakto
+ * devolve no webhook ainda não está confirmado na documentação
+ * oficial — por isso mandamos a referência em mais de um nome, e o
+ * servidor também sabe casar pelo e-mail (server/services/pagamentos/cakto.js).
+ *
+ * @param {{id?: string, email?: string, name?: string}} usuario
+ * @returns {string|null}
+ */
+export function linkDoCheckoutWeb(usuario) {
+  if (ehAppNativo()) return null;
+
+  const base = import.meta.env.VITE_CAKTO_CHECKOUT_URL;
+  if (!base) return null;
+
+  let url;
+  try {
+    url = new URL(base);
+  } catch (_) {
+    // Endereço mal configurado não vira link quebrado na cara do
+    // usuário: some, e a tela cai no texto de sempre.
+    return null;
+  }
+
+  if (usuario?.id) {
+    url.searchParams.set('src', usuario.id);
+    url.searchParams.set('external_reference', usuario.id);
+  }
+  if (usuario?.email) url.searchParams.set('email', usuario.email);
+  if (usuario?.name) url.searchParams.set('name', usuario.name);
+
+  return url.toString();
+}
+
 export const billing = {
   /** Sete dias de teste. Não envolve pagamento, e é de uso único por conta. */
   async iniciarTesteGratis() {
