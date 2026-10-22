@@ -7,6 +7,7 @@ const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
 const { criarNotificacao } = require('../services/notificacoes');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
+const { ehPro } = require('../services/acessoPro');
 
 module.exports = function socialRoutes(db) {
   const router = express.Router();
@@ -26,7 +27,8 @@ module.exports = function socialRoutes(db) {
       if (scope === 'global') {
         // Feed global (public activities)
         activities = await db.prepare(`
-          SELECT a.*, up.name, up.username, up.avatar_url
+          SELECT a.*, up.name, up.username, up.avatar_url, up.location,
+                 u.role, u.subscription_tier, u.subscription_status, u.trial_ends_at
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
           JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
@@ -37,7 +39,8 @@ module.exports = function socialRoutes(db) {
       } else if (scope === 'academy' && req.user.academy_id) {
         // Feed da assessoria
         activities = await db.prepare(`
-          SELECT a.*, up.name, up.username, up.avatar_url
+          SELECT a.*, up.name, up.username, up.avatar_url, up.location,
+                 u.role, u.subscription_tier, u.subscription_status, u.trial_ends_at
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
           JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
@@ -48,9 +51,11 @@ module.exports = function socialRoutes(db) {
       } else {
         // Feed de quem o user segue + próprio
         activities = await db.prepare(`
-          SELECT a.*, up.name, up.username, up.avatar_url
+          SELECT a.*, up.name, up.username, up.avatar_url, up.location,
+                 u.role, u.subscription_tier, u.subscription_status, u.trial_ends_at
           FROM activities a
           JOIN user_profiles up ON up.user_id = a.user_id
+          JOIN users u ON u.id = a.user_id AND u.deleted_at IS NULL
           WHERE (
             a.user_id = ?
             OR (a.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?) AND a.privacy IN ('public', 'followers'))
@@ -71,12 +76,18 @@ module.exports = function socialRoutes(db) {
         const mins = Math.floor(((a.duration_seconds || 0) % 3600) / 60);
         const durationFormatted = hours > 0 ? `${hours}h ${mins}min` : `${mins}min`;
 
+        // As colunas de cobrança entram na consulta só para decidir o
+        // selo PRO. Elas saem daqui: o feed de outra pessoa não é
+        // lugar para o status da assinatura dela.
+        const { role, subscription_tier, subscription_status, trial_ends_at, ...atividade } = a;
+
         return {
-          ...a,
+          ...atividade,
           duration_formatted: durationFormatted,
           likes_count: likesCount.count,
           comments_count: commentsCount.count,
           has_liked: !!hasLiked,
+          is_pro: ehPro(a),
           initials: a.name ? a.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '??',
         };
       }));

@@ -579,9 +579,13 @@ export function toFeedPost(activity: any, currentUserId?: string): FeedPost {
     authorName: activity.name || 'Atleta RUSH',
     authorHandle: `@${activity.username || 'rush'}`,
     authorAvatar: activity.avatar_url || APP_IMAGES.headerAvatar,
-    isPro: false,
+    isPro: !!activity.is_pro,
     isVerified: activity.user_id === currentUserId,
-    location: activity.description || '',
+    // `location` é onde a pessoa mora, do perfil dela — não a anotação
+    // da corrida. Mostrar a descrição aqui repetia o mesmo texto duas
+    // vezes no card (em cima como lugar, embaixo como legenda) e
+    // inventava um lugar que ninguém escreveu.
+    location: activity.location || '',
     timeAgo: timeAgo(activity.date),
     caption: activity.feeling_notes || activity.description || activity.title || '',
     activityPhoto: activity.image_url || undefined,

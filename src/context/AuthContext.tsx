@@ -115,12 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const closeUpgradeModal = () => setIsUpgradeModalOpen(false);
 
   const isAuthenticated = Boolean(user && token);
-  const isPro = Boolean(
-    user?.is_pro ||
-    ['coach', 'owner', 'admin'].includes(user?.role) ||
-    user?.subscription_tier === 'pro' ||
-    user?.subscription_tier === 'lifetime'
-  );
+  // Quem decide é o servidor (server/services/acessoPro.js). A versão
+  // anterior recalculava aqui a partir do `subscription_tier` e ignorava
+  // o status — então assinatura cancelada continuava liberando o app. E
+  // a conta saía do localStorage, que o usuário edita.
+  const isPro = Boolean(user?.is_pro);
 
   const value = {
     user,

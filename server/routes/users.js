@@ -5,6 +5,7 @@
 const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate, authorize } = require('../middleware/auth');
+const { ehPro } = require('../services/acessoPro');
 const bcrypt = require('bcryptjs');
 
 module.exports = function usersRoutes(db) {
@@ -25,10 +26,10 @@ module.exports = function usersRoutes(db) {
       const settings = await db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.user.id);
       const privacy = await db.prepare('SELECT * FROM privacy_settings WHERE user_id = ?').get(req.user.id);
 
-      const isPro = ['coach', 'owner', 'admin'].includes(user.role) || 
-                    user.subscription_tier === 'pro' || 
-                    (user.subscription_status === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) ||
-                    (user.subscription_status === 'active');
+      // Regra única em server/services/acessoPro.js. A versão que
+      // estava aqui liberava PRO para assinatura vencida e para
+      // quem tinha status 'active' no plano grátis.
+      const isPro = ehPro(user);
 
       const hasOnboarding = !!(objectives && objectives.distance_km && objectives.level);
 

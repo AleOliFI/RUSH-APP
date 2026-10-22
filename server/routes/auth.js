@@ -6,6 +6,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { randomUUID: uuidv4, randomInt } = require('node:crypto');
 const { generateAccessToken, authenticate, JWT_SECRET } = require('../middleware/auth');
+const { ehPro } = require('../services/acessoPro');
 const jwt = require('jsonwebtoken');
 const { enviarEmail, modeloCodigoDeRecuperacao } = require('../services/email');
 
@@ -167,6 +168,8 @@ module.exports = function authRoutes(db) {
         has_onboarding: hasOnboarding,
         distance_km: objectives?.distance_km,
         level: objectives?.level,
+        // O cliente não recalcula acesso PRO: obedece a este campo.
+        is_pro: ehPro(user),
       };
 
       res.json({

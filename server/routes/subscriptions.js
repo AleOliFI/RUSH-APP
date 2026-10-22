@@ -6,6 +6,7 @@
 const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
+const { ehPro, diasDeTesteRestantes } = require('../services/acessoPro');
 const { criarNotificacao } = require('../services/notificacoes');
 const { verificarTransacaoApple, appleConfigurado } = require('../services/recibos/apple');
 const { verificarCompraGoogle, googleConfigurado } = require('../services/recibos/google');
@@ -28,24 +29,10 @@ module.exports = function subscriptionsRoutes(db) {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
 
+      // Mesma regra de /api/users/me e do feed: server/services/acessoPro.js.
       const now = new Date();
-      let isPro = false;
-      let trialDaysLeft = 0;
-
-      // Coaches, owners and admins have PRO access by default
-      if (['coach', 'owner', 'admin'].includes(user.role)) {
-        isPro = true;
-      } else if (user.subscription_tier === 'pro' || user.subscription_tier === 'lifetime') {
-        if (user.subscription_status === 'active') {
-          isPro = true;
-        } else if (user.subscription_status === 'trial' && user.trial_ends_at) {
-          const trialEnd = new Date(user.trial_ends_at);
-          if (trialEnd > now) {
-            isPro = true;
-            trialDaysLeft = Math.max(0, Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)));
-          }
-        }
-      }
+      const isPro = ehPro(user, now);
+      const trialDaysLeft = isPro ? diasDeTesteRestantes(user, now) : 0;
 
       res.json({
         tier: user.subscription_tier || 'free',
