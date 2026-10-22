@@ -18,7 +18,18 @@ module.exports = function academiesRoutes(db) {
   // -------------------------------------------------------
   // POST /api/academies — Criar assessoria
   // -------------------------------------------------------
-  router.post('/', authenticate, async (req, res) => {
+  // Exige cargo de treinador, como o resto do módulo já exigia.
+  //
+  // Esta rota promove a conta a `owner`, e só pedia estar logado:
+  // qualquer atleta virava dono de assessoria chamando a API. Era
+  // também o caminho para PRO de graça, enquanto o cargo concedia PRO
+  // (ver server/services/acessoPro.js).
+  //
+  // CONSEQUÊNCIA, e ela é real: com isto, não existe mais caminho no
+  // app para uma conta nova virar treinador — é preciso já ser. Quem
+  // quiser abrir uma assessoria precisa de promoção por fora. Um
+  // fluxo de solicitação e aprovação resolve, e ainda não existe.
+  router.post('/', authenticate, authorize('coach', 'owner', 'admin'), async (req, res) => {
     try {
       const { name, cnpj, description, location, plan_type = 'basic' } = req.body;
 

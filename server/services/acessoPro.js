@@ -18,9 +18,12 @@
 //
 // A regra agora mora aqui, e só aqui. O servidor responde `is_pro`; o
 // cliente obedece, não recalcula.
+//
+// E ela responde UMA pergunta: "esta conta tem assinatura ativa?".
+// "Esta conta pode usar as ferramentas de treinador?" é outra, e quem
+// responde são os `authorize` das rotas do módulo.
 // ============================================================
 
-const CARGOS_COM_ACESSO = ['coach', 'owner', 'admin'];
 const PLANOS_PAGOS = ['pro', 'lifetime'];
 
 /**
@@ -33,9 +36,18 @@ const PLANOS_PAGOS = ['pro', 'lifetime'];
 function ehPro(usuario, agora = new Date()) {
   if (!usuario) return false;
 
-  // Treinador, dono e administrador usam o app para trabalhar.
-  if (CARGOS_COM_ACESSO.includes(usuario.role)) return true;
-
+  // O CARGO NÃO DÁ PRO.
+  //
+  // Antes, `coach`, `owner` e `admin` recebiam PRO só por serem o que
+  // são. Combinado com POST /api/academies — que promovia a `owner`
+  // qualquer conta logada, sem cobrar nada —, isso virava PRO
+  // vitalício de graça para quem chamasse a rota: criar uma
+  // assessoria vazia liberava o app inteiro.
+  //
+  // Agora acesso PRO é assinatura, e só. O cargo continua decidindo
+  // as FERRAMENTAS de treinador (painel, prescrição, gestão de
+  // atletas), que são controladas por `authorize` nas rotas — outra
+  // pergunta, com outra resposta.
   if (!PLANOS_PAGOS.includes(usuario.subscription_tier)) return false;
 
   if (usuario.subscription_status === 'active') return true;
@@ -57,4 +69,4 @@ function diasDeTesteRestantes(usuario, agora = new Date()) {
   return Math.max(0, Math.ceil((fim - agora) / (1000 * 60 * 60 * 24)));
 }
 
-module.exports = { ehPro, diasDeTesteRestantes, CARGOS_COM_ACESSO, PLANOS_PAGOS };
+module.exports = { ehPro, diasDeTesteRestantes, PLANOS_PAGOS };

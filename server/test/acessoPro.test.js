@@ -102,7 +102,13 @@ function limpar() {
   await teste('T1: a regra única decide certo nos casos de borda', () => {
     const agora = new Date('2026-10-22T12:00:00Z');
     const casos = [
-      [{ role: 'coach' }, true, 'treinador trabalha no app'],
+      // O cargo não dá PRO. Treinador tem as ferramentas de treinador
+      // (controladas por `authorize` nas rotas); assinatura é outra
+      // coisa, e ele paga como qualquer um.
+      [{ role: 'coach' }, false, 'treinador sem assinatura não é PRO'],
+      [{ role: 'owner' }, false, 'dono de assessoria sem assinatura não é PRO'],
+      [{ role: 'admin' }, false, 'administrador sem assinatura não é PRO'],
+      [{ role: 'coach', subscription_tier: 'pro', subscription_status: 'active' }, true, 'treinador que assina é PRO'],
       [{ role: 'athlete', subscription_tier: 'pro', subscription_status: 'active' }, true, 'pro ativo'],
       [{ role: 'athlete', subscription_tier: 'lifetime', subscription_status: 'active' }, true, 'vitalício ativo'],
       [{ role: 'athlete', subscription_tier: 'pro', subscription_status: 'canceled' }, false, 'pro cancelado'],
