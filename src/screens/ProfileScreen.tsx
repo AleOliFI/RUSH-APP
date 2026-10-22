@@ -137,9 +137,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <h2 className="font-headline text-2xl text-[#F7F5F3] uppercase tracking-normal">
                 {athlete.name}
               </h2>
-              <span className="bg-[#FF5500] text-[#0D0D0D] font-headline text-[10px] font-black px-1.5 py-0.2 rounded uppercase">
-                {athlete.category}
-              </span>
+              {athlete.category && (
+                <span className="bg-[#FF5500] text-[#0D0D0D] font-headline text-[10px] font-black px-1.5 py-0.2 rounded uppercase">
+                  {athlete.category}
+                </span>
+              )}
             </div>
             <p className="text-xs text-[#A1A1AA] font-telemetry mt-0.5">
               {[athlete.handle, objectiveLabel, location].filter(Boolean).join(' • ')}

@@ -221,11 +221,16 @@ export function toAthlete(src: AthleteSources): AthleteProfile {
     id: me?.id || 'me',
     name: me?.name || profile?.name || 'Atleta RUSH',
     handle: `@${me?.username || profile?.username || 'rush'}`,
-    category: isPro ? 'PRO' : 'AGE-GROUP',
+    // Sem selo para quem não assina: 'AGE-GROUP' era uma categoria de
+    // competição inventada a partir do pagamento.
+    category: isPro ? 'PRO' : null,
     avatarUrl: me?.avatar_url || profile?.avatar_url || APP_IMAGES.headerAvatar,
     status: athleteStatus,
     statusText: ATHLETE_STATUS_TEXT[athleteStatus],
-    quote: me?.bio || profile?.bio || 'Treine mais forte quando seu corpo permitir.',
+    // A frase de reserva aparecia no perfil como se a pessoa a tivesse
+    // escrito. Quem não preencheu a bio não disse nada — e o app não
+    // fala por ela.
+    quote: me?.bio || profile?.bio || '',
     vo2Max: vo2max?.vo2max ?? 0,
     restingHR: Math.round(
       hrvStatus?.measurement?.rhr_bpm ?? hrvStatus?.measurement?.hr_rest_bpm ?? profile?.hr_rest_tested ?? 0,
@@ -580,7 +585,6 @@ export function toFeedPost(activity: any, currentUserId?: string): FeedPost {
     authorHandle: `@${activity.username || 'rush'}`,
     authorAvatar: activity.avatar_url || APP_IMAGES.headerAvatar,
     isPro: !!activity.is_pro,
-    isVerified: activity.user_id === currentUserId,
     // `location` é onde a pessoa mora, do perfil dela — não a anotação
     // da corrida. Mostrar a descrição aqui repetia o mesmo texto duas
     // vezes no card (em cima como lugar, embaixo como legenda) e
@@ -610,19 +614,23 @@ export function toFeedPosts(feed: any[], currentUserId?: string): FeedPost[] {
 /* Calçados                                                            */
 /* ------------------------------------------------------------------ */
 
-const SHOE_FALLBACK_IMAGES = [
-  APP_IMAGES.shoeAlphafly,
-  APP_IMAGES.shoeSuperblast,
-  APP_IMAGES.shoeEndorphin,
-  APP_IMAGES.wornShoeAsics,
-];
+// Não há foto de reserva, de propósito.
+//
+// Antes, um par sem foto recebia uma das quatro imagens de catálogo
+// pela POSIÇÃO na lista: o primeiro par virava um Alphafly, o segundo
+// um Superblast. Quem cadastrava um Mizuno via a foto de um Nike e
+// podia até baixar aquela imagem como se fosse do próprio par.
+//
+// Mostrar o produto errado é pior do que não mostrar produto nenhum,
+// ainda mais num app onde a foto serve para a pessoa reconhecer qual
+// par é qual. Sem foto, a tela desenha um ícone neutro.
 
-export function toShoe(raw: any, index = 0): RunningShoe {
+export function toShoe(raw: any): RunningShoe {
   return {
     id: raw.id,
     name: raw.name,
     modelType: raw.modelType || 'Rodagem Geral',
-    imageUrl: raw.imageUrl || SHOE_FALLBACK_IMAGES[index % SHOE_FALLBACK_IMAGES.length],
+    imageUrl: raw.imageUrl || '',
     currentKm: raw.currentKm,
     maxKm: raw.maxKm,
     status: raw.status,

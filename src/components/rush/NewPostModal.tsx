@@ -184,7 +184,7 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, athlete, onC
               <div className="min-w-0">
                 <span className="font-bold text-sm text-[#F7F5F3] block truncate">{athlete.name}</span>
                 <span className="text-xs text-[#A1A1AA] truncate block">
-                  {athlete.handle} • Atleta {athlete.category}
+                  {[athlete.handle, athlete.category && `Atleta ${athlete.category}`].filter(Boolean).join(' • ')}
                 </span>
               </div>
             </div>

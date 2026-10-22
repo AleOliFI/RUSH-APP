@@ -70,7 +70,7 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
     if (onViewImage) {
       onViewImage({
         url: athlete.avatarUrl,
-        title: `${athlete.name} (${athlete.category})`,
+        title: athlete.category ? `${athlete.name} (${athlete.category})` : athlete.name,
         subtitle: athlete.quote,
         category: 'PASSAPORTE BIOMÉTRICO DO ATLETA',
         filename: `rush-running-atleta-${athlete.name.toLowerCase().replace(/[^a-z0-9]/gi, '-')}.png`,
@@ -181,9 +181,11 @@ export const AthleteModal: React.FC<AthleteModalProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
                 <span className="font-headline-sm text-[#F7F5F3] truncate">{currentAthlete.name}</span>
-                <span className="px-1.5 py-0.2 bg-[#FF5500] text-[#0D0D0D] font-telemetry text-[10px] rounded uppercase font-extrabold">
-                  {currentAthlete.category}
-                </span>
+                {currentAthlete.category && (
+                  <span className="px-1.5 py-0.2 bg-[#FF5500] text-[#0D0D0D] font-telemetry text-[10px] rounded uppercase font-extrabold">
+                    {currentAthlete.category}
+                  </span>
+                )}
               </div>
               <p className="font-body text-xs text-[#737373] mt-0.5">{currentAthlete.quote}</p>
               <span className="font-telemetry text-[11px] text-[#22C55E] font-bold mt-1 inline-block">

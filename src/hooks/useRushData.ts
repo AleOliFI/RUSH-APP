@@ -44,7 +44,7 @@ const PLACEHOLDER_ATHLETE: AthleteProfile = {
   id: 'loading',
   name: '—',
   handle: '@—',
-  category: 'AGE-GROUP',
+  category: null,
   avatarUrl: APP_IMAGES.headerAvatar,
   status: 'UNKNOWN',
   statusText: 'CARREGANDO…',

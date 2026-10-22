@@ -173,8 +173,12 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-[#A1A1AA] font-telemetry">
-                    <span>{post.location}</span>
-                    <span>•</span>
+                    {post.location && (
+                      <>
+                        <span>{post.location}</span>
+                        <span>•</span>
+                      </>
+                    )}
                     <span>{post.timeAgo}</span>
                   </div>
                 </div>

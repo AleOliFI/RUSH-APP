@@ -66,7 +66,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (onViewImage) {
       onViewImage({
         url: athlete.avatarUrl,
-        title: `${athlete.name} (${athlete.category})`,
+        title: athlete.category ? `${athlete.name} (${athlete.category})` : athlete.name,
         subtitle: athlete.quote,
         category: 'PASSAPORTE BIOMÉTRICO DO ATLETA',
         filename: `rush-running-atleta-${athlete.name.toLowerCase().replace(/[^a-z0-9]/gi, '-')}.png`,
@@ -479,9 +479,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span className="font-headline-sm text-[#F7F5F3] truncate group-hover:text-[#FF5500] transition-colors">
                 {athlete.name}
               </span>
-              <span className="px-1.5 py-0.2 bg-[#FF5500] text-[#0D0D0D] font-telemetry text-[10px] rounded uppercase font-extrabold">
-                {athlete.category}
-              </span>
+              {athlete.category && (
+                <span className="px-1.5 py-0.2 bg-[#FF5500] text-[#0D0D0D] font-telemetry text-[10px] rounded uppercase font-extrabold">
+                  {athlete.category}
+                </span>
+              )}
             </div>
             <p className="font-body text-xs text-[#737373] truncate mt-0.5">
               {athlete.quote}

@@ -4,7 +4,15 @@ export interface AthleteProfile {
   id: string;
   name: string;
   handle: string;
-  category: 'PRO' | 'ELITE' | 'AGE-GROUP';
+  /**
+   * Selo de assinatura, não classificação esportiva.
+   *
+   * Era 'PRO' | 'ELITE' | 'AGE-GROUP'. 'ELITE' nunca foi produzido por
+   * nada, e 'AGE-GROUP' aparecia para todo mundo que não assinava —
+   * uma categoria de competição que a pessoa nunca declarou, deduzida
+   * de ela pagar ou não. `null` quando não há selo a mostrar.
+   */
+  category: 'PRO' | null;
   avatarUrl: string;
   /** UNKNOWN = ainda não há medição de VFC registrada hoje. */
   status: 'READY' | 'FATIGUED' | 'RECOVERING' | 'UNKNOWN';
@@ -48,7 +56,6 @@ export interface FeedPost {
   authorHandle: string;
   authorAvatar: string;
   isPro: boolean;
-  isVerified: boolean;
   categoryTag?: string;
   location: string;
   timeAgo: string;
