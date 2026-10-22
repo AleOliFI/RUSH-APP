@@ -275,6 +275,32 @@ export const activities = {
     if (options.to) params.set('to', options.to);
     return request(`/activities?${params.toString()}`);
   },
+  /**
+   * TODAS as atividades, pagina por pagina.
+   *
+   * `list()` devolve uma pagina — 20 itens por padrao, 100 no teto do
+   * backend. Isso serve para listar na tela, e NAO serve para exportar:
+   * quem tem 300 corridas e baixa o CSV levava 20 e perdia o resto.
+   *
+   * Na tela de exclusao de conta isso era pior do que um dado faltando:
+   * a pessoa baixava "seus dados", apagava a conta, e so depois
+   * descobriria que levou os 20 mais recentes.
+   *
+   * Pagina pelo `pagination.pages` que a rota devolve, no limite maximo,
+   * para fazer o menor numero de idas ao servidor.
+   */
+  todas: async (): Promise<any[]> => {
+    const LIMITE = 100; // teto aceito por server/routes/activities.js
+    const primeira = await request(`/activities?page=1&limit=${LIMITE}`);
+    const tudo: any[] = Array.isArray(primeira?.activities) ? [...primeira.activities] : [];
+
+    const paginas = Number(primeira?.pagination?.pages) || 1;
+    for (let pagina = 2; pagina <= paginas; pagina += 1) {
+      const resposta = await request(`/activities?page=${pagina}&limit=${LIMITE}`);
+      if (Array.isArray(resposta?.activities)) tudo.push(...resposta.activities);
+    }
+    return tudo;
+  },
   create: (data: any) => request('/activities', { method: 'POST', body: JSON.stringify(data) }),
   get: (id: string) => request(`/activities/${id}`),
   update: (id: string, data: any) => request(`/activities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

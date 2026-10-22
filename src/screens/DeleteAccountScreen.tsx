@@ -11,8 +11,9 @@
 // tela descreve esse processo, e não um que soaria melhor.
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { activitiesToCsv, downloadCsv } from '../utils/exportCsv';
+import { activities as activitiesApi } from '../api';
 
 interface DeleteAccountScreenProps {
   /** Assinatura vigente, para avisar sobre a cobrança na loja. */
@@ -61,10 +62,57 @@ export const DeleteAccountScreen: React.FC<DeleteAccountScreenProps> = ({
     !!subscription &&
     (subscription.is_pro || ['active', 'trial'].includes(String(subscription.status)));
 
-  const baixarDados = () => {
-    const hoje = new Date().toISOString().split('T')[0];
-    downloadCsv(`rush-minhas-atividades-${hoje}.csv`, activitiesToCsv(activities));
-    setBaixou(true);
+  /**
+   * Quantas atividades a conta REALMENTE tem.
+   *
+   * A prop `activities` é a primeira página — 20 itens. Usá-la para
+   * dizer "você tem N atividades" subnotifica justamente quem tem mais
+   * a perder: alguém com 300 corridas lia "você tem 20" e decidia
+   * excluir a conta com essa informação.
+   */
+  const [totalReal, setTotalReal] = useState<number | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    activitiesApi
+      .list(1, { limit: 1 })
+      .then((r: any) => {
+        const total = Number(r?.pagination?.total);
+        if (vivo && Number.isFinite(total)) setTotalReal(total);
+      })
+      .catch(() => { /* sem o total, a tela cai no texto sem número */ });
+    return () => { vivo = false; };
+  }, []);
+
+  const [baixando, setBaixando] = useState(false);
+  const [erroDoDownload, setErroDoDownload] = useState<string | null>(null);
+  const [quantasBaixadas, setQuantasBaixadas] = useState(0);
+
+  /**
+   * Baixa TODAS as atividades, não só a primeira página.
+   *
+   * Esta é a última chance da pessoa de levar os próprios dados: logo
+   * abaixo ela apaga a conta. Exportar 20 de 300 aqui não era um dado
+   * faltando — era perda silenciosa, com a pessoa achando que salvou.
+   */
+  const baixarDados = async () => {
+    if (baixando) return;
+    setBaixando(true);
+    setErroDoDownload(null);
+    try {
+      const todas = await activitiesApi.todas();
+      const hoje = new Date().toISOString().split('T')[0];
+      downloadCsv(`rush-minhas-atividades-${hoje}.csv`, activitiesToCsv(todas));
+      setQuantasBaixadas(todas.length);
+      setBaixou(true);
+    } catch (err: any) {
+      // Falhar calado aqui repetiria o erro antigo: a pessoa acharia
+      // que baixou, e apagaria a conta em seguida.
+      setErroDoDownload(err?.message || 'Não foi possível baixar. Tente de novo antes de excluir.');
+      setBaixou(false);
+    } finally {
+      setBaixando(false);
+    }
   };
 
   const podeExcluir = senha.trim().length > 0 && confirmou && !isDeleting;
@@ -107,24 +155,40 @@ export const DeleteAccountScreen: React.FC<DeleteAccountScreenProps> = ({
         </div>
 
         <p className="text-xs text-[#A1A1AA] leading-relaxed">
-          {activities.length > 0
-            ? `Você tem ${activities.length} ${activities.length === 1 ? 'atividade registrada' : 'atividades registradas'}. Baixe a planilha antes de excluir — depois não há como recuperar.`
+          {(totalReal ?? activities.length) > 0
+            ? `${totalReal === null
+                ? 'Você tem atividades registradas'
+                : `Você tem ${totalReal} ${totalReal === 1 ? 'atividade registrada' : 'atividades registradas'}`
+              }. Baixe a planilha antes de excluir — depois não há como recuperar.`
             : 'Você ainda não tem atividades registradas para exportar.'}
         </p>
 
-        {activities.length > 0 && (
-          <button
-            type="button"
-            onClick={baixarDados}
-            className="w-full min-h-[52px] bg-[#101010] hover:bg-[#262626] border border-[#262626] rounded-xl flex items-center justify-center gap-2 text-[#F7F5F3] cursor-pointer transition-colors"
-          >
-            <span className="material-symbols-outlined text-[#FF5500] text-[20px]">
-              {baixou ? 'check_circle' : 'download'}
-            </span>
-            <span className="text-xs font-bold uppercase tracking-wider">
-              {baixou ? 'Planilha baixada' : 'Baixar minhas atividades (CSV)'}
-            </span>
-          </button>
+        {(totalReal ?? activities.length) > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={baixarDados}
+              disabled={baixando}
+              className="w-full min-h-[52px] bg-[#101010] hover:bg-[#262626] border border-[#262626] rounded-xl flex items-center justify-center gap-2 text-[#F7F5F3] cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-wait"
+            >
+              <span className={`material-symbols-outlined text-[#FF5500] text-[20px] ${baixando ? 'animate-spin' : ''}`}>
+                {baixando ? 'progress_activity' : baixou ? 'check_circle' : 'download'}
+              </span>
+              <span className="text-xs font-bold uppercase tracking-wider">
+                {baixando
+                  ? 'Reunindo suas atividades…'
+                  : baixou
+                    ? `Planilha baixada — ${quantasBaixadas} ${quantasBaixadas === 1 ? 'atividade' : 'atividades'}`
+                    : 'Baixar minhas atividades (CSV)'}
+              </span>
+            </button>
+
+            {erroDoDownload && (
+              <p className="text-[11px] text-[#EF4444] leading-relaxed" role="alert">
+                {erroDoDownload}
+              </p>
+            )}
+          </>
         )}
 
         <p className="text-[10px] text-[#737373] leading-relaxed">

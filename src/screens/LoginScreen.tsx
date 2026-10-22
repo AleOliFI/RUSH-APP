@@ -17,6 +17,20 @@ interface LoginScreenProps {
   onRegister: (payload: { email: string; password: string; name: string; username: string }) => Promise<any>;
 }
 
+/**
+ * Atalho de desenvolvimento: entra como cada papel com um toque.
+ *
+ * Isto NUNCA pode ir para produção. A tela chegou a exibir, para
+ * qualquer visitante, quatro contas reais — incluindo a de `owner` —
+ * e a senha padrão ao lado. Era um convite escrito.
+ *
+ * O gate é `import.meta.env.DEV`, e não uma variável nossa, porque o
+ * Vite o substitui por `false` ao compilar: no build de produção o
+ * bloco inteiro vira código morto e SAI do pacote. Não fica escondido
+ * atrás de um `if` que alguém possa inverter pelo console.
+ */
+const MOSTRAR_CONTAS_DE_DEMONSTRACAO = import.meta.env.DEV;
+
 const DEMO_ACCOUNTS = [
   { role: 'Owner', email: 'alessandro@rush.com' },
   { role: 'Coach', email: 'coach@rush.com' },
@@ -295,8 +309,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ mode: initialMode = 'l
           </button>
         </form>
 
-        {/* Contas de demonstração */}
-        {mode === 'login' && (
+        {/* Contas de demonstração — só em desenvolvimento */}
+        {MOSTRAR_CONTAS_DE_DEMONSTRACAO && mode === 'login' && (
           <div className="bg-[#141414] rounded-2xl border border-[#262626] p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-label-sm text-[10px] text-[#A1A1AA] uppercase tracking-widest">

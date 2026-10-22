@@ -58,6 +58,7 @@ import { useRushData } from './hooks/useRushData';
 import type { RunSummary } from './hooks/useRunTracker';
 import { parseCustomZonePaces } from './data/adapters';
 import { activitiesToCsv, downloadCsv } from './utils/exportCsv';
+import { activities as activitiesApi } from './api';
 
 
 // ------------------------------------------------------------
@@ -296,11 +297,29 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
     [finishRun],
   );
 
-  /** Exporta o histórico de atividades já carregado como CSV. */
-  const handleExportCsv = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
-    downloadCsv(`rush-atividades-${today}.csv`, activitiesToCsv(recentActivitiesRaw));
-  }, [recentActivitiesRaw]);
+  /**
+   * Exporta o histórico COMPLETO como CSV.
+   *
+   * Antes usava `recentActivitiesRaw`, que é a primeira página — 20
+   * atividades. Quem tivesse 300 corridas baixava 20 e não tinha como
+   * saber. Agora busca tudo, página por página.
+   */
+  const [exportando, setExportando] = useState(false);
+  const handleExportCsv = useCallback(async () => {
+    if (exportando) return;
+    setExportando(true);
+    try {
+      const todas = await activitiesApi.todas();
+      const today = new Date().toISOString().split('T')[0];
+      downloadCsv(`rush-atividades-${today}.csv`, activitiesToCsv(todas));
+    } catch (err: any) {
+      // Falhar em silêncio aqui seria o mesmo erro de antes com outra
+      // roupa: a pessoa acharia que baixou.
+      window.alert(err?.message || 'Não foi possível exportar o histórico. Tente de novo.');
+    } finally {
+      setExportando(false);
+    }
+  }, [exportando]);
 
   /** Linha "Maratona • Avançado" montada a partir do objetivo cadastrado. */
   const objectiveLabel = useMemo(() => {
