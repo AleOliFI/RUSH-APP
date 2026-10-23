@@ -24,6 +24,7 @@
 // ============================================================
 
 import React, { useMemo, useState } from 'react';
+import { rotuloDoNivel } from '../data/niveis';
 import type { PlanoCompletoData, ResumoSemana } from '../hooks/useTrainingReference';
 
 interface FullPlanScreenProps {
@@ -266,7 +267,7 @@ export const FullPlanScreen: React.FC<FullPlanScreenProps> = ({ plano, onVoltar 
         </span>
         <h1 className="font-headline-md text-[#F7F5F3] uppercase tracking-tight">{plan.name}</h1>
         <p className="text-xs text-[#737373] leading-relaxed mt-1">
-          {plan.distance_km} km • {plan.duration_weeks} semanas • {plan.level}
+          {plan.distance_km} km • {plan.duration_weeks} semanas • {rotuloDoNivel(plan.level)}
           {dias != null && dias >= 0 ? ` • faltam ${dias} ${dias === 1 ? 'dia' : 'dias'}` : ''}
         </p>
       </div>

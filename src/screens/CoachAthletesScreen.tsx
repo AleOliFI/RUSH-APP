@@ -17,6 +17,7 @@
 // ============================================================
 
 import React, { useState } from 'react';
+import { NIVEIS_DE_TREINO } from '../data/niveis';
 import type { GestaoAtletasData, PainelData } from '../hooks/useAssessoria';
 import { challenges } from '../api';
 
@@ -29,11 +30,8 @@ interface CoachAthletesScreenProps {
 
 type Aba = 'convite' | 'cadastro' | 'desafio';
 
-const NIVEIS = [
-  { valor: 'beginner', rotulo: 'Iniciante' },
-  { valor: 'intermediate', rotulo: 'Intermediário' },
-  { valor: 'advanced', rotulo: 'Avançado' },
-] as const;
+/** Mesma lista de src/data/niveis.ts, para os rótulos não divergirem. */
+const NIVEIS = NIVEIS_DE_TREINO;
 
 const DISTANCIAS = [5, 10, 21, 42] as const;
 

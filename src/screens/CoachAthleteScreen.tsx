@@ -18,6 +18,7 @@
 // ============================================================
 
 import React, { useMemo } from 'react';
+import { rotuloDoNivel } from '../data/niveis';
 import type { FichaAtletaData } from '../hooks/useAssessoria';
 
 interface CoachAthleteScreenProps {
@@ -302,7 +303,7 @@ export const CoachAthleteScreen: React.FC<CoachAthleteScreenProps> = ({
               </div>
               <span className="text-[10px] text-[#A1A1AA]">
                 Semana {plan.current_week || 1} de {plan.duration_weeks || '—'}
-                {plan.level ? ` • ${plan.level}` : ''}
+                {plan.level ? ` • ${rotuloDoNivel(plan.level)}` : ''}
               </span>
             </>
           )}

@@ -127,14 +127,6 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
 
   const currentTab: TabType = PATH_TO_TAB[location.pathname] || 'inicio';
 
-  const goToTab = useCallback(
-    (tab: TabType) => {
-      navigate(TAB_TO_PATH[tab]);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [navigate],
-  );
-
   const {
     athlete,
     readiness,
@@ -231,6 +223,25 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   // Enfiar uma setima coluna la mudaria a navegacao de todo mundo.
   const [coachView, setCoachView] = useState<null | 'painel' | 'atleta' | 'gestao' | 'prescrever' | 'plano'>(null);
   const [coachAtletaId, setCoachAtletaId] = useState<string | null>(null);
+
+  /**
+   * Tocar numa aba leva à RAIZ dela.
+   *
+   * Antes isto só trocava a rota, e a navegação interna da aba Perfil
+   * ficava onde estava. O efeito era um beco: o treinador que abria o
+   * painel da equipe não tinha como voltar ao próprio perfil — o
+   * painel não tem botão de sair, e tocar em "Perfil" devolvia o
+   * painel de novo. Valia para Ajustes e Excluir conta também.
+   */
+  const goToTab = useCallback(
+    (tab: TabType) => {
+      setCoachView(null);
+      setProfileView('perfil');
+      navigate(TAB_TO_PATH[tab]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [navigate],
+  );
 
   const ehTreinador = ['coach', 'owner', 'admin'].includes(String(meRaw?.role || ''));
 

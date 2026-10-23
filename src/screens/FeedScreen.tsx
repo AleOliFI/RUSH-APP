@@ -336,7 +336,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
                 <div className="flex items-center justify-between text-xs font-telemetry">
                   <span className="text-[#A1A1AA]">
                     Seu progresso: {activeChallenge.my_progress} / {activeChallenge.target_value}{' '}
-                    {activeChallenge.unit || ''}
+                    {activeChallenge.target_unit || ''}
                   </span>
                   <span className="text-[#22C55E] font-bold">{activeChallenge.progress_pct}%</span>
                 </div>
@@ -350,7 +350,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             ) : (
               <p className="text-xs text-[#A1A1AA] leading-relaxed">
                 {activeChallenge.description ||
-                  `Meta de ${activeChallenge.target_value} ${activeChallenge.unit || ''} no período.`}
+                  `Meta de ${activeChallenge.target_value}${activeChallenge.target_unit ? ' ' + activeChallenge.target_unit : ''} no período.`}
               </p>
             )}
 
@@ -383,7 +383,7 @@ export const FeedScreen: React.FC<FeedScreenProps> = ({
             {classificacaoAberta && (
               <ChallengeLeaderboard
                 challengeId={activeChallenge.id}
-                unidade={activeChallenge.unit || undefined}
+                unidade={activeChallenge.target_unit || undefined}
               />
             )}
           </div>

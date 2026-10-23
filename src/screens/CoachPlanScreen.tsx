@@ -21,6 +21,7 @@
 // ============================================================
 
 import React, { useEffect, useState } from 'react';
+import { NIVEIS_DE_TREINO } from '../data/niveis';
 import { training } from '../api';
 import type { FichaAtletaData, GestaoAtletasData } from '../hooks/useAssessoria';
 
@@ -39,11 +40,8 @@ const PROVAS = [
   { valor: 42, rotulo: '42 km' },
 ] as const;
 
-const NIVEIS = [
-  { valor: 'beginner', rotulo: 'Iniciante' },
-  { valor: 'intermediate', rotulo: 'Intermediário' },
-  { valor: 'advanced', rotulo: 'Avançado' },
-] as const;
+/** Mesma lista de src/data/niveis.ts, para os rótulos não divergirem. */
+const NIVEIS = NIVEIS_DE_TREINO;
 
 const hoje = () => new Date().toISOString().split('T')[0];
 
