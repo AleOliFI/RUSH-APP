@@ -146,6 +146,9 @@ export function toReadiness(hrvStatus: any): PhysiologicalReadiness {
       status?.explanation_text ||
       suggestion?.explanation_text ||
       'Realize a medição matinal de VFC para liberar a prescrição do dia.',
+    // `toReadiness` só é chamado quando existe medição (ver
+    // useRushData); sem ela o app usa EMPTY_READINESS.
+    temMedicao: true,
     restingHR: Math.round(restingHR),
     rhrDiff: rhrBaseline != null && restingHR ? Math.round(restingHR - rhrBaseline) : 0,
     hrvRmssd: measurement?.rmssd_ms ? Math.round(measurement.rmssd_ms) : 0,
@@ -160,6 +163,7 @@ export const EMPTY_READINESS: PhysiologicalReadiness = {
   score: 0,
   label: 'AGUARDANDO MEDIÇÃO',
   advice: 'Realize a medição matinal de VFC para liberar a prescrição do dia.',
+  temMedicao: false,
   restingHR: 0,
   rhrDiff: 0,
   hrvRmssd: 0,

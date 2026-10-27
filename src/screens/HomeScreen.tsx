@@ -98,6 +98,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* 0. Resumo Diário Compacto & Minimalista */}
       <DailySummary
         readinessScore={readiness.score}
+        temMedicao={readiness.temMedicao}
         readinessLabel={readiness.label}
         pendingDistanceKm={todayWorkout.distanceKm}
         pendingDurationMinutes={todayWorkout.durationMinutes}
@@ -136,9 +137,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </div>
             <div className="flex items-baseline space-x-1.5">
               <span className="font-metric-hero-mobile text-[#F7F5F3] tracking-tighter">
-                {readiness.score}
+                {readiness.temMedicao ? readiness.score : '—'}
               </span>
-              <span className="font-headline-sm text-[#FF5500] uppercase">%</span>
+              {readiness.temMedicao && (
+                <span className="font-headline-sm text-[#FF5500] uppercase">%</span>
+              )}
             </div>
             <p className="font-body text-xs text-[#737373] mt-0.5 leading-relaxed">
               {readiness.advice}
@@ -175,7 +178,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <div className="absolute flex flex-col items-center justify-center text-center">
               <span className="material-symbols-outlined text-[#FF5500] text-[26px]">vital_signs</span>
               <span className="font-label-sm text-[11px] text-[#737373] mt-0.5 font-bold">
-                {readiness.score}/100
+                {readiness.temMedicao ? `${readiness.score}/100` : 'sem medição'}
               </span>
             </div>
           </div>
@@ -188,14 +191,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span className="font-label-caps text-[10px] uppercase font-bold">RHR (REPOUSO)</span>
               <span className="material-symbols-outlined text-[16px] text-[#EF4444]">favorite</span>
             </div>
+            {/* Sem medição do dia não há número nem comparação: zero
+                batimentos com seta verde de melhora é pior do que não
+                mostrar nada, porque parece dado. */}
             <div className="mt-1 flex items-baseline space-x-1">
-              <span className="font-headline-md text-[#F7F5F3]">{readiness.restingHR}</span>
-              <span className="font-label-sm text-[10px] text-[#FF5500] uppercase font-bold">BPM</span>
+              <span className="font-headline-md text-[#F7F5F3]">
+                {readiness.temMedicao ? readiness.restingHR : '—'}
+              </span>
+              {readiness.temMedicao && (
+                <span className="font-label-sm text-[10px] text-[#FF5500] uppercase font-bold">BPM</span>
+              )}
             </div>
-            <div className="mt-1 flex items-center space-x-1 text-[#22C55E] font-label-sm text-[10px]">
-              <span className="material-symbols-outlined text-[12px]">trending_down</span>
-              <span>{readiness.rhrDiff} bpm vs média</span>
-            </div>
+            {readiness.temMedicao ? (
+              <div className="mt-1 flex items-center space-x-1 text-[#22C55E] font-label-sm text-[10px]">
+                <span className="material-symbols-outlined text-[12px]">trending_down</span>
+                <span>{readiness.rhrDiff} bpm vs média</span>
+              </div>
+            ) : (
+              <div className="mt-1 font-label-sm text-[10px] text-[#737373]">sem medição hoje</div>
+            )}
           </div>
 
           <div className="bg-[#101010] p-3 rounded-lg border border-[#202020] flex flex-col justify-between">
@@ -204,13 +218,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span className="material-symbols-outlined text-[16px] text-[#22C55E]">monitoring</span>
             </div>
             <div className="mt-1 flex items-baseline space-x-1">
-              <span className="font-headline-md text-[#F7F5F3]">{readiness.hrvRmssd}</span>
-              <span className="font-label-sm text-[10px] text-[#FF5500] uppercase font-bold">MS</span>
+              <span className="font-headline-md text-[#F7F5F3]">
+                {readiness.temMedicao ? readiness.hrvRmssd : '—'}
+              </span>
+              {readiness.temMedicao && (
+                <span className="font-label-sm text-[10px] text-[#FF5500] uppercase font-bold">MS</span>
+              )}
             </div>
-            <div className="mt-1 flex items-center space-x-1 text-[#22C55E] font-label-sm text-[10px]">
-              <span className="material-symbols-outlined text-[12px]">check_circle</span>
-              <span className="font-bold uppercase">{readiness.hrvStatus}</span>
-            </div>
+            {readiness.temMedicao ? (
+              <div className="mt-1 flex items-center space-x-1 text-[#22C55E] font-label-sm text-[10px]">
+                <span className="material-symbols-outlined text-[12px]">check_circle</span>
+                <span className="font-bold uppercase">{readiness.hrvStatus}</span>
+              </div>
+            ) : (
+              <div className="mt-1 font-label-sm text-[10px] text-[#737373]">sem medição hoje</div>
+            )}
           </div>
         </div>
       </div>

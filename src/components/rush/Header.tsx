@@ -52,8 +52,11 @@ export const Header: React.FC<HeaderProps> = ({
                 {athlete.statusText}
               </span>
             </div>
+            {/* "0% HRV" ao lado de "SEM MEDIÇÃO HOJE" era um número
+                inventado: 0% é uma leitura péssima, não a ausência de
+                leitura. */}
             <span className="font-telemetry text-xs text-[#F7F5F3] font-bold tracking-tight">
-              {readiness.hrvPercentage}% HRV
+              {readiness.temMedicao ? `${readiness.hrvPercentage}% HRV` : '— HRV'}
             </span>
           </button>
 

@@ -96,6 +96,15 @@ export interface PhysiologicalReadiness {
   label: string; // 'RECUPERAÇÃO ÓTIMA'
   advice: string;
   restingHR: number; // 46 bpm
+  /**
+   * `false` enquanto não houver medição de VFC do dia.
+   *
+   * Sem isto, as telas não distinguiam "RMSSD de 0 ms" de "ninguém
+   * mediu": os campos numéricos vinham zerados e o rótulo vinha
+   * 'Normal', então a tela inicial anunciava 0 ms com selo verde de
+   * NORMAL logo abaixo de "AGUARDANDO MEDIÇÃO".
+   */
+  temMedicao: boolean;
   rhrDiff: number; // -3 bpm
   hrvRmssd: number; // 68 ms
   hrvStatus: 'Excelente' | 'Normal' | 'Baixo';

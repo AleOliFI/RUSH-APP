@@ -2,6 +2,14 @@ import React from 'react';
 
 interface DailySummaryProps {
   readinessScore: number;
+  /**
+   * `false` quando ainda não houve medição de VFC hoje.
+   *
+   * Sem isto, score 0 caía na faixa mais baixa e a tela pintava um
+   * "0" VERMELHO com ponto vermelho — a mesma aparência de quem está
+   * exausto. Quem não mediu não está mal; não se sabe.
+   */
+  temMedicao?: boolean;
   readinessLabel: string;
   pendingDistanceKm: number;
   pendingDurationMinutes: number;
@@ -12,6 +20,7 @@ interface DailySummaryProps {
 
 export const DailySummary: React.FC<DailySummaryProps> = ({
   readinessScore,
+  temMedicao = true,
   readinessLabel,
   pendingDistanceKm,
   pendingDurationMinutes,
@@ -20,11 +29,12 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
   onViewWorkout,
 }) => {
   // Determine color theme based on readiness score
-  const isHigh = readinessScore >= 80;
-  const isModerate = readinessScore >= 60 && readinessScore < 80;
-  const scoreColor = isHigh ? 'text-[#22C55E]' : isModerate ? 'text-[#FACC15]' : 'text-[#EF4444]';
-  const scoreBg = isHigh ? 'bg-[#22C55E]/10' : isModerate ? 'bg-[#FACC15]/10' : 'bg-[#EF4444]/10';
-  const scoreBorder = isHigh ? 'border-[#22C55E]/30' : isModerate ? 'border-[#FACC15]/30' : 'border-[#EF4444]/30';
+  const isHigh = temMedicao && readinessScore >= 80;
+  const isModerate = temMedicao && readinessScore >= 60 && readinessScore < 80;
+  const isLow = temMedicao && readinessScore < 60;
+  const scoreColor = isHigh ? 'text-[#22C55E]' : isModerate ? 'text-[#FACC15]' : isLow ? 'text-[#EF4444]' : 'text-[#737373]';
+  const scoreBg = isHigh ? 'bg-[#22C55E]/10' : isModerate ? 'bg-[#FACC15]/10' : isLow ? 'bg-[#EF4444]/10' : 'bg-[#262626]/40';
+  const scoreBorder = isHigh ? 'border-[#22C55E]/30' : isModerate ? 'border-[#FACC15]/30' : isLow ? 'border-[#EF4444]/30' : 'border-[#353534]';
 
   return (
     <div
@@ -39,7 +49,7 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
       >
         <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${scoreBg} ${scoreBorder} flex-shrink-0`}>
           <span className={`font-telemetry text-base font-extrabold ${scoreColor}`}>
-            {readinessScore}
+            {temMedicao ? readinessScore : '—'}
           </span>
         </div>
         <div className="flex flex-col min-w-0">
@@ -47,7 +57,7 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
             Prontidão Fisiológica
           </span>
           <div className="flex items-center gap-1.5">
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${isHigh ? 'bg-[#22C55E]' : isModerate ? 'bg-[#FACC15]' : 'bg-[#EF4444]'}`} />
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${isHigh ? 'bg-[#22C55E]' : isModerate ? 'bg-[#FACC15]' : isLow ? 'bg-[#EF4444]' : 'bg-[#737373]'}`} />
             <span className="font-telemetry text-xs font-bold text-[#F7F5F3] uppercase tracking-tight truncate">
               {readinessLabel}
             </span>
