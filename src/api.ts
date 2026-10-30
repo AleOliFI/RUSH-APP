@@ -425,6 +425,24 @@ export const academies = {
   athleteDetails: (id: string) => request(`/academies/athlete/${id}`),
   prescribe: (athleteId: string, data: any) => request(`/academies/athlete/${athleteId}/prescribe`, { method: 'POST', body: JSON.stringify(data) }),
   create: (data: any) => request('/academies', { method: 'POST', body: JSON.stringify(data) }),
+
+  /**
+   * Pedidos para virar treinador.
+   *
+   * Criar assessoria exige já ser treinador — foi assim que o furo de
+   * autopromoção foi fechado. Este é o caminho honesto para entrar:
+   * a pessoa pede, um administrador decide.
+   */
+  pedirParaSerTreinador: (dados: { nome_da_assessoria: string; mensagem?: string }) =>
+    request('/academies/solicitacoes', { method: 'POST', body: JSON.stringify(dados) }),
+  meuPedidoDeTreinador: () => request('/academies/solicitacoes/minha'),
+  pedidosDeTreinador: (status: 'pendente' | 'aprovada' | 'recusada' = 'pendente') =>
+    request(`/academies/solicitacoes?status=${status}`),
+  decidirPedidoDeTreinador: (id: string, aprovar: boolean, motivo?: string) =>
+    request(`/academies/solicitacoes/${id}/decidir`, {
+      method: 'POST',
+      body: JSON.stringify({ aprovar, motivo }),
+    }),
 };
 
 // Subscriptions (RUSH PRO)

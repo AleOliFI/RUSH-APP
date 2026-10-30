@@ -503,5 +503,174 @@ module.exports = function academiesRoutes(db) {
     }
   });
 
+
+  // =======================================================
+  // Pedidos para virar treinador
+  // -------------------------------------------------------
+  // Criar assessoria exige já ser treinador (ver POST / acima), o que
+  // fechou o furo de autopromoção e, junto, o único caminho para
+  // alguém SE TORNAR treinador. Estas quatro rotas são esse caminho:
+  // a pessoa pede, um administrador decide.
+  //
+  // Quem decide é `admin`, e só. `owner` não serve: qualquer
+  // treinador que cria uma assessoria vira `owner`, e aí donos
+  // estariam fabricando treinadores uns aos outros.
+  // =======================================================
+
+  // POST /api/academies/solicitacoes — pedir para virar treinador
+  router.post('/solicitacoes', authenticate, async (req, res) => {
+    try {
+      const { nome_da_assessoria, mensagem } = req.body || {};
+
+      if (!nome_da_assessoria || String(nome_da_assessoria).trim().length < 2) {
+        return res.status(400).json({ error: 'Diga o nome da assessoria que você quer abrir' });
+      }
+
+      const eu = await db
+        .prepare('SELECT id, role FROM users WHERE id = ? AND deleted_at IS NULL')
+        .get(req.user.id);
+      if (!eu) return res.status(401).json({ error: 'Sessão inválida' });
+
+      if (['coach', 'owner', 'admin'].includes(eu.role)) {
+        return res.status(409).json({ error: 'Esta conta já é de treinador' });
+      }
+
+      const pendente = await db
+        .prepare("SELECT id FROM solicitacoes_treinador WHERE user_id = ? AND status = 'pendente'")
+        .get(req.user.id);
+      if (pendente) {
+        return res.status(409).json({ error: 'Você já tem um pedido aguardando resposta', id: pendente.id });
+      }
+
+      const id = uuidv4();
+      try {
+        await db.prepare(`
+          INSERT INTO solicitacoes_treinador (id, user_id, nome_da_assessoria, mensagem)
+          VALUES (?, ?, ?, ?)
+        `).run(id, req.user.id, String(nome_da_assessoria).trim(),
+          mensagem ? String(mensagem).trim() : null);
+      } catch (err) {
+        // Índice único: dois toques no botão ao mesmo tempo.
+        if (/UNIQUE|duplicate key/i.test(err.message || '')) {
+          return res.status(409).json({ error: 'Você já tem um pedido aguardando resposta' });
+        }
+        throw err;
+      }
+
+      const pedido = await db.prepare('SELECT * FROM solicitacoes_treinador WHERE id = ?').get(id);
+      res.status(201).json({ solicitacao: pedido });
+    } catch (err) {
+      console.error('Erro ao pedir para virar treinador:', err);
+      res.status(500).json({ error: 'Erro ao registrar o pedido' });
+    }
+  });
+
+  // GET /api/academies/solicitacoes/minha — o que aconteceu com o meu pedido
+  router.get('/solicitacoes/minha', authenticate, async (req, res) => {
+    try {
+      // `created_at` tem precisão de segundo: pedir, ser recusado e
+      // pedir de novo no mesmo segundo empata, e sem desempate "o meu
+      // último pedido" podia devolver o anterior — a pessoa veria
+      // "recusado" depois de já ter mandado outro. O rowid desempata
+      // pela ordem real de inserção.
+      const pedido = await db.prepare(`
+        SELECT * FROM solicitacoes_treinador
+        WHERE user_id = ?
+        ORDER BY created_at DESC, rowid DESC LIMIT 1
+      `).get(req.user.id);
+      res.json({ solicitacao: pedido || null });
+    } catch (err) {
+      console.error('Erro ao ler o pedido:', err);
+      res.status(500).json({ error: 'Erro ao buscar o pedido' });
+    }
+  });
+
+  // GET /api/academies/solicitacoes — a fila, para quem decide
+  router.get('/solicitacoes', authenticate, authorize('admin'), async (req, res) => {
+    try {
+      const status = ['pendente', 'aprovada', 'recusada'].includes(req.query.status)
+        ? req.query.status
+        : 'pendente';
+
+      const solicitacoes = await db.prepare(`
+        SELECT s.*, up.name, up.username, u.email
+        FROM solicitacoes_treinador s
+        JOIN users u ON u.id = s.user_id
+        LEFT JOIN user_profiles up ON up.user_id = s.user_id
+        WHERE s.status = ?
+        ORDER BY s.created_at ASC
+      `).all(status);
+
+      res.json({ solicitacoes, status });
+    } catch (err) {
+      console.error('Erro ao listar pedidos:', err);
+      res.status(500).json({ error: 'Erro ao buscar os pedidos' });
+    }
+  });
+
+  // POST /api/academies/solicitacoes/:id/decidir — aprovar ou recusar
+  router.post('/solicitacoes/:id/decidir', authenticate, authorize('admin'), async (req, res) => {
+    try {
+      const { aprovar, motivo } = req.body || {};
+      if (typeof aprovar !== 'boolean') {
+        return res.status(400).json({ error: 'Informe `aprovar` (true ou false)' });
+      }
+
+      const pedido = await db
+        .prepare('SELECT * FROM solicitacoes_treinador WHERE id = ?')
+        .get(req.params.id);
+      if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+      // Decidir duas vezes o mesmo pedido promoveria de novo alguém já
+      // promovido, ou reverteria uma decisão sem registro.
+      if (pedido.status !== 'pendente') {
+        return res.status(409).json({ error: `Este pedido já foi ${pedido.status}` });
+      }
+
+      const decidir = db.transaction(async () => {
+        await db.prepare(`
+          UPDATE solicitacoes_treinador
+          SET status = ?, motivo_da_recusa = ?, decidido_por = ?, decidido_em = datetime('now')
+          WHERE id = ?
+        `).run(
+          aprovar ? 'aprovada' : 'recusada',
+          !aprovar && motivo ? String(motivo).trim() : null,
+          req.user.id,
+          pedido.id,
+        );
+
+        if (aprovar) {
+          // Promove a `coach`, e só. A assessoria em si continua sendo
+          // criada pela rota de sempre, pela própria pessoa — uma
+          // lógica de criação, num lugar só.
+          await db.prepare("UPDATE users SET role = 'coach', updated_at = datetime('now') WHERE id = ?")
+            .run(pedido.user_id);
+        }
+      });
+      await decidir();
+
+      // Tipo 'system', e não um tipo novo: a coluna `type` da tabela
+      // notifications tem um CHECK com a lista fechada, e trocar um
+      // CHECK em SQLite exige reconstruir a tabela — risco alto para
+      // um ganho cosmético num banco que já está em produção.
+      // 'system' existe exatamente para este caso, e a mensagem diz o
+      // que aconteceu.
+      await criarNotificacao(db, {
+        userId: pedido.user_id,
+        type: 'system',
+        sourceUserId: req.user.id,
+        message: aprovar
+          ? 'Seu pedido para abrir uma assessoria foi aprovado. Abra o perfil para criar a sua.'
+          : `Seu pedido para abrir uma assessoria foi recusado.${motivo ? ' Motivo: ' + String(motivo).trim() : ''}`,
+      });
+
+      const atualizado = await db.prepare('SELECT * FROM solicitacoes_treinador WHERE id = ?').get(pedido.id);
+      res.json({ solicitacao: atualizado });
+    } catch (err) {
+      console.error('Erro ao decidir o pedido:', err);
+      res.status(500).json({ error: 'Erro ao registrar a decisão' });
+    }
+  });
+
   return router;
 };

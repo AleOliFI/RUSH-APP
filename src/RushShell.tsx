@@ -84,6 +84,8 @@ const CoachAthleteScreen = lazy(() => import('./screens/CoachAthleteScreen').the
 const CoachAthletesScreen = lazy(() => import('./screens/CoachAthletesScreen').then((m) => ({ default: m.CoachAthletesScreen })));
 const CoachPrescribeScreen = lazy(() => import('./screens/CoachPrescribeScreen').then((m) => ({ default: m.CoachPrescribeScreen })));
 const CoachPlanScreen = lazy(() => import('./screens/CoachPlanScreen').then((m) => ({ default: m.CoachPlanScreen })));
+const SerTreinadorScreen = lazy(() => import('./screens/SerTreinadorScreen').then((m) => ({ default: m.SerTreinadorScreen })));
+const PedidosDeTreinadorScreen = lazy(() => import('./screens/PedidosDeTreinadorScreen').then((m) => ({ default: m.PedidosDeTreinadorScreen })));
 const GearGarageModal = lazy(() => import('./components/rush/GearGarageModal').then((m) => ({ default: m.GearGarageModal })));
 const ActiveRunModal = lazy(() => import('./components/rush/ActiveRunModal').then((m) => ({ default: m.ActiveRunModal })));
 const WorkoutSummaryModal = lazy(() => import('./components/rush/WorkoutSummaryModal').then((m) => ({ default: m.WorkoutSummaryModal })));
@@ -217,7 +219,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   const notifications = useNotifications();
   const publicProfile = usePublicProfile(openAthleteId);
 
-  const [profileView, setProfileView] = useState<'perfil' | 'conta' | 'ajustes'>('perfil');
+  const [profileView, setProfileView] = useState<'perfil' | 'conta' | 'ajustes' | 'ser-treinador' | 'pedidos-treinador'>('perfil');
 
   // ---- Modulo do treinador ----
   // Vive dentro da aba Perfil, como Ajustes: a BottomNav e fixa em
@@ -246,6 +248,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
   );
 
   const ehTreinador = ['coach', 'owner', 'admin'].includes(String(meRaw?.role || ''));
+  const ehAdministrador = String(meRaw?.role || '') === 'admin';
 
   const painelAssessoria = usePainelAssessoria(ehTreinador && coachView !== null);
   const fichaAtleta = useFichaAtleta(
@@ -649,6 +652,28 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
           </Adiado>
         )}
 
+        {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'ser-treinador' && (
+          <Adiado>
+            <SerTreinadorScreen
+              onVoltar={() => setProfileView('perfil')}
+              onAprovado={async () => {
+                // O servidor promoveu a conta; sem recarregar o
+                // usuário, o app continuaria achando que ela é atleta
+                // e não ofereceria a criação da assessoria.
+                await reload();
+                setProfileView('perfil');
+                setCoachView('painel');
+              }}
+            />
+          </Adiado>
+        )}
+
+        {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'pedidos-treinador' && (
+          <Adiado>
+            <PedidosDeTreinadorScreen onVoltar={() => setProfileView('perfil')} />
+          </Adiado>
+        )}
+
         {!isNotificationsOpen && currentTab === 'perfil' && coachView === null && profileView === 'ajustes' && (
           <SettingsScreen
             account={account}
@@ -681,6 +706,8 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             onViewRoute={setActiveRoute}
             onOpenAccount={() => setProfileView('ajustes')}
             onOpenAssessoria={ehTreinador ? () => setCoachView('painel') : undefined}
+            onOpenSerTreinador={ehTreinador ? undefined : () => setProfileView('ser-treinador')}
+            onOpenPedidosDeTreinador={ehAdministrador ? () => setProfileView('pedidos-treinador') : undefined}
             onOpenGestaoAtletas={ehTreinador ? () => setCoachView('gestao') : undefined}
           />
         )}

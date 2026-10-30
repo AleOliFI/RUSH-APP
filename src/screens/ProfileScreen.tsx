@@ -45,6 +45,10 @@ interface ProfileScreenProps {
   onOpenAssessoria?: () => void;
   /** Gestão de atletas da assessoria. Só existe para treinador. */
   onOpenGestaoAtletas?: () => void;
+  /** Pedir para virar treinador. Só existe para quem ainda não é. */
+  onOpenSerTreinador?: () => void;
+  /** Fila de pedidos. Só existe para administrador. */
+  onOpenPedidosDeTreinador?: () => void;
 }
 
 const ACWR_ZONE_TEXT: Record<string, string> = {
@@ -77,6 +81,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOpenAccount,
   onOpenAssessoria,
   onOpenGestaoAtletas,
+  onOpenSerTreinador,
+  onOpenPedidosDeTreinador,
 }) => {
   const [activeTab, setActiveTab] = useState<'posts' | 'stats' | 'badges'>('posts');
 
@@ -326,6 +332,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <div>
                 <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Painel da equipe</span>
                 <span className="text-[10px] text-[#A1A1AA] block">Atletas por risco fisiológico</span>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
+          </button>
+        )}
+
+        {/* Para quem ainda não é treinador. Criar assessoria exige já
+            ser um — foi assim que o furo de autopromoção foi fechado —,
+            então este é o caminho de entrada. */}
+        {onOpenSerTreinador && (
+          <button
+            onClick={onOpenSerTreinador}
+            className="min-h-[56px] p-3.5 bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] rounded-2xl flex items-center justify-between transition-all cursor-pointer shadow-md text-left sm:col-span-2"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[#A1A1AA] text-[24px]">sports</span>
+              <div>
+                <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Quero treinar atletas</span>
+                <span className="text-[10px] text-[#A1A1AA] block">Pedir para abrir uma assessoria</span>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>
+          </button>
+        )}
+
+        {onOpenPedidosDeTreinador && (
+          <button
+            onClick={onOpenPedidosDeTreinador}
+            className="min-h-[56px] p-3.5 bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] rounded-2xl flex items-center justify-between transition-all cursor-pointer shadow-md text-left sm:col-span-2"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[#FACC15] text-[24px]">how_to_reg</span>
+              <div>
+                <span className="font-headline text-sm uppercase text-[#F7F5F3] block">Pedidos para treinar</span>
+                <span className="text-[10px] text-[#A1A1AA] block">Aprovar ou recusar</span>
               </div>
             </div>
             <span className="material-symbols-outlined text-[#A1A1AA] text-[18px]">chevron_right</span>

@@ -859,6 +859,44 @@ module.exports = async function initializeDatabase(db) {
     CREATE INDEX IF NOT EXISTS idx_shoes_retired ON shoes(user_id, retired_at);
   `);
 
+  // -------------------------------------------------------
+  // Pedidos para virar treinador
+  // -------------------------------------------------------
+  // POST /api/academies criava a assessoria E promovia quem chamava a
+  // `owner`, exigindo apenas estar logado: qualquer atleta virava dono
+  // chamando a API. A rota foi fechada para quem já é treinador — e
+  // isso deixou o app sem caminho nenhum para alguém SE TORNAR
+  // treinador.
+  //
+  // Esta tabela é esse caminho: a pessoa pede, um administrador
+  // decide. Promoção continua não sendo autosserviço, mas deixa de
+  // depender de alguém mexer no banco à mão.
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS solicitacoes_treinador (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nome_da_assessoria TEXT NOT NULL,
+      mensagem TEXT DEFAULT NULL,
+      status TEXT NOT NULL DEFAULT 'pendente'
+        CHECK (status IN ('pendente', 'aprovada', 'recusada')),
+      motivo_da_recusa TEXT DEFAULT NULL,
+      decidido_por TEXT DEFAULT NULL REFERENCES users(id) ON DELETE SET NULL,
+      decidido_em TEXT DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_solic_treinador_status
+      ON solicitacoes_treinador(status, created_at);
+
+    -- Um pedido pendente por pessoa. Parcial de propósito: pedidos já
+    -- decididos ficam no histórico, e quem foi recusado pode pedir de
+    -- novo. Sem este índice, dois toques no botão viram dois pedidos,
+    -- e o administrador decide duas vezes a mesma coisa.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_solic_treinador_um_pendente
+      ON solicitacoes_treinador(user_id)
+      WHERE status = 'pendente';
+  `);
+
   // Vínculo atividade -> calçado (quilometragem acumula automaticamente)
   try {
     await db.exec(`ALTER TABLE activities ADD COLUMN shoe_id TEXT DEFAULT NULL REFERENCES shoes(id) ON DELETE SET NULL`);

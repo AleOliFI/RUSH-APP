@@ -18,6 +18,7 @@ bolt
 calendar_add_on
 calendar_month
 calendar_view_week
+cancel
 chat_bubble
 chat_bubble_outline
 check
@@ -55,6 +56,7 @@ groups
 healing
 help
 history
+hourglass_top
 how_to_reg
 image
 info
@@ -108,6 +110,7 @@ shield
 shield_person
 shield_with_heart
 speed
+sports
 sports_martial_arts
 stacked_line_chart
 stop
