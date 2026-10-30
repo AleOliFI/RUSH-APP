@@ -5,6 +5,9 @@
 const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate } = require('../middleware/auth');
+const { exigirAssinatura } = require('../middleware/assinatura');
+const { ehPro } = require('../services/acessoPro');
+const { DIAS_DE_VFC_SEM_ASSINATURA } = require('../services/recursosPro');
 const { generateTrainingSuggestion, calculateLnRmssd, calculateStats } = require('../agent/trainingAgent');
 const { getCyclePhase, calcMenstrualSymptomScore } = require('../agent/menstrualModule');
 
@@ -378,7 +381,18 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   router.get('/history', authenticate, async (req, res) => {
     try {
-      const days = Math.min(90, Math.max(7, Number(req.query.days) || 28));
+      const pedidos = Math.min(90, Math.max(7, Number(req.query.days) || 28));
+
+      // Sem assinatura a janela encurta, mas a resposta avisa — em vez
+      // de devolver uma série curta fingindo ser a série completa. A
+      // prontidão de HOJE continua inteira; o que é pago é olhar para
+      // trás.
+      const assinante = ehPro(await db
+        .prepare('SELECT role, subscription_tier, subscription_status, trial_ends_at FROM users WHERE id = ?')
+        .get(req.user.id));
+      const days = assinante ? pedidos : Math.min(pedidos, DIAS_DE_VFC_SEM_ASSINATURA);
+      const limitadoPelaAssinatura = !assinante && pedidos > DIAS_DE_VFC_SEM_ASSINATURA;
+
       const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
       const measurements = await db.prepare(`
@@ -412,6 +426,9 @@ module.exports = function hrvRoutes(db) {
         measurements,
         wellness,
         daily_statuses: statuses,
+        // A tela precisa saber que está vendo um pedaço, e quanto.
+        limitado_por_assinatura: limitadoPelaAssinatura,
+        dias_pedidos: pedidos,
       });
     } catch (err) {
       console.error('HRV history error:', err);
@@ -422,7 +439,7 @@ module.exports = function hrvRoutes(db) {
   // -------------------------------------------------------
   // GET /api/hrv/vo2max — Última estimativa de VO2max + histórico
   // -------------------------------------------------------
-  router.get('/vo2max', authenticate, async (req, res) => {
+  router.get('/vo2max', authenticate, exigirAssinatura(db, 'vo2max'), async (req, res) => {
     try {
       const latest = await db.prepare(`
         SELECT id, date, vo2max_value, method, notes

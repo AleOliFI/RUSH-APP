@@ -178,7 +178,12 @@ async function runAdversarialSuite() {
   await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
   await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(UNLINKED_COACH_ID);
 
-  await db.prepare('INSERT INTO users (id, email, password_hash, role, academy_id) VALUES (?, ?, ?, ?, ?)').run(ATHLETE_ID, 'athlete@rush.com', passwordHash, 'athlete', ACADEMY_ID);
+  // Assinante de propósito: o teste 4.6 exercita a VALIDAÇÃO do
+  // protocolo de campo, e essa rota passou a exigir assinatura
+  // (server/middleware/assinatura.js). Sem isto, o 402 chegaria antes
+  // da validação e o teste mediria o paywall em vez do que se propõe.
+  // Quem testa o paywall é server/test/paywall.test.js.
+  await db.prepare("INSERT INTO users (id, email, password_hash, role, academy_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, 'pro', 'active')").run(ATHLETE_ID, 'athlete@rush.com', passwordHash, 'athlete', ACADEMY_ID);
   await db.prepare('INSERT INTO user_profiles (user_id, name, username) VALUES (?, ?, ?)').run(ATHLETE_ID, 'Alessandro Atleta', 'alessandro_runner');
   await db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(ATHLETE_ID);
   await db.prepare('INSERT INTO privacy_settings (user_id) VALUES (?)').run(ATHLETE_ID);

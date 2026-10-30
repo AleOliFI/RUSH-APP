@@ -13,6 +13,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { AthleteProfile, PhysiologicalReadiness } from '../types';
+import { BloqueioPro, TEXTOS_PRO } from '../components/rush/BloqueioPro';
 
 export interface TrainingLoad {
   acute_load: number;
@@ -42,6 +43,10 @@ interface ProScreenProps {
   athlete: AthleteProfile;
   readiness: PhysiologicalReadiness;
   trainingLoad: TrainingLoad | null;
+  /** O que esta conta não vê por não assinar (ver useRushData). */
+  bloqueiosPro?: { vo2max: boolean; cargaDeTreino: boolean };
+  /** `true` quando a série de VFC veio encurtada por falta de assinatura. */
+  vfcLimitadaPelaAssinatura?: boolean;
   hrvHistory: HrvHistoryPoint[];
   vo2maxTrendPercent: number | null;
   hrZones: Record<string, { name: string; minBpm: number; maxBpm: number }> | null;
@@ -83,6 +88,8 @@ export const ProScreen: React.FC<ProScreenProps> = ({
   athlete,
   readiness,
   trainingLoad,
+  bloqueiosPro,
+  vfcLimitadaPelaAssinatura,
   hrvHistory,
   vo2maxTrendPercent,
   hrZones,
@@ -97,6 +104,10 @@ export const ProScreen: React.FC<ProScreenProps> = ({
   onExportCsv,
 }) => {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+
+  // O servidor é quem manda (middleware de assinatura); aqui a tela
+  // só evita oferecer um botão que vai bater numa porta fechada.
+  const ehAssinante = !!subscription?.is_pro;
 
   const acwr = trainingLoad?.has_enough_history ? trainingLoad.acwr : null;
   const zoneMeta = trainingLoad?.zone ? ACWR_ZONE_META[trainingLoad.zone] : null;
@@ -185,19 +196,27 @@ export const ProScreen: React.FC<ProScreenProps> = ({
       {/* Atalhos */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         <button
-          onClick={onOpenFieldProtocol}
-          className="min-h-[52px] p-3 rounded-xl bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] flex flex-col items-center justify-center gap-1 text-center cursor-pointer transition-all shadow"
+          onClick={ehAssinante ? onOpenFieldProtocol : onOpenCheckout}
+          title={ehAssinante ? undefined : TEXTOS_PRO.protocolo_de_campo.explicacao}
+          className="min-h-[52px] p-3 rounded-xl bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] flex flex-col items-center justify-center gap-1 text-center cursor-pointer transition-all shadow relative"
         >
-          <span className="material-symbols-outlined text-[#FF5500] text-[22px]">biotech</span>
-          <span className="font-label-caps text-[9px] uppercase font-bold text-[#F7F5F3]">Protocolo LTHR</span>
+          {!ehAssinante && (
+            <span className="material-symbols-outlined text-[#FF5500] text-[13px] absolute top-1.5 right-1.5">lock</span>
+          )}
+          <span className={`material-symbols-outlined text-[22px] ${ehAssinante ? 'text-[#FF5500]' : 'text-[#525252]'}`}>biotech</span>
+          <span className={`font-label-caps text-[9px] uppercase font-bold ${ehAssinante ? 'text-[#F7F5F3]' : 'text-[#A1A1AA]'}`}>Protocolo LTHR</span>
         </button>
 
         <button
-          onClick={onOpenStoryExporter}
-          className="min-h-[52px] p-3 rounded-xl bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] flex flex-col items-center justify-center gap-1 text-center cursor-pointer transition-all shadow"
+          onClick={ehAssinante ? onOpenStoryExporter : onOpenCheckout}
+          title={ehAssinante ? undefined : TEXTOS_PRO.arte_para_redes.explicacao}
+          className="min-h-[52px] p-3 rounded-xl bg-[#1C1C1C] hover:bg-[#262626] border border-[#262626] flex flex-col items-center justify-center gap-1 text-center cursor-pointer transition-all shadow relative"
         >
-          <span className="material-symbols-outlined text-[#22C55E] text-[22px]">auto_stories</span>
-          <span className="font-label-caps text-[9px] uppercase font-bold text-[#F7F5F3]">Stories & TikTok 9:16</span>
+          {!ehAssinante && (
+            <span className="material-symbols-outlined text-[#FF5500] text-[13px] absolute top-1.5 right-1.5">lock</span>
+          )}
+          <span className={`material-symbols-outlined text-[22px] ${ehAssinante ? 'text-[#22C55E]' : 'text-[#525252]'}`}>auto_stories</span>
+          <span className={`font-label-caps text-[9px] uppercase font-bold ${ehAssinante ? 'text-[#F7F5F3]' : 'text-[#A1A1AA]'}`}>Stories &amp; TikTok 9:16</span>
         </button>
 
         <button
@@ -244,7 +263,16 @@ export const ProScreen: React.FC<ProScreenProps> = ({
           )}
         </div>
 
-        {acwr == null ? (
+        {/* Sem assinatura o número existe e está trancado — dizer
+            "faltam quatro semanas de treino" aqui mandaria a pessoa
+            treinar atrás de algo que ela não receberia no fim. */}
+        {bloqueiosPro?.cargaDeTreino ? (
+          <BloqueioPro
+            titulo={TEXTOS_PRO.carga_de_treino.titulo}
+            explicacao={TEXTOS_PRO.carga_de_treino.explicacao}
+            onAssinar={onOpenCheckout}
+          />
+        ) : acwr == null ? (
           <div className="bg-[#101010] p-4 rounded-lg border border-[#202020]">
             <p className="text-xs text-[#A1A1AA] leading-relaxed">
               A razão carga aguda/crônica precisa de pelo menos quatro semanas de treinos registrados.
@@ -321,10 +349,22 @@ export const ProScreen: React.FC<ProScreenProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5 mt-1">
             <span className="font-headline-lg-mobile text-[#F7F5F3]">
-              {athlete.vo2Max > 0 ? athlete.vo2Max : '—'}
+              {bloqueiosPro?.vo2max ? '—' : athlete.vo2Max > 0 ? athlete.vo2Max : '—'}
             </span>
-            <span className="font-label-sm text-[10px] text-[#737373] font-bold">mL/kg/min</span>
+            {!bloqueiosPro?.vo2max && (
+              <span className="font-label-sm text-[10px] text-[#737373] font-bold">mL/kg/min</span>
+            )}
           </div>
+          {bloqueiosPro?.vo2max ? (
+            <div className="mt-1.5">
+              <BloqueioPro
+                titulo={TEXTOS_PRO.vo2max.titulo}
+                explicacao={TEXTOS_PRO.vo2max.explicacao}
+                onAssinar={onOpenCheckout}
+                compacto
+              />
+            </div>
+          ) : (
           <span
             className={`font-label-sm text-[10px] font-bold block mt-1 ${
               vo2maxTrendPercent == null
@@ -338,6 +378,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({
               ? 'sem histórico para comparar'
               : `${vo2maxTrendPercent >= 0 ? '+' : ''}${vo2maxTrendPercent}% no período`}
           </span>
+          )}
         </div>
 
         <div className="bg-[#1C1C1C] p-4 rounded-xl border border-[#262626]">
@@ -366,6 +407,16 @@ export const ProScreen: React.FC<ProScreenProps> = ({
             {hrvChart ? `média ${hrvChart.mean}` : 'sem dados'}
           </span>
         </div>
+
+        {/* A série curta não pode passar por completa. */}
+        {vfcLimitadaPelaAssinatura && (
+          <BloqueioPro
+            titulo={TEXTOS_PRO.serie_de_vfc.titulo}
+            explicacao={TEXTOS_PRO.serie_de_vfc.explicacao}
+            onAssinar={onOpenCheckout}
+            compacto
+          />
+        )}
 
         <div className="h-44 w-full bg-[#101010] rounded-lg p-3 relative border border-[#202020] flex flex-col justify-end">
           {hrvChart ? (

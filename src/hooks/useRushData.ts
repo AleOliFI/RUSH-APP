@@ -14,6 +14,7 @@ import {
   subscriptions as subscriptionsApi,
   training,
   users,
+  ehErroDeAssinatura,
 } from '../api';
 import {
   AthleteProfile,
@@ -88,6 +89,24 @@ async function safe<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
+/**
+ * Como `safe`, mas separando "deu erro" de "isto é do RUSH PRO".
+ *
+ * Sem esta distinção, uma porta de assinatura chegaria à tela como
+ * `null` e viraria "sem dados" — o que é mentira de outro tipo: a
+ * pessoa acharia que o app não tem o número, quando ele existe e
+ * está atrás da assinatura dela.
+ */
+async function seguroComAssinatura<T>(
+  promise: Promise<T>,
+): Promise<{ dado: T | null; bloqueado: boolean }> {
+  try {
+    return { dado: await promise, bloqueado: false };
+  } catch (err) {
+    return { dado: null, bloqueado: ehErroDeAssinatura(err) };
+  }
+}
+
 export interface RushData {
   athlete: AthleteProfile;
   readiness: PhysiologicalReadiness;
@@ -106,6 +125,10 @@ export interface RushData {
   trainingLoad: any | null;
   hrvHistory: any[];
   vo2maxRaw: any;
+  /** O que esta conta não vê por não assinar. */
+  bloqueiosPro: { vo2max: boolean; cargaDeTreino: boolean };
+  /** `true` quando o histórico de VFC veio encurtado por falta de assinatura. */
+  vfcLimitadaPelaAssinatura: boolean;
   devices: any[];
   subscription: any | null;
   recentActivitiesRaw: any[];
@@ -187,6 +210,19 @@ export function useRushData(): RushData {
   const [trainingLoad, setTrainingLoad] = useState<any | null>(null);
   const [hrvHistory, setHrvHistory] = useState<any[]>([]);
   const [vo2maxRaw, setVo2maxRaw] = useState<any>(null);
+
+  /**
+   * O que esta conta não vê por não assinar.
+   *
+   * Separado do dado em si: `null` com `bloqueado: false` é "ainda
+   * não há medições"; `null` com `bloqueado: true` é "existe, mas é
+   * do RUSH PRO". As duas coisas pedem telas diferentes.
+   */
+  const [bloqueiosPro, setBloqueiosPro] = useState<{ vo2max: boolean; cargaDeTreino: boolean }>({
+    vo2max: false,
+    cargaDeTreino: false,
+  });
+  const [vfcLimitadaPelaAssinatura, setVfcLimitadaPelaAssinatura] = useState(false);
   const [devices, setDevices] = useState<any[]>([]);
   const [subscription, setSubscription] = useState<any | null>(null);
   const [recentActivitiesRaw, setRecentActivitiesRaw] = useState<any[]>([]);
@@ -221,13 +257,13 @@ export function useRushData(): RushData {
           safe(activitiesApi.stats(7)),
           safe(activitiesApi.stats(365)),
           safe(activitiesApi.records()),
-          safe(hrv.vo2max()),
+          seguroComAssinatura(hrv.vo2max()),
           safe(activitiesApi.list(1)),
           safe(social.feed(CHANNEL_SCOPE[feedChannel], 1)),
         ]);
 
       const [load, history, deviceList, subStatus, achievementData, gearData] = await Promise.all([
-        safe(activitiesApi.trainingLoad()),
+        seguroComAssinatura(activitiesApi.trainingLoad()),
         safe(hrv.history(28)),
         safe(users.devices()),
         safe(subscriptionsApi.status()),
@@ -253,9 +289,14 @@ export function useRushData(): RushData {
       setProfileRaw(profile);
       setMeRaw(me);
       setRecordsRaw(records);
-      setTrainingLoad(load);
+      setTrainingLoad(load.dado);
       setHrvHistory(history?.measurements || []);
-      setVo2maxRaw(vo2max);
+      // O servidor encurta a janela para quem não assina e AVISA que
+      // encurtou. Sem repassar isso, a tela mostraria sete dias como
+      // se fossem os vinte e oito pedidos.
+      setVfcLimitadaPelaAssinatura(!!history?.limitado_por_assinatura);
+      setVo2maxRaw(vo2max.dado);
+      setBloqueiosPro({ vo2max: vo2max.bloqueado, cargaDeTreino: load.bloqueado });
       setDevices(deviceList?.devices || []);
       setSubscription(subStatus);
       setRecentActivitiesRaw(recentActivities?.activities || []);
@@ -409,6 +450,8 @@ export function useRushData(): RushData {
     trainingLoad,
     hrvHistory,
     vo2maxRaw,
+    bloqueiosPro,
+    vfcLimitadaPelaAssinatura,
     devices,
     subscription,
     recentActivitiesRaw,

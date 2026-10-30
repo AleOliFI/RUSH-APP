@@ -6,6 +6,7 @@ const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate, authorize } = require('../middleware/auth');
 const { ehPro } = require('../services/acessoPro');
+const { exigirAssinatura } = require('../middleware/assinatura');
 const bcrypt = require('bcryptjs');
 
 module.exports = function usersRoutes(db) {
@@ -268,7 +269,7 @@ module.exports = function usersRoutes(db) {
   // -------------------------------------------------------
   // POST /api/users/field-test — Processar teste de campo para iniciantes/avançados
   // -------------------------------------------------------
-  router.post('/field-test', authenticate, async (req, res) => {
+  router.post('/field-test', authenticate, exigirAssinatura(db, 'protocolo_de_campo'), async (req, res) => {
     try {
       const { test_type, distance_km, duration_seconds, avg_hr, max_hr, rest_hr } = req.body;
 

@@ -146,6 +146,8 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
     trainingLoad,
     hrvHistory,
     vo2maxRaw,
+    bloqueiosPro,
+    vfcLimitadaPelaAssinatura,
     devices,
     subscription,
     recentActivitiesRaw,
@@ -505,6 +507,7 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
               <HistoryScreen
                 history={history}
                 trainingLoad={trainingLoad}
+                bloqueiosPro={bloqueiosPro}
                 activeTab={historyTab}
                 onTabChange={setHistoryTab}
                 onViewRoute={setActiveRoute}
@@ -554,6 +557,8 @@ export default function RushShell({ onLogout }: { onLogout: () => void }) {
             athlete={athlete}
             readiness={readiness}
             trainingLoad={trainingLoad}
+            bloqueiosPro={bloqueiosPro}
+            vfcLimitadaPelaAssinatura={vfcLimitadaPelaAssinatura}
             hrvHistory={hrvHistory}
             vo2maxTrendPercent={vo2maxRaw?.trend_percent ?? null}
             hrZones={hrvStatusRaw?.suggestion?.hr_zones || null}

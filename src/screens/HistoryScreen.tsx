@@ -15,11 +15,14 @@ import React, { useMemo } from 'react';
 import { formatDuration, paceFromActivity, timeAgo } from '../data/adapters';
 import type { HistoryActivity, SessionIntensity } from '../hooks/useActivityHistory';
 import type { ActivityHistoryData } from '../hooks/useActivityHistory';
+import { BloqueioPro, TEXTOS_PRO } from '../components/rush/BloqueioPro';
 
 type HistoryTab = 'calendario' | 'lista' | 'carga';
 
 interface HistoryScreenProps {
   history: ActivityHistoryData;
+  /** O que esta conta não vê por não assinar (ver useRushData). */
+  bloqueiosPro?: { vo2max: boolean; cargaDeTreino: boolean };
   trainingLoad: {
     acwr: number | null;
     zone: string | null;
@@ -176,6 +179,7 @@ const ActivityCard: React.FC<{
 export const HistoryScreen: React.FC<HistoryScreenProps> = ({
   history,
   trainingLoad,
+  bloqueiosPro,
   activeTab,
   onTabChange,
   onViewRoute,
@@ -509,7 +513,15 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
               Carga aguda : crônica (ACWR)
             </span>
 
-            {trainingLoad?.has_enough_history && trainingLoad.acwr != null ? (
+            {/* Sem assinatura o número existe e está trancado. Dizer
+                "faltam quatro semanas" aqui mandaria a pessoa treinar
+                atrás de algo que não chegaria no fim. */}
+            {bloqueiosPro?.cargaDeTreino ? (
+              <BloqueioPro
+                titulo={TEXTOS_PRO.carga_de_treino.titulo}
+                explicacao={TEXTOS_PRO.carga_de_treino.explicacao}
+              />
+            ) : trainingLoad?.has_enough_history && trainingLoad.acwr != null ? (
               <>
                 <div className="flex items-end gap-3">
                   <span className="font-headline text-5xl text-[#F7F5F3] leading-none">

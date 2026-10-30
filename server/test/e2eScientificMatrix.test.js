@@ -43,9 +43,14 @@ async function run() {
   const token = generateAccessToken({ id: userId, email: 'e2e@rush.com', role: 'athlete', academy_id: null });
 
   await db.prepare(`
-    INSERT INTO users (id, email, password_hash, role)
-    VALUES (?, 'e2e@rush.com', 'hash', 'athlete')
+    INSERT INTO users (id, email, password_hash, role, subscription_tier, subscription_status)
+    VALUES (?, 'e2e@rush.com', 'hash', 'athlete', 'pro', 'active')
   `).run(userId);
+  // Assinante de propósito: este arquivo testa a FISIOLOGIA (VO2máx,
+  // zonas, periodização), e algumas dessas rotas passaram a exigir
+  // assinatura (server/middleware/assinatura.js). Sem isto, o que
+  // falharia aqui seria o paywall, escondendo o que o teste mede.
+  // Quem testa o paywall é server/test/paywall.test.js.
 
   await db.prepare(`
     INSERT INTO user_profiles (user_id, name, username)

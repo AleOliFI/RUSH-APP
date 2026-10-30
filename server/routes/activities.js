@@ -5,6 +5,7 @@
 const express = require('express');
 const { randomUUID: uuidv4 } = require('node:crypto');
 const { authenticate, optionalAuth } = require('../middleware/auth');
+const { exigirAssinatura } = require('../middleware/assinatura');
 const { criarNotificacao } = require('../services/notificacoes');
 const { calculateMaxHr, calculateHrZones } = require('../agent/trainingAgent');
 const { formatDuration, formatPaceFromSeconds } = require('../utils/formatters');
@@ -512,7 +513,7 @@ module.exports = function activitiesRoutes(db) {
   // registrou RPE, a sessão entra apenas pela duração (equivalente a RPE 1),
   // e a resposta sinaliza quantas sessões estão nessa condição para que a
   // interface não apresente o número como se fosse completo.
-  router.get('/training-load', authenticate, async (req, res) => {
+  router.get('/training-load', authenticate, exigirAssinatura(db, 'carga_de_treino'), async (req, res) => {
     try {
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;

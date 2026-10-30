@@ -97,6 +97,37 @@ async function tryRefresh() {
   return refreshPromise;
 }
 
+/**
+ * Erro da API que carrega o status e o código devolvidos pelo servidor.
+ *
+ * Antes tudo virava `new Error(texto)`, e a tela só conseguia
+ * distinguir um caso do outro comparando a mensagem — que muda. Agora
+ * "você ainda não assinou" (402) chega como dado, não como frase.
+ */
+export class ErroDaApi extends Error {
+  status: number;
+  code?: string;
+  recurso?: string;
+  titulo?: string;
+
+  constructor(mensagem: string, status: number, extras: Record<string, any> = {}) {
+    super(mensagem);
+    this.name = 'ErroDaApi';
+    this.status = status;
+    this.code = extras.code;
+    this.recurso = extras.recurso;
+    this.titulo = extras.titulo;
+  }
+}
+
+/** Código que o servidor usa para "esta parte é do RUSH PRO". */
+export const SEM_ASSINATURA = 'assinatura_necessaria';
+
+/** `true` quando o erro é uma porta de assinatura, e não uma falha. */
+export function ehErroDeAssinatura(erro: any): erro is ErroDaApi {
+  return erro instanceof ErroDaApi && (erro.status === 402 || erro.code === SEM_ASSINATURA);
+}
+
 async function request(path: string, options: RequestInit = {}): Promise<any> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -126,7 +157,7 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       const retry = await fetch(`${API_BASE}${path}`, { ...options, headers });
       if (!retry.ok) {
         const err = await retry.json().catch(() => ({}));
-        throw new Error(err.error || 'Erro na requisição');
+        throw new ErroDaApi(err.error || 'Erro na requisição', retry.status, err);
       }
       return retry.json();
     }
@@ -140,7 +171,7 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Erro na requisição');
+    throw new ErroDaApi(err.error || 'Erro na requisição', res.status, err);
   }
 
   return res.json();
